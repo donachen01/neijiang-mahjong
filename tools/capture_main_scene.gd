@@ -33,9 +33,10 @@ func _capture() -> void:
 
 	await process_frame
 	await process_frame
-	_force_ai_helper_preview(root_node)
+	_force_tabletop_polish_preview(root_node)
 	_force_self_hand_preview(root_node)
 	_force_self_hu_preview(root_node)
+	_force_ai_helper_preview(root_node)
 
 	var image: Image = get_root().get_texture().get_image()
 	if image == null:
@@ -233,6 +234,110 @@ func _force_self_hu_preview(root_node: Node) -> void:
 			{"id": 9106, "suit": "wan", "rank": 8},
 		]
 	)
+
+
+func _force_tabletop_polish_preview(root_node: Node) -> void:
+	if root_node == null:
+		return
+	var players := [
+		{
+			"seat": 0,
+			"nickname": "本家",
+			"score": 3,
+			"hand_count": 10,
+			"hand_tiles": [
+				{"id": 9301, "suit": "tiao", "rank": 1},
+				{"id": 9302, "suit": "tiao", "rank": 2},
+				{"id": 9303, "suit": "tiao", "rank": 3},
+				{"id": 9304, "suit": "tong", "rank": 5},
+				{"id": 9305, "suit": "tong", "rank": 6},
+				{"id": 9306, "suit": "wan", "rank": 7},
+			],
+			"melds": [
+				{"type": "peng", "tile": {"id": 9311, "suit": "tong", "rank": 2}, "tiles": [
+					{"id": 9311, "suit": "tong", "rank": 2},
+					{"id": 9312, "suit": "tong", "rank": 2},
+					{"id": 9313, "suit": "tong", "rank": 2},
+				], "from_seat": 1},
+			],
+			"discards": [],
+			"ding_que": "tong",
+			"has_won": true,
+			"win_type": "discard_win",
+			"winning_tile": {"id": 9399, "suit": "tong", "rank": 8},
+			"winning_source_seat": 1,
+		},
+		{
+			"seat": 1,
+			"nickname": "舒小燕",
+			"score": -5,
+			"hand_count": 8,
+			"hand_tiles": [],
+			"melds": [
+				{"type": "gang", "tile": {"id": 9411, "suit": "tong", "rank": 3}, "tiles": [
+					{"id": 9411, "suit": "tong", "rank": 3},
+					{"id": 9412, "suit": "tong", "rank": 3},
+					{"id": 9413, "suit": "tong", "rank": 3},
+					{"id": 9414, "suit": "tong", "rank": 3},
+				], "from_seat": 0},
+			],
+			"discards": [],
+			"ding_que": "wan",
+			"has_won": false,
+		},
+		{
+			"seat": 2,
+			"nickname": "陈东",
+			"score": 6,
+			"hand_count": 9,
+			"hand_tiles": [],
+			"melds": [
+				{"type": "peng", "tile": {"id": 9511, "suit": "tiao", "rank": 6}, "tiles": [
+					{"id": 9511, "suit": "tiao", "rank": 6},
+					{"id": 9512, "suit": "tiao", "rank": 6},
+					{"id": 9513, "suit": "tiao", "rank": 6},
+				], "from_seat": 3},
+			],
+			"discards": [],
+			"ding_que": "tong",
+			"has_won": false,
+		},
+		{
+			"seat": 3,
+			"nickname": "舒玲",
+			"score": 2,
+			"hand_count": 8,
+			"hand_tiles": [],
+			"melds": [
+				{"type": "peng", "tile": {"id": 9611, "suit": "wan", "rank": 5}, "tiles": [
+					{"id": 9611, "suit": "wan", "rank": 5},
+					{"id": 9612, "suit": "wan", "rank": 5},
+					{"id": 9613, "suit": "wan", "rank": 5},
+				], "from_seat": 2},
+			],
+			"discards": [],
+			"ding_que": "wan",
+			"has_won": false,
+		},
+	]
+	var snapshot := {
+		"players": players,
+		"current_turn_seat": 0,
+		"current_dealer_seat": 0,
+		"rules": {"use_ding_que_phase": true},
+		"human_can_discard": true,
+		"human_last_draw_tile_id": -1,
+	}
+	if root_node.get("self_ui") != null:
+		root_node.get("self_ui").apply_snapshot(players[0], false, 0, 0, true)
+	if root_node.get("left_ui") != null:
+		root_node.get("left_ui").apply_snapshot(players[1], true, 0, 0, true)
+	if root_node.get("top_ui") != null:
+		root_node.get("top_ui").apply_snapshot(players[2], true, 0, 0, true)
+	if root_node.get("right_ui") != null:
+		root_node.get("right_ui").apply_snapshot(players[3], true, 0, 0, true)
+	root_node.call("_update_v17_player_info_panels", snapshot)
+	root_node.call("_update_self_area", snapshot, players[0]["hand_tiles"])
 
 
 func _take_tile_from_wall(wall: Array, suit: String, rank: int) -> Dictionary:

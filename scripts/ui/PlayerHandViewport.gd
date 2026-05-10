@@ -228,28 +228,18 @@ func _refresh_canvas() -> void:
 
 func _style_tray() -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.13, 0.45, 0.30, 0.94)
-	style.border_color = Color(0.78, 0.94, 0.58, 0.36)
-	style.set_border_width_all(1)
-	style.corner_radius_top_left = 20
-	style.corner_radius_top_right = 20
-	style.corner_radius_bottom_left = 20
-	style.corner_radius_bottom_right = 20
-	style.content_margin_left = 12
-	style.content_margin_right = 12
-	style.content_margin_top = 10
-	style.content_margin_bottom = 12
-	style.shadow_color = Color(0.01, 0.05, 0.02, 0.40)
-	style.shadow_size = 28
-	style.shadow_offset = Vector2(0, 10)
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.set_border_width_all(0)
+	style.set_corner_radius_all(0)
+	style.content_margin_left = 0
+	style.content_margin_right = 0
+	style.content_margin_top = 0
+	style.content_margin_bottom = 0
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.shadow_size = 0
+	style.shadow_offset = Vector2.ZERO
 	tray_panel.add_theme_stylebox_override("panel", style)
 	var overlay := tray_panel.get_node_or_null("SelfHandTraySoftLight") as Control
-	if overlay == null:
-		overlay = TABLE_MATERIAL_OVERLAY_SCRIPT.new()
-		overlay.name = "SelfHandTraySoftLight"
-		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-		overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		tray_panel.add_child(overlay)
-		tray_panel.move_child(overlay, 0)
-	overlay.set("material_mode", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL)
-	overlay.set("opacity", 0.95)
+	if overlay != null:
+		overlay.queue_free()

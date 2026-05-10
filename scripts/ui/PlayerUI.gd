@@ -101,7 +101,7 @@ func apply_snapshot(
 
 
 func _apply_style() -> void:
-	style_config.apply_panel(root_panel)
+	style_config.apply_tabletop_zone_panel(root_panel)
 	style_config.apply_label(title_label, false, true)
 	style_config.apply_label(meta_label, true, false)
 	style_config.apply_label(state_tag, false, false)
@@ -646,7 +646,8 @@ func _apply_band_slot_plate(slot: Control, warm: bool, strong: bool) -> void:
 		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(panel)
 		slot.move_child(panel, 0)
-	style_config.apply_plate_panel(panel, warm, strong)
+	style_config.apply_tabletop_zone_panel(panel)
+	panel.visible = false
 
 
 func _create_band_layout_root() -> Control:

@@ -87,6 +87,38 @@ func apply_clear_panel(panel: Panel) -> void:
 	panel.self_modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 
+func apply_tabletop_zone_panel(panel: Panel) -> void:
+	if panel == null:
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.set_border_width_all(0)
+	style.set_corner_radius_all(0)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.shadow_size = 0
+	style.shadow_offset = Vector2.ZERO
+	panel.add_theme_stylebox_override("panel", style)
+	panel.self_modulate = Color(1.0, 1.0, 1.0, 1.0)
+
+
+func panel_is_tabletop_zone(panel: Panel) -> bool:
+	if panel == null:
+		return false
+	var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+	if style == null:
+		return false
+	return (
+		style.bg_color.a <= 0.01
+		and style.border_color.a <= 0.01
+		and style.get_border_width(SIDE_LEFT) == 0
+		and style.get_border_width(SIDE_TOP) == 0
+		and style.get_border_width(SIDE_RIGHT) == 0
+		and style.get_border_width(SIDE_BOTTOM) == 0
+		and style.shadow_size == 0
+	)
+
+
 func apply_label(label: Control, use_aux: bool = false, large: bool = false) -> void:
 	if label == null:
 		return

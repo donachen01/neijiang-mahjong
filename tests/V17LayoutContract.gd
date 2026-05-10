@@ -35,6 +35,7 @@ func _run() -> void:
 	await _check_side_hu_slot_contract(failures)
 	await _check_opponent_tile_size_contract(failures)
 	_check_cross_plate_separation(root_node, failures)
+	_check_tabletop_zone_visual_contract(root_node, failures)
 
 	if failures.is_empty():
 		print("V17 LAYOUT CONTRACT OK")
@@ -1182,6 +1183,66 @@ func _check_cross_plate_separation(root_node: Node, failures: Array[String]) -> 
 		failures.append("顶部弃牌面板不应过度压到左右弃牌面板，当前重叠 %.1f" % top_overlap)
 	if bottom_overlap > 56.0:
 		failures.append("底部弃牌面板不应过度压到左右弃牌面板，当前重叠 %.1f" % bottom_overlap)
+
+
+func _check_tabletop_zone_visual_contract(root_node: Node, failures: Array[String]) -> void:
+	var panels: Array[Panel] = [
+		root_node.get("board_cross_top_plate") as Panel,
+		root_node.get("board_cross_bottom_plate") as Panel,
+		root_node.get("board_cross_left_plate") as Panel,
+		root_node.get("board_cross_right_plate") as Panel,
+		root_node.get("board_cross_center_plate") as Panel,
+	]
+	for panel in panels:
+		if panel == null:
+			failures.append("桌面精修需要保留布局容器，但有中心牌区容器缺失")
+			continue
+		_assert_tabletop_zone_panel(panel, panel.name, failures)
+
+	for host_name in ["SelfInfoHost", "SelfHuTileHost"]:
+		var host: Control = _find_control(root_node, host_name)
+		if host == null:
+			continue
+		var backplate := host.find_child("V17Backplate", true, false) as Panel
+		if backplate != null and backplate.visible:
+			failures.append("%s 的 V17Backplate 不应可见，牌应直接裸摆在桌面上" % host_name)
+
+	var tray_panel := _find_control(root_node, "TrayPanel") as Panel
+	if tray_panel == null:
+		failures.append("缺少本家手牌 TrayPanel，无法验证底部手牌区去分区化")
+	else:
+		_assert_tabletop_zone_panel(tray_panel, "TrayPanel", failures)
+
+	for slot_name in ["TopMeldSlot", "TopHandSlot", "TopHuSlot", "SideMeldColumn", "SideHandColumn", "SideHuSlot"]:
+		var matches: Array[Node] = []
+		_collect_nodes_by_name(root_node, slot_name, matches)
+		for node in matches:
+			var slot := node as Control
+			if slot == null:
+				continue
+			var slot_plate := slot.find_child("SlotPlate", true, false) as Panel
+			if slot_plate != null and slot_plate.visible:
+				_assert_tabletop_zone_panel(slot_plate, "%s/SlotPlate" % slot_name, failures)
+
+
+func _assert_tabletop_zone_panel(panel: Panel, label: String, failures: Array[String]) -> void:
+	var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+	if style == null:
+		failures.append("%s 缺少 panel style，无法验证是否去分区化" % label)
+		return
+	if style.bg_color.a > 0.03:
+		failures.append("%s 不应再显示独立底色，当前透明度 %.2f" % [label, style.bg_color.a])
+	if style.border_color.a > 0.03 or style.get_border_width(SIDE_LEFT) > 0 or style.get_border_width(SIDE_TOP) > 0 or style.get_border_width(SIDE_RIGHT) > 0 or style.get_border_width(SIDE_BOTTOM) > 0:
+		failures.append("%s 不应再显示区域边框" % label)
+	if style.shadow_size > 0:
+		failures.append("%s 不应再用面板阴影形成独立分区" % label)
+
+
+func _collect_nodes_by_name(node: Node, target_name: String, result: Array[Node]) -> void:
+	if node.name == target_name:
+		result.append(node)
+	for child in node.get_children():
+		_collect_nodes_by_name(child, target_name, result)
 
 
 func _rects_overlap(a: Rect2, b: Rect2) -> bool:

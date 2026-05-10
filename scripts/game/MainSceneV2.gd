@@ -1353,7 +1353,7 @@ func _flatten_table_panel(panel: Panel, bg: Color) -> void:
 func _apply_tabletop_matte_theme() -> void:
 	if background_rect != null:
 		background_rect.color = MATTE_FELT_BG
-		_ensure_material_overlay(background_rect, "TableFeltSoftGlow", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.FELT, 0.42)
+		_ensure_material_overlay(background_rect, "TableFeltSoftGlow", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.FELT, 0.52)
 
 	_apply_clear_panel(%TopBar)
 	_apply_felt_panel(room_card, Color(0.12, 0.36, 0.27, 0.82), Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.24), 18, 1, 7)
@@ -1365,10 +1365,10 @@ func _apply_tabletop_matte_theme() -> void:
 	_apply_felt_panel(center_hint_card, Color(0.10, 0.33, 0.24, 0.70), Color(0.84, 0.95, 0.90, 0.10), 16, 1, 4)
 	_apply_clear_panel(board_area)
 	_apply_clear_panel(board_square)
-	_ensure_material_overlay(board_square, "BoardFeltTexture", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.FELT, 0.12)
+	_remove_material_overlay(board_square, "BoardFeltTexture")
 	_apply_felt_panel(board_core, Color(0.17, 0.19, 0.18, 0.96), Color(0.45, 0.90, 1.0, 0.80), 14, 2, 10)
-	_apply_felt_panel(center_meld_card, Color(0.16, 0.48, 0.32, 0.84), Color(0.88, 0.96, 0.72, 0.16), 18, 1, 8)
-	_apply_felt_panel(center_discard_card, Color(0.16, 0.48, 0.32, 0.84), Color(0.88, 0.96, 0.72, 0.16), 18, 1, 8)
+	_apply_clear_panel(center_meld_card)
+	_apply_clear_panel(center_discard_card)
 	_apply_clear_panel(%SelfSection)
 	_apply_clear_panel(%TopRail)
 	_apply_clear_panel(%LeftRail)
@@ -1406,9 +1406,9 @@ func _apply_v17_plate_styles() -> void:
 func _apply_v17_plate_panel(panel: Panel, glowing: bool) -> void:
 	if panel == null:
 		return
-	STYLE_CONFIG.apply_plate_panel(panel, false, glowing)
+	STYLE_CONFIG.apply_tabletop_zone_panel(panel)
 	panel.clip_contents = true
-	_ensure_material_overlay(panel, "V17SoftPlateLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.95 if glowing else 0.70)
+	_remove_material_overlay(panel, "V17SoftPlateLight")
 
 
 func _apply_v17_host_backplate(host: Control) -> void:
@@ -1504,6 +1504,14 @@ func _ensure_material_overlay(parent: Control, overlay_name: String, mode: int, 
 	overlay.offset_top = 0.0
 	overlay.offset_right = 0.0
 	overlay.offset_bottom = 0.0
+
+
+func _remove_material_overlay(parent: Control, overlay_name: String) -> void:
+	if parent == null:
+		return
+	var existing := parent.get_node_or_null(overlay_name)
+	if existing != null:
+		existing.queue_free()
 
 
 func _apply_opening_roll_ui_style(style: Resource) -> void:
