@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4 - 2026-05-10
+
+- Replaced the self-hu source text label with the same arrow-style claim marker used elsewhere.
+- Reduced the left and right opponent meld tiles a little more so the side meld areas feel less oversized.
+- Updated the contract and preview capture to lock the new claim badge and smaller side meld size.
+
 ## 1.0.3 - 2026-05-10
 
 - Centered the AI discard helper on the main board and made the prompt reason line readable on mobile.

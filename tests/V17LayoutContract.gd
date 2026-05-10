@@ -592,7 +592,6 @@ func _check_self_actual_meld_row_contract(root_node: Node, failures: Array[Strin
 	root_node.call("_update_self_hu_tile_display", sample_player["winning_tile"], 1)
 	await process_frame
 	await process_frame
-
 	var hand_canvas: Node = hand_host.find_child("HandCanvas", true, false)
 	if hand_canvas == null or not hand_canvas.has_method("get_layout_bounds"):
 		failures.append("本家手牌画布缺少布局边界，无法对齐真实碰杠牌")
@@ -639,6 +638,13 @@ func _check_self_actual_meld_row_contract(root_node: Node, failures: Array[Strin
 	if hu_host == null:
 		failures.append("缺少本家胡牌宿主 SelfHuTileHost")
 		return
+	var hu_badge := hu_host.find_child("WinningSourceBadge", true, false)
+	if hu_badge == null:
+		failures.append("本家胡牌来源应改为牌面上的箭头标记，不要再用小字说明")
+	for child in hu_host.get_children():
+		if child is Label and (child as Label).visible:
+			failures.append("本家胡牌来源不应再用小字加箭头标注")
+			break
 	var hu_tiles: Array[Control] = []
 	_collect_tile_visual_controls(hu_host, hu_tiles)
 	if hu_tiles.is_empty():

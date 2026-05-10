@@ -35,6 +35,7 @@ func _capture() -> void:
 	await process_frame
 	_force_ai_helper_preview(root_node)
 	_force_self_hand_preview(root_node)
+	_force_self_hu_preview(root_node)
 
 	var image: Image = get_root().get_texture().get_image()
 	if image == null:
@@ -187,6 +188,50 @@ func _force_self_hand_preview(root_node: Node) -> void:
 		false,
 		{"recommended_tile_id": 9002},
 		{}
+	)
+
+
+func _force_self_hu_preview(root_node: Node) -> void:
+	if root_node == null:
+		return
+	root_node.call(
+		"_update_self_area",
+		{
+			"players": [
+				{
+					"seat": 0,
+					"nickname": "本家",
+					"score": 0,
+					"hand_tiles": [
+						{"id": 9101, "suit": "tiao", "rank": 1},
+						{"id": 9102, "suit": "tiao", "rank": 2},
+						{"id": 9103, "suit": "tiao", "rank": 3},
+						{"id": 9104, "suit": "tong", "rank": 5},
+						{"id": 9105, "suit": "wan", "rank": 7},
+						{"id": 9106, "suit": "wan", "rank": 8},
+					],
+					"hand_count": 6,
+					"melds": [],
+					"discards": [],
+					"ding_que": "tong",
+					"has_won": true,
+					"win_type": "discard_win",
+					"winning_tile": {"id": 9199, "suit": "tong", "rank": 8},
+					"winning_source_seat": 1,
+				},
+			],
+			"rules": {"use_ding_que_phase": true},
+			"human_can_discard": false,
+			"human_last_draw_tile_id": -1,
+		},
+		[
+			{"id": 9101, "suit": "tiao", "rank": 1},
+			{"id": 9102, "suit": "tiao", "rank": 2},
+			{"id": 9103, "suit": "tiao", "rank": 3},
+			{"id": 9104, "suit": "tong", "rank": 5},
+			{"id": 9105, "suit": "wan", "rank": 7},
+			{"id": 9106, "suit": "wan", "rank": 8},
+		]
 	)
 
 

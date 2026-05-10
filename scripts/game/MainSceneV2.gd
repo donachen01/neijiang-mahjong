@@ -2730,31 +2730,84 @@ func _update_self_hu_tile_display(winning_tile: Dictionary, winning_source_seat:
 		if self_hand_host != null and self_hand_host.has_method("clear_right_host"):
 			self_hand_host.call("clear_right_host")
 		return
+	var wrapper := Control.new()
+	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var tile := TILE_SCENE.instantiate()
 	tile.call("configure", winning_tile, SELF_ROW_TILE_VISUAL_SCALE, false, false, true)
 	var tile_size: Vector2 = tile.custom_minimum_size
-	tile.position = Vector2(
-		(hu_rect.size.x - tile_size.x) * 0.5,
-		0.0
-	)
-	self_hu_tile_host.add_child(tile)
-
+	wrapper.custom_minimum_size = tile_size
+	wrapper.size = wrapper.custom_minimum_size
+	tile.position = Vector2.ZERO
+	wrapper.add_child(tile)
 	if winning_source_seat > 0:
-		var arrow := Label.new()
-		arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		arrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		arrow.text = "←上家" if winning_source_seat == 1 else "↑对家" if winning_source_seat == 2 else "→下家"
-		STYLE_CONFIG.apply_label(arrow, false, false)
-		arrow.add_theme_font_size_override("font_size", 14)
-		arrow.anchor_left = 0.0
-		arrow.anchor_right = 1.0
-		arrow.anchor_top = 0.0
-		arrow.anchor_bottom = 0.0
-		arrow.offset_top = 0.0
-		arrow.offset_bottom = 28.0
-		self_hu_tile_host.add_child(arrow)
+		wrapper.add_child(_create_winning_source_badge(tile_size, winning_source_seat))
+	self_hu_tile_host.add_child(wrapper)
 	if self_hand_host != null and self_hand_host.has_method("embed_right_host"):
 		self_hand_host.call("embed_right_host", self_hu_tile_host, hu_rect.size.x, 10.0)
+
+
+func _create_winning_source_badge(tile_size: Vector2, winning_source_seat: int) -> Node:
+	var badge := Node2D.new()
+	badge.name = "WinningSourceBadge"
+	badge.position = tile_size * 0.5
+	badge.rotation = _winning_source_badge_rotation(winning_source_seat)
+
+	var badge_size := Vector2(30, 24)
+	var shadow := Polygon2D.new()
+	shadow.polygon = PackedVector2Array([
+		Vector2(0, -badge_size.y * 0.5),
+		Vector2(badge_size.x * 0.56, badge_size.y * 0.46),
+		Vector2(0, badge_size.y * 0.18),
+		Vector2(-badge_size.x * 0.56, badge_size.y * 0.46),
+	])
+	shadow.color = Color(0.34, 0.22, 0.02, 0.18)
+	shadow.position = Vector2(0, 2)
+	badge.add_child(shadow)
+
+	var arrow := Polygon2D.new()
+	arrow.polygon = PackedVector2Array([
+		Vector2(0, -badge_size.y * 0.5),
+		Vector2(badge_size.x * 0.56, badge_size.y * 0.46),
+		Vector2(0, badge_size.y * 0.18),
+		Vector2(-badge_size.x * 0.56, badge_size.y * 0.46),
+	])
+	arrow.color = Color(1.0, 0.84, 0.18, 0.72)
+	badge.add_child(arrow)
+
+	var highlight := Polygon2D.new()
+	highlight.polygon = PackedVector2Array([
+		Vector2(0, -badge_size.y * 0.42),
+		Vector2(badge_size.x * 0.28, badge_size.y * 0.12),
+		Vector2(-badge_size.x * 0.28, badge_size.y * 0.12),
+	])
+	highlight.color = Color(1.0, 0.97, 0.70, 0.36)
+	highlight.position = Vector2(0, -1)
+	badge.add_child(highlight)
+
+	var outline := Line2D.new()
+	outline.width = 1.6
+	outline.default_color = Color(0.70, 0.48, 0.04, 0.76)
+	outline.closed = true
+	outline.points = PackedVector2Array([
+		Vector2(0, -badge_size.y * 0.5),
+		Vector2(badge_size.x * 0.56, badge_size.y * 0.46),
+		Vector2(0, badge_size.y * 0.18),
+		Vector2(-badge_size.x * 0.56, badge_size.y * 0.46),
+	])
+	badge.add_child(outline)
+	return badge
+
+
+func _winning_source_badge_rotation(winning_source_seat: int) -> float:
+	match winning_source_seat:
+		1:
+			return -PI * 0.5
+		2:
+			return PI
+		3:
+			return PI * 0.5
+		_:
+			return 0.0
 
 
 func _update_self_row_slot_layout(self_player: Dictionary, hand_count: int) -> void:
