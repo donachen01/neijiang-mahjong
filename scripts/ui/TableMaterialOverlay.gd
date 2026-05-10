@@ -1,0 +1,108 @@
+extends Control
+
+class_name TableMaterialOverlay
+
+enum MaterialMode {
+	FELT,
+	WOOD,
+	SOFT_PANEL,
+}
+
+@export var material_mode: MaterialMode = MaterialMode.FELT:
+	set(value):
+		material_mode = value
+		queue_redraw()
+
+@export var opacity: float = 1.0:
+	set(value):
+		opacity = clampf(value, 0.0, 1.0)
+		queue_redraw()
+
+
+func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+func _draw() -> void:
+	if size.x <= 2.0 or size.y <= 2.0:
+		return
+	match material_mode:
+		MaterialMode.FELT:
+			_draw_felt_texture()
+		MaterialMode.WOOD:
+			_draw_wood_texture()
+		MaterialMode.SOFT_PANEL:
+			_draw_soft_panel_texture()
+
+
+func _draw_felt_texture() -> void:
+	var center := Vector2(size.x * 0.50, size.y * 0.42)
+	var highlight := Vector2(size.x * 0.18, size.y * 0.16)
+	var shadow := Vector2(size.x * 0.83, size.y * 0.82)
+	var radius := maxf(size.x, size.y) * 0.66
+	for band in range(5):
+		var t := float(band) / 4.0
+		draw_circle(center, lerpf(radius * 0.14, radius * 0.52, t), Color(0.36, 0.74, 0.44, 0.042 * opacity * (1.0 - t)))
+	for band in range(4):
+		var t := float(band) / 3.0
+		draw_circle(highlight, lerpf(radius * 0.06, radius * 0.28, t), Color(0.95, 1.0, 0.84, 0.030 * opacity * (1.0 - t)))
+		draw_circle(shadow, lerpf(radius * 0.06, radius * 0.24, t), Color(0.0, 0.12, 0.06, 0.020 * opacity * (1.0 - t)))
+	draw_rect(Rect2(Vector2(0.0, 0.0), Vector2(size.x, 2.0)), Color(1.0, 1.0, 0.86, 0.006 * opacity), true)
+	draw_rect(Rect2(Vector2(0.0, maxf(0.0, size.y - 2.0)), Vector2(size.x, 2.0)), Color(0.0, 0.10, 0.05, 0.008 * opacity), true)
+
+
+func _draw_soft_panel_texture() -> void:
+	var center := Vector2(size.x * 0.45, size.y * 0.38)
+	var top_left := Vector2(size.x * 0.18, size.y * 0.18)
+	var bottom_right := Vector2(size.x * 0.82, size.y * 0.80)
+	var radius := maxf(size.x, size.y) * 0.58
+	for band in range(5):
+		var t := float(band) / 4.0
+		draw_circle(center + Vector2(-size.x * 0.05, -size.y * 0.05), lerpf(radius * 0.18, radius * 0.58, t), Color(0.86, 0.98, 0.68, 0.028 * opacity * (1.0 - t)))
+	for band in range(4):
+		var t := float(band) / 3.0
+		draw_circle(top_left, lerpf(radius * 0.05, radius * 0.24, t), Color(0.98, 1.0, 0.88, 0.034 * opacity * (1.0 - t)))
+		draw_circle(bottom_right, lerpf(radius * 0.05, radius * 0.22, t), Color(0.0, 0.12, 0.06, 0.026 * opacity * (1.0 - t)))
+	draw_rect(Rect2(Vector2(6.0, 5.0), Vector2(maxf(0.0, size.x - 12.0), 2.0)), Color(1.0, 1.0, 0.84, 0.045 * opacity), true)
+	draw_rect(Rect2(Vector2(7.0, maxf(0.0, size.y - 8.0)), Vector2(maxf(0.0, size.x - 14.0), 4.0)), Color(0.0, 0.11, 0.05, 0.055 * opacity), true)
+	draw_rect(Rect2(Vector2(0.0, 0.0), Vector2(2.0, size.y)), Color(1.0, 1.0, 0.78, 0.015 * opacity), true)
+	draw_rect(Rect2(Vector2(maxf(0.0, size.x - 2.0), 0.0), Vector2(2.0, size.y)), Color(0.0, 0.14, 0.07, 0.020 * opacity), true)
+
+
+func _draw_wood_texture() -> void:
+	var rect := Rect2(Vector2(10.0, 8.0), size - Vector2(20.0, 16.0))
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		rect = Rect2(Vector2.ZERO, size)
+
+	var grain_count := maxi(8, int(rect.size.y / 7.0))
+	for index in range(grain_count):
+		var t := float(index) / float(maxi(1, grain_count - 1))
+		var y := lerpf(rect.position.y, rect.end.y, t)
+		var alpha := (0.035 + 0.020 * sin(float(index) * 1.7)) * opacity
+		var points := PackedVector2Array()
+		var segments := 18
+		for segment in range(segments + 1):
+			var s := float(segment) / float(segments)
+			var x := lerpf(rect.position.x, rect.end.x, s)
+			var wave := sin(s * TAU * 2.2 + float(index) * 0.6) * 2.2
+			wave += sin(s * TAU * 5.1 + float(index) * 0.27) * 0.8
+			points.append(Vector2(x, y + wave))
+		draw_polyline(points, Color(0.98, 0.76, 0.38, alpha), 2.0, true)
+
+	for knot_index in range(3):
+		var knot_center := Vector2(
+			lerpf(rect.position.x + rect.size.x * 0.18, rect.end.x - rect.size.x * 0.12, float(knot_index) / 2.0),
+			rect.position.y + rect.size.y * (0.28 + 0.18 * float(knot_index % 2))
+		)
+		var radius := minf(rect.size.x, rect.size.y) * (0.035 + 0.012 * float(knot_index))
+		for ring in range(3):
+			draw_arc(
+				knot_center,
+				radius + float(ring) * 4.0,
+				0.0,
+				TAU,
+				36,
+				Color(0.26, 0.15, 0.04, (0.028 - float(ring) * 0.005) * opacity),
+				1.0,
+				true
+			)

@@ -1,0 +1,28 @@
+.DS_Store
+
+# Godot generated/editor state
+.godot/
+*.import
+export_presets.cfg
+
+# Build/export outputs
+build/
+exports/
+dist/
+bin/
+obj/
+*.apk
+*.aab
+*.dmg
+*.zip
+
+# Local/generated scratch assets
+.tmp_tts/
+
+# Signing and local secrets
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+.env
+.env.*

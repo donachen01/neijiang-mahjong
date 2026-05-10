@@ -1,0 +1,38 @@
+namespace NeijiangMahjong.AI.Core.Models;
+
+public sealed class NeijiangCandidateDetail
+{
+    public int TileType { get; init; }
+    public int FastTingDiscardRank { get; init; }
+    public int Score { get; init; }
+    public int Shanten { get; init; }
+    public int Ukeire { get; init; }
+    public int LiveUkeire { get; init; }
+    public int Danger { get; init; }
+    public int WaitCount { get; init; }
+    public int WaitQualityScore { get; init; }
+    public IReadOnlyList<int> ImprovingTiles { get; init; } = Array.Empty<int>();
+    public string RiskLabel { get; init; } = string.Empty;
+    public string StrategyTag { get; init; } = string.Empty;
+    public string StrategyMode { get; init; } = string.Empty;
+    public string ExplanationHint { get; init; } = string.Empty;
+    public IReadOnlyList<string> RoutesAfter { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> RouteLoss { get; init; } = Array.Empty<string>();
+    public double TenpaiProbability { get; init; }
+    public double SelfDrawProbability { get; init; }
+    public double WinProbability { get; init; }
+    public double DealInProbability { get; init; }
+    public double ExpectedValue { get; init; }
+    public double ExpectedNetScore { get; init; }
+    public double ExpectedWinGain { get; init; }
+    public double ExpectedDealInLoss { get; init; }
+    public double ExpectedDrawRiskLoss { get; init; }
+    public double ExpectedReadyValue { get; init; }
+    public double PosteriorAdjustment { get; init; }
+    public double SearchBonus { get; init; }
+    public int SearchSimulations { get; init; }
+    public bool SearchUsed { get; init; }
+    public IReadOnlyList<string> PosteriorReasons { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> RiskReasons { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> Reasons { get; init; } = Array.Empty<string>();
+}
