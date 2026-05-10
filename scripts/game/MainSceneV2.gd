@@ -1299,10 +1299,10 @@ func _apply_discard_helper_style() -> void:
 	discard_helper_summary.add_theme_color_override("font_color", IVORY_SOFT)
 	discard_helper_summary.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.92))
 	discard_helper_summary.add_theme_constant_override("outline_size", 4)
-	discard_helper_compare.add_theme_font_size_override("font_size", 1)
-	discard_helper_compare.add_theme_color_override("font_color", Color(0.84, 0.89, 0.82, 0.96))
+	discard_helper_compare.add_theme_font_size_override("font_size", 24)
+	discard_helper_compare.add_theme_color_override("font_color", Color(0.90, 0.96, 0.82, 0.98))
 	discard_helper_compare.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.88))
-	discard_helper_compare.add_theme_constant_override("outline_size", 0)
+	discard_helper_compare.add_theme_constant_override("outline_size", 2)
 	discard_helper_options.add_theme_font_size_override("font_size", 1)
 	discard_helper_options.add_theme_color_override("font_color", Color(0.79, 0.84, 0.81, 0.92))
 	discard_helper_options.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.82))
@@ -2842,11 +2842,13 @@ func _update_discard_helper_panel(snapshot: Dictionary, trainer_hint: Dictionary
 		discard_helper_summary.text = "%s → 打 %s" % [display_tile_name, recommended_tile_name]
 	discard_helper_action_button.visible = false
 	discard_helper_action_button.disabled = true
-	discard_helper_compare.text = ""
-	discard_helper_compare.visible = false
+	var reason_text := _build_helper_explanation_text(trainer_hint, recommended)
+	discard_helper_compare.text = reason_text
+	discard_helper_compare.visible = not reason_text.is_empty()
 	discard_helper_options.text = ""
 	discard_helper_options.visible = false
 	discard_helper_panel.visible = true
+	_position_discard_helper_panel()
 
 
 func _position_discard_helper_panel() -> void:
@@ -2856,11 +2858,11 @@ func _position_discard_helper_panel() -> void:
 	var panel_height: float = discard_helper_panel.custom_minimum_size.y
 	var action_rect := action_panel.get_global_rect() if action_panel != null and action_panel.visible else Rect2(Vector2.ZERO, Vector2.ZERO)
 	var hand_rect := self_hand_host.get_global_rect()
-	var x := clampf(
-		hand_rect.position.x + maxf(260.0, hand_rect.size.x * 0.18),
-		18.0,
-		maxf(18.0, root_ui.size.x - panel_width - 18.0)
-	)
+	var root_rect := root_ui.get_global_rect()
+	var board_rect := board_area.get_global_rect() if board_area != null else root_rect
+	var min_x := root_rect.position.x + 18.0
+	var max_x := maxf(min_x, root_rect.end.x - panel_width - 18.0)
+	var x := clampf(board_rect.get_center().x - panel_width * 0.5, min_x, max_x)
 	var y := maxf(18.0, hand_rect.position.y - panel_height - 20.0)
 	if action_rect.size.x > 1.0:
 		var max_left_of_action := action_rect.position.x - panel_width - 18.0

@@ -377,8 +377,10 @@ func _check_action_helper_layer_contract(root_node: Node, failures: Array[String
 		if helper_summary.get_theme_font_size("font_size") < 34:
 			failures.append("AI 提示主内容字体应明显放大，当前 %d" % helper_summary.get_theme_font_size("font_size"))
 	if helper_compare != null:
-		if helper_compare.visible:
-			failures.append("AI 提示框不应再显示分析说明文字")
+		if helper_compare.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER:
+			failures.append("AI 提示原因应居中显示")
+		if helper_compare.get_theme_font_size("font_size") < 22:
+			failures.append("AI 提示原因字体应在手机上可读，当前 %d" % helper_compare.get_theme_font_size("font_size"))
 	if helper_options != null and helper_options.visible:
 		failures.append("AI 提示框不应再显示备选说明文字")
 	var action_snapshot := {
@@ -410,14 +412,14 @@ func _check_action_helper_layer_contract(root_node: Node, failures: Array[String
 		],
 	}, {
 		"recommended": {
-			"tile": {"id": 9001, "suit": "tiao", "rank": 2},
-			"tile_name": "二条",
+			"tile": {"id": 9001, "suit": "tiao", "rank": 9},
+			"tile_name": "9条",
 			"shanten": 1,
 			"ukeire": 8,
 			"win_probability": 0.24,
 			"risk_label": "低危",
 			"score": 120,
-			"explanation_hint": "保留两门进张",
+			"explanation_hint": "边九孤张，先拆掉",
 		},
 		"recommended_tile_id": 9001,
 		"options": [],
@@ -429,6 +431,10 @@ func _check_action_helper_layer_contract(root_node: Node, failures: Array[String
 	var helper_text := helper_summary.text if helper_summary != null else ""
 	if helper_text.contains("出牌辅助") or helper_text.contains("轮到你出牌") or helper_text.contains("建议："):
 		failures.append("AI 提示框应直接显示内容，不要出现说明文字或“建议：”前缀：%s" % helper_text)
+	if helper_summary != null and helper_summary.text != "打 9条":
+		failures.append("AI 提示主文案应直接显示打 9条，当前：%s" % helper_summary.text)
+	if helper_compare == null or not helper_compare.visible or not helper_compare.text.contains("边九孤张"):
+		failures.append("AI 提示框应显示简短原因，例如“边九孤张，先拆掉”")
 	var action_rect := action_panel.get_global_rect()
 	var helper_rect := helper_panel.get_global_rect()
 	var hand_host: Control = _find_control(root_node, "SelfHandHost")
@@ -448,11 +454,13 @@ func _check_action_helper_layer_contract(root_node: Node, failures: Array[String
 	if hand_rect.size.y > 1.0:
 		if helper_rect.end.y > hand_rect.position.y - 8.0:
 			failures.append("AI 提示信息应悬浮在手牌上方的主桌面上，不能落入手牌托盘")
-		if absf(helper_rect.get_center().x - hand_rect.get_center().x) > hand_rect.size.x * 0.32:
-			failures.append("AI 提示信息应位于我的手牌上方附近，而不是远离手牌")
 	var board_area: Control = _find_control(root_node, "BoardArea")
 	if board_area != null and helper_panel.z_index <= board_area.z_index:
 		failures.append("AI 提示层级应高于主桌面")
+	if board_area != null:
+		var board_rect := board_area.get_global_rect()
+		if absf(helper_rect.get_center().x - board_rect.get_center().x) > 24.0:
+			failures.append("打牌提示框应水平居中到主桌面中心，当前偏差 %.1f" % absf(helper_rect.get_center().x - board_rect.get_center().x))
 	if helper_rect.intersects(action_rect, true):
 		failures.append("AI 提示浮层不应遮挡碰杠胡悬浮按钮")
 	elif helper_rect.end.x > action_rect.position.x - 12.0 and absf(helper_rect.position.y - action_rect.position.y) < action_rect.size.y:

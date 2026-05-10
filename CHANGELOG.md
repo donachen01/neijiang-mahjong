@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 - 2026-05-10
+
+- Centered the AI discard helper on the main board and made the prompt reason line readable on mobile.
+- Updated the discard hint preview to show a short reason directly under the recommended tile text.
+- Bumped the tracked source and Android package versions to keep the release metadata in sync.
+
 ## 1.0.2 - 2026-05-10
 
 - Enlarged the floating AI discard helper and reduced it to centered direct content so the hint stays readable on mobile.

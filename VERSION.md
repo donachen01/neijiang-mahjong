@@ -1,6 +1,6 @@
 # Version
 
-Current app version: `1.0.2`
+Current app version: `1.0.3`
 
 ## Versioning Workflow
 
