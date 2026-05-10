@@ -449,12 +449,15 @@ func _check_top_integrated_row_contract(root_node: Node, failures: Array[String]
 	var info_rect: Rect2 = root_node.call("_v17_player_info_rect", 2)
 	if row_rect.position.x > board_rect.position.x + 40.0:
 		failures.append("对家 18 槽横排应朝左侧空白扩展，当前左边 %.1f / 桌面左边 %.1f" % [row_rect.position.x, board_rect.position.x])
-	if row_rect.end.x > info_rect.position.x - 12.0:
-		failures.append("对家手牌+碰杠+胡牌区应向左扩展并避开姓名积分框，当前右边 %.1f / 信息框左边 %.1f" % [row_rect.end.x, info_rect.position.x])
-	if row_root.size.x > 1488.0:
+	var info_gap := info_rect.position.x - row_rect.end.x
+	if info_gap < 4.0:
+		failures.append("对家手牌+碰杠+胡牌区应避开姓名积分框，当前右边 %.1f / 信息框左边 %.1f" % [row_rect.end.x, info_rect.position.x])
+	if info_gap > 56.0:
+		failures.append("对家手牌+碰杠+胡牌区应再向右靠近姓名积分框，当前间距 %.1f" % info_gap)
+	if row_root.size.x > 1470.0:
 		failures.append("对家横排容器过宽，会撞到右侧信息区，当前宽 %.1f" % row_root.size.x)
-	if row_root.size.x < 1380.0:
-		failures.append("对家手牌+碰杠+胡牌区整体偏小，应往中心扩并吃满顶部空间，当前宽 %.1f" % row_root.size.x)
+	if row_root.size.x < 1400.0:
+		failures.append("对家手牌+碰杠+胡牌区整体偏小，应向右拉长并吃满顶部空间，当前宽 %.1f" % row_root.size.x)
 	if row_root.size.y > 192.0:
 		failures.append("对家横排容器过高，会挤压牌桌主体，当前高 %.1f" % row_root.size.y)
 	if row_root.size.y < 172.0:
@@ -792,6 +795,9 @@ func _check_self_status_badge_contract(root_node: Node, failures: Array[String])
 
 
 func _check_side_hu_slot_contract(failures: Array[String]) -> void:
+	var left_ui := PLAYER_UI_SCENE.instantiate()
+	left_ui.set("seat_dock", 2)
+	get_root().add_child(left_ui)
 	var right_ui := PLAYER_UI_SCENE.instantiate()
 	right_ui.set("seat_dock", 3)
 	get_root().add_child(right_ui)
@@ -824,8 +830,8 @@ func _check_side_hu_slot_contract(failures: Array[String]) -> void:
 	var meld_column: Control = right_ui.find_child("SideMeldColumn", true, false) as Control
 	if hu_slot == null:
 		failures.append("侧家胡牌槽应命名为 SideHuSlot 并独立预留完整牌位")
-	elif hu_slot.size.y < 70.0:
-		failures.append("侧家胡牌槽高度不足，胡牌会被裁切")
+	elif hu_slot.size.x < 170.0 or hu_slot.size.y < 112.0:
+		failures.append("侧家胡牌槽应按碰杠牌尺寸重新计算，当前 %.1fx%.1f" % [hu_slot.size.x, hu_slot.size.y])
 	if hand_column == null:
 		failures.append("侧家手牌列应命名为 SideHandColumn，胡牌必须并入这条牌道")
 	if meld_column == null:
@@ -833,18 +839,10 @@ func _check_side_hu_slot_contract(failures: Array[String]) -> void:
 	elif meld_column.visible and meld_column.size.y < 630.0:
 		failures.append("侧家碰杠区外框应拉到牌道上下两端，当前高 %.1f" % meld_column.size.y)
 	if hu_slot != null and hand_column != null and hu_slot.visible:
-		var hu_center_x := hu_slot.get_rect().get_center().x
-		var hand_center_x := hand_column.get_rect().get_center().x
-		if absf(hu_center_x - hand_center_x) > 8.0:
-			failures.append("侧家胡牌槽必须与手牌同列，当前胡牌列中心 %.1f / 手牌列中心 %.1f" % [hu_center_x, hand_center_x])
-		if hu_slot.position.y < hand_column.position.y - 1.0:
-			failures.append("侧家胡牌槽不能脱离手牌列上方")
+		if hu_slot.get_rect().end.x < hand_column.get_rect().end.x - 1.0:
+			failures.append("下家胡牌槽应朝外侧桌边扩展并包住胡牌，当前右边 %.1f / 手牌列右边 %.1f" % [hu_slot.get_rect().end.x, hand_column.get_rect().end.x])
 		if hu_slot.position.y < hand_column.get_rect().end.y - 1.0 and hu_slot.get_rect().end.y > hand_column.position.y + 1.0:
 			failures.append("侧家胡牌槽不能覆盖手牌列，应排在手牌列末端")
-		if meld_column != null and meld_column.visible:
-			var meld_center_x := meld_column.get_rect().get_center().x
-			if absf(hu_center_x - meld_center_x) < 16.0:
-				failures.append("侧家胡牌槽不能再与碰杠区同列，当前中心 %.1f" % hu_center_x)
 		var hu_backplate := hu_slot.find_child("SlotPlate", true, false) as Control
 		if hu_backplate != null and hu_backplate.visible:
 			failures.append("侧家胡牌槽不要单独画杂色背景，应与手牌区背景一致")
@@ -854,10 +852,34 @@ func _check_side_hu_slot_contract(failures: Array[String]) -> void:
 	hu_slot = right_ui.find_child("SideHuSlot", true, false) as Control
 	hand_column = right_ui.find_child("SideHandColumn", true, false) as Control
 	if hu_slot != null and hand_column != null and hu_slot.visible:
-		var hu_center_x := hu_slot.get_rect().get_center().x
-		var hand_center_x := hand_column.get_rect().get_center().x
-		if absf(hu_center_x - hand_center_x) > 8.0:
-			failures.append("侧家无碰杠时，胡牌槽也必须留在手牌列，当前胡牌列中心 %.1f / 手牌列中心 %.1f" % [hu_center_x, hand_center_x])
+		if hu_slot.get_rect().end.x < hand_column.get_rect().end.x - 1.0:
+			failures.append("侧家无碰杠时，胡牌槽也应朝外侧桌边保留完整牌位")
+
+	var left_player := sample_player.duplicate(true)
+	left_player["seat"] = 1
+	left_player["name"] = "上家"
+	left_player["melds"] = [
+		{
+			"type": "peng",
+			"from_seat": 3,
+			"tiles": [
+				{"id": 501, "suit": "tiao", "rank": 6},
+				{"id": 502, "suit": "tiao", "rank": 6},
+				{"id": 503, "suit": "tiao", "rank": 6},
+			],
+		},
+	]
+	left_ui.call("apply_snapshot", left_player, true, -1, -1, true)
+	var left_hu_slot: Control = left_ui.find_child("SideHuSlot", true, false) as Control
+	var left_hand_column: Control = left_ui.find_child("SideHandColumn", true, false) as Control
+	if left_hu_slot != null and left_hand_column != null and left_hu_slot.visible:
+		if left_hu_slot.size.x < 170.0 or left_hu_slot.size.y < 112.0:
+			failures.append("上家胡牌槽应按碰杠牌尺寸重新计算，当前 %.1fx%.1f" % [left_hu_slot.size.x, left_hu_slot.size.y])
+		if left_hu_slot.position.x > left_hand_column.position.x + 1.0:
+			failures.append("上家胡牌槽应朝外侧桌边扩展，当前左边 %.1f / 手牌列左边 %.1f" % [left_hu_slot.position.x, left_hand_column.position.x])
+		if left_hu_slot.position.y < left_hand_column.get_rect().end.y - 1.0 and left_hu_slot.get_rect().end.y > left_hand_column.position.y + 1.0:
+			failures.append("上家胡牌槽不能覆盖手牌列，应排在手牌列末端")
+	left_ui.queue_free()
 	right_ui.queue_free()
 
 
@@ -909,14 +931,14 @@ func _check_opponent_tile_size_contract(failures: Array[String]) -> void:
 		failures.append("对家碰杠+手牌+胡牌区缺少横向承载框")
 	elif top_row.size.y < 172.0:
 		failures.append("对家碰杠+手牌+胡牌承载框应向下扩展到红框大小，当前高 %.1f" % top_row.size.y)
-	elif top_row.size.x < 1380.0:
-		failures.append("对家碰杠+手牌+胡牌承载框应朝左侧空白扩展，当前宽 %.1f" % top_row.size.x)
+	elif top_row.size.x < 1400.0:
+		failures.append("对家碰杠+手牌+胡牌承载框应向右拉长靠近姓名区，当前宽 %.1f" % top_row.size.x)
 	_assert_tile_visual_min(top_ui.find_child("TopHandSlot", true, false), 128.0, "对家手牌", failures)
 	_assert_tile_visual_min(top_ui.find_child("TopMeldSlot", true, false), 128.0, "对家碰杠牌", failures)
 	_assert_tile_visual_min(left_ui.find_child("SideHandColumn", true, false), 112.0, "上家手牌", failures)
-	_assert_tile_visual_min(left_ui.find_child("SideMeldColumn", true, false), 176.0, "上家碰杠牌", failures)
+	_assert_tile_visual_min(left_ui.find_child("SideMeldColumn", true, false), 160.0, "上家碰杠牌", failures)
 	_assert_tile_visual_min(right_ui.find_child("SideHandColumn", true, false), 112.0, "下家手牌", failures)
-	_assert_tile_visual_min(right_ui.find_child("SideMeldColumn", true, false), 176.0, "下家碰杠牌", failures)
+	_assert_tile_visual_min(right_ui.find_child("SideMeldColumn", true, false), 160.0, "下家碰杠牌", failures)
 	_assert_side_lane_symmetry(left_ui, right_ui, failures)
 	_assert_side_meld_column_fill(left_ui.find_child("SideMeldColumn", true, false), "上家碰杠区", failures)
 	_assert_side_meld_column_fill(right_ui.find_child("SideMeldColumn", true, false), "下家碰杠区", failures)

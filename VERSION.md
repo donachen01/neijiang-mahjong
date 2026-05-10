@@ -1,6 +1,6 @@
 # Version
 
-Current app version: `1.0.0`
+Current app version: `1.0.1`
 
 ## Versioning Workflow
 
@@ -9,4 +9,3 @@ Current app version: `1.0.0`
 - The repository tracks the source version in `project.godot` (`application/config/version`) and this file.
 - `export_presets.cfg` stays ignored because it can contain local export paths and signing configuration.
 - Build outputs such as APK/AAB files stay out of git. Put release installers on GitHub Releases when needed.
-

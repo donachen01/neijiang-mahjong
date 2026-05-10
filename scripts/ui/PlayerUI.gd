@@ -21,7 +21,7 @@ const SELF_MELD_TILE_STEP := 136.0
 const TOP_ROW_TILE_SCALE := 0.86
 const TOP_ROW_TILE_SEPARATION := 4
 const SIDE_HAND_TILE_SCALE := 0.74
-const SIDE_MELD_TILE_SCALE := 1.16
+const SIDE_MELD_TILE_SCALE := 1.08
 const SIDE_MELD_VERTICAL_OVERLAP := -10.0
 @onready var root_panel: Panel = %RootPanel
 @onready var root_margin: MarginContainer = $RootPanel/Margin
@@ -160,7 +160,7 @@ func _apply_orientation() -> void:
 			_place_identity_overlay(Vector2(0.5, 1.52), Vector2(-116, -28), HORIZONTAL_ALIGNMENT_CENTER, Vector2(232, 98))
 		SeatDock.TOP:
 			root_panel.custom_minimum_size = Vector2(0, 204)
-			custom_minimum_size = Vector2(1480, 210)
+			custom_minimum_size = Vector2(1482, 210)
 			size = custom_minimum_size
 			opponent_band.visible = true
 			opponent_band.clip_contents = true
@@ -359,7 +359,7 @@ func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
 		hu_wrapper = _create_hu_display_wrapper(player)
 	var has_hu := hu_wrapper != null
 	if seat_dock == SeatDock.TOP:
-		var layout_width := 1480.0 if size.x <= 1.0 else size.x
+		var layout_width := 1482.0 if size.x <= 1.0 else size.x
 		var layout_height := 210.0 if size.y <= 1.0 else size.y
 		var layout_root := _create_band_layout_root()
 		layout_root.custom_minimum_size = Vector2(layout_width, layout_height)
@@ -378,7 +378,7 @@ func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
 		var gap_width := (content_gap if has_melds else 0.0) + (content_gap if has_hu else 0.0)
 		var visible_hand_count := clampi(hand_count, 1, 14)
 		var natural_hand_width := top_tile_size.x + maxf(0.0, float(visible_hand_count - 1)) * (top_tile_size.x + float(TOP_ROW_TILE_SEPARATION))
-		var row_width := clampf(meld_width + natural_hand_width + hu_width + gap_width + 56.0, 1380.0, 1440.0)
+		var row_width := clampf(meld_width + natural_hand_width + hu_width + gap_width + 56.0, 1404.0, 1466.0)
 		var row_height := 184.0
 		var content_x := 26.0
 		var content_width := row_width - 56.0
@@ -387,7 +387,8 @@ func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
 
 		var row_root := _create_fixed_slot(row_width, row_height)
 		row_root.name = "HorizontalRowRoot"
-		var row_rect := Rect2(Vector2(8.0, 6.0), Vector2(row_width, row_height))
+		var row_x := maxf(8.0, layout_width - row_width - 8.0)
+		var row_rect := Rect2(Vector2(row_x, 6.0), Vector2(row_width, row_height))
 		_place_rect_in_parent(layout_root, row_root, row_rect)
 		_apply_band_slot_plate(row_root, false, true)
 
@@ -447,16 +448,19 @@ func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
 	opponent_band.add_child(layout_root)
 
 	var side_hand_width := 120.0
-	var side_meld_width := 192.0
+	var side_meld_width := 184.0
 	var side_margin := 6.0
 	var side_gap := 8.0
 	var hand_rect := Rect2(Vector2(side_margin, 20.0), Vector2(side_hand_width, layout_height - 92.0)) if seat_dock == SeatDock.LEFT else Rect2(Vector2(layout_width - side_margin - side_hand_width, 20.0), Vector2(side_hand_width, layout_height - 92.0))
 	var side_content_x := hand_rect.end.x + side_gap if seat_dock == SeatDock.LEFT else hand_rect.position.x - side_gap - side_meld_width
 	var side_content_y := 0.0
 	var meld_height := layout_height if has_melds else 0.0
-	var hu_height := 122.0
+	var meld_tile_visual_size := _tile_visual_size_for_scale(_meld_tile_scale())
+	var hu_width := maxf(side_meld_width, meld_tile_visual_size.y + 16.0)
+	var hu_height := maxf(122.0, meld_tile_visual_size.x + 16.0)
 	var hu_gap := 10.0
-	var hu_rect := Rect2(Vector2(hand_rect.position.x, hand_rect.end.y - hu_height), Vector2(hand_rect.size.x, hu_height))
+	var hu_x := 0.0 if seat_dock == SeatDock.LEFT else layout_width - hu_width
+	var hu_rect := Rect2(Vector2(hu_x, hand_rect.end.y - hu_height), Vector2(hu_width, hu_height))
 	if has_hu:
 		hand_rect = Rect2(hand_rect.position, Vector2(hand_rect.size.x, maxf(96.0, hand_rect.size.y - hu_height - hu_gap)))
 		hu_rect.position.y = hand_rect.end.y + hu_gap
@@ -886,10 +890,17 @@ func _create_claim_tile_stack(tile_data: Dictionary, scale: float, rotation: flo
 
 	var tile := _create_plain_meld_tile(tile_data, scale, rotation, show_back, highlight_winning)
 	var tile_size := tile.custom_minimum_size
-	wrapper.custom_minimum_size = tile_size
+	var is_side_rotation := absf(fmod(absf(rotation), 180.0) - 90.0) < 0.1
+	var wrapper_size := Vector2(tile_size.y, tile_size.x) if is_side_rotation else tile_size
+	wrapper.custom_minimum_size = wrapper_size
+	wrapper.size = wrapper_size
+	tile.position = Vector2(
+		(wrapper_size.x - tile_size.x) * 0.5,
+		(wrapper_size.y - tile_size.y) * 0.5
+	)
 	wrapper.add_child(tile)
 
-	wrapper.add_child(_create_claim_arrow_overlay(tile_size, arrow_text, true))
+	wrapper.add_child(_create_claim_arrow_overlay(wrapper_size, arrow_text, true))
 	return wrapper
 
 

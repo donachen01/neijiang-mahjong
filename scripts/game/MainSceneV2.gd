@@ -829,7 +829,7 @@ func _v17_board_rect() -> Rect2:
 
 
 func _v17_top_dynamic_rect() -> Rect2:
-	return _scale_v17_rect(8.0, 0.0, 1480.0, 210.0)
+	return _scale_v17_rect(16.0, 0.0, 1482.0, 210.0)
 
 
 func _v17_left_dynamic_rect() -> Rect2:
