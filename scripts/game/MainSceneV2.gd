@@ -1201,32 +1201,36 @@ func _setup_discard_helper_panel() -> void:
 		return
 	discard_helper_panel = Panel.new()
 	discard_helper_panel.name = "DiscardHelperPanel"
-	discard_helper_panel.custom_minimum_size = Vector2(640, 86)
+	discard_helper_panel.custom_minimum_size = Vector2(940, 160)
 	discard_helper_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	discard_helper_panel.z_index = 160
 	discard_helper_panel.top_level = true
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 10)
-	margin.add_theme_constant_override("margin_top", 6)
-	margin.add_theme_constant_override("margin_right", 10)
-	margin.add_theme_constant_override("margin_bottom", 6)
+	margin.add_theme_constant_override("margin_left", 20)
+	margin.add_theme_constant_override("margin_top", 16)
+	margin.add_theme_constant_override("margin_right", 20)
+	margin.add_theme_constant_override("margin_bottom", 16)
 	discard_helper_panel.add_child(margin)
 
 	var box := VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 2)
+	box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 4)
 	margin.add_child(box)
 
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 8)
+	header.visible = false
 	box.add_child(header)
 
 	discard_helper_title = Label.new()
-	discard_helper_title.text = "出牌辅助"
+	discard_helper_title.text = ""
 	discard_helper_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	discard_helper_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	discard_helper_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	discard_helper_title.visible = false
 	header.add_child(discard_helper_title)
 
 	discard_helper_action_button = Button.new()
@@ -1240,17 +1244,28 @@ func _setup_discard_helper_panel() -> void:
 
 	discard_helper_summary = Label.new()
 	discard_helper_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	discard_helper_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	discard_helper_summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	discard_helper_summary.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	discard_helper_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	discard_helper_summary.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	box.add_child(discard_helper_summary)
 
 	discard_helper_compare = Label.new()
 	discard_helper_compare.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	discard_helper_compare.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	discard_helper_compare.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	discard_helper_compare.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	discard_helper_compare.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	discard_helper_compare.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	discard_helper_compare.visible = false
 	box.add_child(discard_helper_compare)
 
 	discard_helper_options = Label.new()
 	discard_helper_options.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	discard_helper_options.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	discard_helper_options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	discard_helper_options.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	discard_helper_options.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	discard_helper_options.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	discard_helper_options.visible = false
 	box.add_child(discard_helper_options)
 
 	root_ui.add_child(discard_helper_panel)
@@ -1275,22 +1290,23 @@ func _apply_discard_helper_style() -> void:
 	panel_style.shadow_size = 8
 	panel_style.shadow_offset = Vector2(0, 4)
 	discard_helper_panel.add_theme_stylebox_override("panel", panel_style)
-	discard_helper_title.add_theme_font_size_override("font_size", 13)
+	discard_helper_title.visible = false
+	discard_helper_title.add_theme_font_size_override("font_size", 1)
 	discard_helper_title.add_theme_color_override("font_color", Color(0.96, 0.86, 0.62, 0.98))
 	discard_helper_title.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.02, 0.90))
-	discard_helper_title.add_theme_constant_override("outline_size", 2)
-	discard_helper_summary.add_theme_font_size_override("font_size", 16)
+	discard_helper_title.add_theme_constant_override("outline_size", 0)
+	discard_helper_summary.add_theme_font_size_override("font_size", 36)
 	discard_helper_summary.add_theme_color_override("font_color", IVORY_SOFT)
 	discard_helper_summary.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.92))
-	discard_helper_summary.add_theme_constant_override("outline_size", 2)
-	discard_helper_compare.add_theme_font_size_override("font_size", 12)
+	discard_helper_summary.add_theme_constant_override("outline_size", 4)
+	discard_helper_compare.add_theme_font_size_override("font_size", 1)
 	discard_helper_compare.add_theme_color_override("font_color", Color(0.84, 0.89, 0.82, 0.96))
 	discard_helper_compare.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.88))
-	discard_helper_compare.add_theme_constant_override("outline_size", 2)
-	discard_helper_options.add_theme_font_size_override("font_size", 12)
+	discard_helper_compare.add_theme_constant_override("outline_size", 0)
+	discard_helper_options.add_theme_font_size_override("font_size", 1)
 	discard_helper_options.add_theme_color_override("font_color", Color(0.79, 0.84, 0.81, 0.92))
 	discard_helper_options.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.82))
-	discard_helper_options.add_theme_constant_override("outline_size", 2)
+	discard_helper_options.add_theme_constant_override("outline_size", 0)
 	discard_helper_action_button.modulate = Color(1.0, 1.0, 1.0, 0.92)
 	discard_helper_action_button.visible = false
 	discard_helper_action_button.disabled = true
@@ -2775,35 +2791,39 @@ func _update_discard_helper_panel(snapshot: Dictionary, trainer_hint: Dictionary
 	if not ai_helper_enabled:
 		discard_helper_panel.visible = false
 		return
-	discard_helper_panel.visible = true
+	discard_helper_panel.visible = false
 	discard_helper_action_button.visible = false
 	discard_helper_action_button.disabled = true
 	_position_discard_helper_panel()
 	if trainer_hint.is_empty():
-		discard_helper_title.text = "出牌辅助"
-		discard_helper_summary.text = "轮到你出牌时显示建议。"
+		discard_helper_title.text = ""
+		discard_helper_title.visible = false
+		discard_helper_summary.text = ""
 		discard_helper_compare.text = ""
+		discard_helper_compare.visible = false
 		discard_helper_options.text = ""
+		discard_helper_options.visible = false
 		return
 
 	var recommended: Dictionary = trainer_hint.get("recommended", {})
 	var self_player: Dictionary = _player_by_seat(snapshot.get("players", []), 0)
-	var strategy_profile: Dictionary = trainer_hint.get("strategy_profile", {})
-	var mode_label: String = str(strategy_profile.get("mode_label", "两门速听"))
-	var situation_label: String = str(trainer_hint.get("situation_label", "两门均衡"))
-	discard_helper_title.text = "出牌辅助 · %s · %s" % [situation_label, mode_label]
+	discard_helper_title.text = ""
+	discard_helper_title.visible = false
 
 	if not can_discard or recommended.is_empty():
 		if bool(trainer_hint.get("can_self_hu", false)):
-			discard_helper_summary.text = "当前已成和，建议直接自摸。"
+			discard_helper_summary.text = "已成和，直接自摸"
 		elif bool(trainer_hint.get("can_add_gang", false)):
-			discard_helper_summary.text = "当前可补杠。"
+			discard_helper_summary.text = "可补杠"
 		elif bool(trainer_hint.get("can_an_gang", false)):
-			discard_helper_summary.text = "当前可暗杠。"
+			discard_helper_summary.text = "可暗杠"
 		else:
-			discard_helper_summary.text = "当前不是你的主动出牌阶段。"
+			discard_helper_summary.text = ""
 		discard_helper_compare.text = ""
+		discard_helper_compare.visible = false
 		discard_helper_options.text = ""
+		discard_helper_options.visible = false
+		discard_helper_panel.visible = discard_helper_summary.text != ""
 		return
 
 	var recommended_tile_name: String = str(recommended.get("tile_name", "?"))
@@ -2817,31 +2837,16 @@ func _update_discard_helper_panel(snapshot: Dictionary, trainer_hint: Dictionary
 		)
 	var display_option: Dictionary = selected_option if not selected_option.is_empty() else recommended
 	var display_tile_name: String = str(display_option.get("tile_name", recommended_tile_name))
-	discard_helper_summary.text = "建议：%s" % recommended_tile_name
+	discard_helper_summary.text = "打 %s" % recommended_tile_name
 	if not selected_option.is_empty():
-		discard_helper_summary.text = "已选：%s｜建议：%s" % [display_tile_name, recommended_tile_name]
+		discard_helper_summary.text = "%s → 打 %s" % [display_tile_name, recommended_tile_name]
 	discard_helper_action_button.visible = false
 	discard_helper_action_button.disabled = true
-
-	var compare_parts: Array[String] = [
-		"向听%d" % int(display_option.get("shanten", 8)),
-		"进张%d" % int(display_option.get("ukeire", 0)),
-		"胡率%.1f%%" % (float(display_option.get("win_probability", 0.0)) * 100.0),
-		"风险%s" % str(display_option.get("risk_label", "低危")),
-	]
-	discard_helper_compare.text = "%s｜%s" % [
-		_build_helper_explanation_text(trainer_hint, display_option),
-		"｜".join(compare_parts),
-	]
-
-	if not selected_option.is_empty() and selected_tile_id != recommended_tile_id:
-		discard_helper_options.text = "你选 %s，推荐更优 %d 分｜%s" % [
-			str(selected_option.get("tile_name", "?")),
-			int(recommended.get("score", 0)) - int(selected_option.get("score", 0)),
-			_build_helper_selected_option_reason(selected_option, recommended),
-		]
-	else:
-		discard_helper_options.text = _build_helper_secondary_choice_text(trainer_hint.get("options", []), recommended_tile_id)
+	discard_helper_compare.text = ""
+	discard_helper_compare.visible = false
+	discard_helper_options.text = ""
+	discard_helper_options.visible = false
+	discard_helper_panel.visible = true
 
 
 func _position_discard_helper_panel() -> void:
@@ -2863,6 +2868,9 @@ func _position_discard_helper_panel() -> void:
 			x = max_left_of_action
 		if Rect2(Vector2(x, y), Vector2(panel_width, panel_height)).intersects(action_rect, true):
 			y = maxf(18.0, minf(y, action_rect.position.y - panel_height - 18.0))
+	if self_hand_host != null:
+		var hand_top := self_hand_host.get_global_rect().position.y
+		y = minf(y, maxf(18.0, hand_top - panel_height - 16.0))
 	discard_helper_panel.position = Vector2(x, y)
 	discard_helper_panel.size = Vector2(panel_width, panel_height)
 

@@ -18,7 +18,7 @@ config/name="neijiangMahjong Prototype"
 run/main_scene="res://scenes/boot/SplashScreen.tscn"
 config/features=PackedStringArray("4.6", "C#")
 config/icon="res://res/art/app_icon/app_icon_1024.png"
-config/version="1.0.1"
+config/version="1.0.2"
 
 [autoload]
 

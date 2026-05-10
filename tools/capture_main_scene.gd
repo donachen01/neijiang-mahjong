@@ -33,6 +33,8 @@ func _capture() -> void:
 
 	await process_frame
 	await process_frame
+	_force_ai_helper_preview(root_node)
+	_force_self_hand_preview(root_node)
 
 	var image: Image = get_root().get_texture().get_image()
 	if image == null:
@@ -124,6 +126,67 @@ func _force_discard_demo() -> void:
 	game_state.set("discard_pile", discard_pile)
 	game_state.set("wall_count", wall.size())
 	game_state.call("_emit_state_changed")
+
+
+func _force_ai_helper_preview(root_node: Node) -> void:
+	if root_node == null:
+		return
+	root_node.set("ai_helper_enabled", true)
+	root_node.call("_update_discard_helper_panel", {
+		"players": [
+			{
+				"seat": 0,
+				"nickname": "本家",
+				"score": 0,
+				"hand_tiles": [
+					{"id": 9001, "suit": "tiao", "rank": 1},
+					{"id": 9002, "suit": "tiao", "rank": 2},
+					{"id": 9003, "suit": "tiao", "rank": 3},
+					{"id": 9004, "suit": "tong", "rank": 5},
+					{"id": 9005, "suit": "wan", "rank": 7},
+					{"id": 9006, "suit": "wan", "rank": 8},
+				],
+			},
+		],
+	}, {
+		"recommended": {
+			"tile": {"id": 9002, "suit": "tiao", "rank": 2},
+			"tile_name": "二条",
+			"shanten": 1,
+			"ukeire": 8,
+			"win_probability": 0.24,
+			"risk_label": "低危",
+			"score": 120,
+		},
+		"recommended_tile_id": 9002,
+		"options": [],
+		"strategy_profile": {"mode_label": "快攻"},
+		"situation_label": "缺门",
+	}, true)
+
+
+func _force_self_hand_preview(root_node: Node) -> void:
+	if root_node == null:
+		return
+	var self_hand_host: Node = root_node.get("self_hand_host") as Node
+	if self_hand_host == null:
+		return
+	self_hand_host.call(
+		"configure_hand",
+		[
+			{"id": 9001, "suit": "tiao", "rank": 1},
+			{"id": 9002, "suit": "tiao", "rank": 2},
+			{"id": 9003, "suit": "tiao", "rank": 3},
+			{"id": 9004, "suit": "tong", "rank": 5},
+			{"id": 9005, "suit": "wan", "rank": 7},
+			{"id": 9006, "suit": "wan", "rank": 8},
+		],
+		-1,
+		-1,
+		false,
+		{"recommended_tile_id": 9002},
+		{}
+	)
 
 
 func _take_tile_from_wall(wall: Array, suit: String, rank: int) -> Dictionary:

@@ -53,10 +53,15 @@ const TILE_INNER_BORDER := Color(1.0, 0.99, 0.88, 0.82)
 const TILE_INNER_SHADOW := Color(0.48, 0.45, 0.32, 0.13)
 const TILE_SIDE_COLOR := Color(0.76, 0.84, 0.63, 1.0)
 const TILE_SIDE_SHADE := Color(0.38, 0.53, 0.34, 0.52)
-const RECOMMEND_OUTLINE := Color(0.42, 0.66, 0.46, 0.92)
 const DANGER_OUTLINE := Color(0.72, 0.28, 0.24, 0.92)
-const RECOMMEND_BANNER := Color(0.18, 0.42, 0.28, 0.94)
 const DANGER_BANNER := Color(0.50, 0.14, 0.12, 0.92)
+const RECOMMEND_CONE_HEIGHT := 56.0
+const RECOMMEND_CONE_RADIUS := 24.0
+const RECOMMEND_CONE_SPIN_SPEED := 2.6
+const RECOMMEND_CONE_TOP := Color(1.0, 0.86, 0.20, 0.96)
+const RECOMMEND_CONE_SIDE_A := Color(1.0, 0.66, 0.10, 0.90)
+const RECOMMEND_CONE_SIDE_B := Color(0.92, 0.38, 0.08, 0.76)
+const RECOMMEND_CONE_SHADOW := Color(0.18, 0.09, 0.02, 0.28)
 
 var hand_tiles: Array = []
 var selected_tile_id: int = -1
@@ -68,6 +73,7 @@ var embedded_left_width: float = 0.0
 var embedded_left_gap: float = 0.0
 var embedded_right_width: float = 0.0
 var embedded_right_gap: float = 0.0
+var recommended_marker_contract: Dictionary = {}
 
 static var texture_cache: Dictionary = {}
 static var _face_stylebox: StyleBoxFlat = _build_face_stylebox()
@@ -109,6 +115,10 @@ func get_layout_bounds() -> Rect2:
 	return bounds
 
 
+func get_recommended_marker_contract() -> Dictionary:
+	return recommended_marker_contract.duplicate(true)
+
+
 func _draw() -> void:
 	if tile_layouts.is_empty():
 		return
@@ -122,6 +132,9 @@ func _draw() -> void:
 
 	for layout in selected_layouts:
 		_draw_single_tile(layout)
+
+	if _has_recommended_tile():
+		queue_redraw()
 
 
 func _draw_single_tile(layout: Dictionary) -> void:
@@ -163,7 +176,7 @@ func _draw_single_tile(layout: Dictionary) -> void:
 	if is_danger:
 		draw_rect(local_outer_rect.grow(5.0), DANGER_OUTLINE, false, 5.0)
 	if is_recommended:
-		draw_rect(local_outer_rect.grow(7.0), RECOMMEND_OUTLINE, false, 6.0)
+		_draw_recommended_cone(local_front_rect)
 	if is_selected:
 		_draw_selected_accent(local_front_rect, local_outer_rect)
 	if is_winning_tile:
@@ -211,6 +224,7 @@ func _draw_polyline_closed(points: PackedVector2Array, color: Color, width: floa
 
 func _rebuild_layout() -> void:
 	tile_layouts.clear()
+	recommended_marker_contract = {}
 	if hand_tiles.is_empty():
 		return
 
@@ -275,6 +289,54 @@ func _rebuild_layout() -> void:
 			"outer_rect": outer_rect,
 			"hit_rect": outer_rect.grow_individual(10.0, 12.0, 10.0, 10.0),
 		})
+		if int(trainer_markers.get("recommended_tile_id", -1)) == tile_id:
+			recommended_marker_contract = {
+				"mode": "rotating_cone",
+				"uses_outline": false,
+				"is_rotating": true,
+				"center": front_rect.get_center(),
+				"front_rect": front_rect,
+				"tile_id": tile_id,
+			}
+
+
+func _has_recommended_tile() -> bool:
+	return int(trainer_markers.get("recommended_tile_id", -1)) != -1
+
+
+func _draw_recommended_cone(front_rect: Rect2) -> void:
+	var center := front_rect.get_center()
+	var time := Time.get_ticks_msec() / 1000.0
+	var spin := time * TAU * RECOMMEND_CONE_SPIN_SPEED
+	var radius := RECOMMEND_CONE_RADIUS
+	var height := RECOMMEND_CONE_HEIGHT
+	var base_center := Vector2(center.x, center.y + height * 0.20)
+	var tip := Vector2(center.x + cos(spin) * radius * 0.18, center.y - height * 0.42)
+	var left := base_center + Vector2(cos(spin + PI * 0.88) * radius, sin(spin + PI * 0.88) * radius * 0.34)
+	var right := base_center + Vector2(cos(spin - PI * 0.88) * radius, sin(spin - PI * 0.88) * radius * 0.34)
+	var back := base_center + Vector2(cos(spin + PI) * radius * 0.72, sin(spin + PI) * radius * 0.26)
+	var front := base_center + Vector2(cos(spin) * radius * 0.72, sin(spin) * radius * 0.26)
+
+	draw_colored_polygon(_ellipse_points(base_center + Vector2(0, 7), radius * 0.92, radius * 0.24, 36), RECOMMEND_CONE_SHADOW)
+	draw_colored_polygon(PackedVector2Array([tip, left, back]), RECOMMEND_CONE_SIDE_B)
+	draw_colored_polygon(PackedVector2Array([tip, back, right]), RECOMMEND_CONE_SIDE_A.darkened(0.10))
+	draw_colored_polygon(PackedVector2Array([tip, left, front]), RECOMMEND_CONE_SIDE_A)
+	draw_colored_polygon(PackedVector2Array([tip, front, right]), RECOMMEND_CONE_SIDE_B.lightened(0.06))
+	draw_colored_polygon(PackedVector2Array([
+		tip + Vector2(0, 3),
+		front.lerp(left, 0.42),
+		front.lerp(right, 0.42),
+	]), Color(1.0, 0.98, 0.64, 0.30))
+	draw_colored_polygon(_ellipse_points(base_center, radius, radius * 0.34, 36), RECOMMEND_CONE_TOP)
+	draw_arc(base_center, radius, 0.0, TAU, 48, Color(0.82, 0.38, 0.04, 0.82), 2.0)
+
+
+func _ellipse_points(center: Vector2, radius_x: float, radius_y: float, segments: int) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for index in range(maxi(8, segments)):
+		var angle := TAU * float(index) / float(maxi(8, segments))
+		points.append(center + Vector2(cos(angle) * radius_x, sin(angle) * radius_y))
+	return points
 
 
 func _arc_factor_for_index(index: int) -> float:

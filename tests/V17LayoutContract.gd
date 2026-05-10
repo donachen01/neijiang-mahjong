@@ -28,6 +28,7 @@ func _run() -> void:
 	await _check_self_actual_meld_row_contract(root_node, failures)
 	_check_self_embedded_row_contract(root_node, failures)
 	_check_self_hand_fill_contract(root_node, failures)
+	await _check_ai_recommended_cone_contract(root_node, failures)
 	await _check_self_winning_tile_not_duplicated(root_node, failures)
 	_check_frontend_design_layout_contract(root_node, failures)
 	_check_self_status_badge_contract(root_node, failures)
@@ -360,10 +361,26 @@ func _check_action_helper_layer_contract(root_node: Node, failures: Array[String
 		failures.append("碰杠胡操作面板层级必须高于 AI 提示面板")
 	if helper_button != null and helper_button.visible:
 		failures.append("AI 提示不应再显示“选中推荐”按钮")
-	if helper_panel.custom_minimum_size.x < 480.0:
-		failures.append("AI 提示应作为手牌上方横向悬浮信息条，当前宽度 %.1f 太窄" % helper_panel.custom_minimum_size.x)
-	if helper_panel.custom_minimum_size.y > 104.0:
-		failures.append("AI 提示面板过高，会遮挡主桌面和碰杠胡按钮")
+	if helper_panel.custom_minimum_size.x < 900.0:
+		failures.append("AI 提示应放大为手机可读的大浮层，当前宽度 %.1f 太窄" % helper_panel.custom_minimum_size.x)
+	if helper_panel.custom_minimum_size.y < 156.0:
+		failures.append("AI 提示浮层高度不足，手机上文字会太小，当前高度 %.1f" % helper_panel.custom_minimum_size.y)
+	var helper_title: Label = root_node.get("discard_helper_title") as Label
+	var helper_summary: Label = root_node.get("discard_helper_summary") as Label
+	var helper_compare: Label = root_node.get("discard_helper_compare") as Label
+	var helper_options: Label = root_node.get("discard_helper_options") as Label
+	if helper_title != null and helper_title.visible:
+		failures.append("AI 提示框不要显示“出牌辅助”等说明标题")
+	if helper_summary != null:
+		if helper_summary.horizontal_alignment != HORIZONTAL_ALIGNMENT_CENTER or helper_summary.vertical_alignment != VERTICAL_ALIGNMENT_CENTER:
+			failures.append("AI 提示主内容应居中显示")
+		if helper_summary.get_theme_font_size("font_size") < 34:
+			failures.append("AI 提示主内容字体应明显放大，当前 %d" % helper_summary.get_theme_font_size("font_size"))
+	if helper_compare != null:
+		if helper_compare.visible:
+			failures.append("AI 提示框不应再显示分析说明文字")
+	if helper_options != null and helper_options.visible:
+		failures.append("AI 提示框不应再显示备选说明文字")
 	var action_snapshot := {
 		"current_phase": 2,
 		"players": [
@@ -381,8 +398,37 @@ func _check_action_helper_layer_contract(root_node: Node, failures: Array[String
 	}
 	root_node.call("_refresh_action_panel", action_snapshot)
 	root_node.call("_layout_action_panel")
+	root_node.set("ai_helper_enabled", true)
+	root_node.call("_update_discard_helper_panel", {
+		"players": [
+			{
+				"seat": 0,
+				"nickname": "本家",
+				"score": 0,
+				"hand_tiles": _fake_tiles(6),
+			},
+		],
+	}, {
+		"recommended": {
+			"tile": {"id": 9001, "suit": "tiao", "rank": 2},
+			"tile_name": "二条",
+			"shanten": 1,
+			"ukeire": 8,
+			"win_probability": 0.24,
+			"risk_label": "低危",
+			"score": 120,
+			"explanation_hint": "保留两门进张",
+		},
+		"recommended_tile_id": 9001,
+		"options": [],
+		"strategy_profile": {"mode_label": "快攻"},
+		"situation_label": "缺门",
+	}, true)
 	helper_panel.visible = true
 	root_node.call("_position_discard_helper_panel")
+	var helper_text := helper_summary.text if helper_summary != null else ""
+	if helper_text.contains("出牌辅助") or helper_text.contains("轮到你出牌") or helper_text.contains("建议："):
+		failures.append("AI 提示框应直接显示内容，不要出现说明文字或“建议：”前缀：%s" % helper_text)
 	var action_rect := action_panel.get_global_rect()
 	var helper_rect := helper_panel.get_global_rect()
 	var hand_host: Control = _find_control(root_node, "SelfHandHost")
@@ -677,6 +723,36 @@ func _check_self_hand_fill_contract(root_node: Node, failures: Array[String]) ->
 	var vertical_fill := hand_bounds.size.y / maxf(1.0, host_height)
 	if vertical_fill < 0.86:
 		failures.append("本家手牌纵向填充不足，当前 %.2f，应进一步铺满底部托盘" % vertical_fill)
+
+
+func _check_ai_recommended_cone_contract(root_node: Node, failures: Array[String]) -> void:
+	var hand_host: Control = _find_control(root_node, "SelfHandHost")
+	if hand_host == null:
+		failures.append("缺少本家手牌横排，无法验证 AI 推荐圆锥标记")
+		return
+	hand_host.call("configure_hand", _fake_tiles(6), -1, -1, true, {"recommended_tile_id": 9002}, {})
+	await process_frame
+	var hand_canvas: Node = hand_host.find_child("HandCanvas", true, false)
+	if hand_canvas == null:
+		failures.append("本家手牌画布缺失，无法验证 AI 推荐圆锥标记")
+		return
+	if not hand_canvas.has_method("get_recommended_marker_contract"):
+		failures.append("AI 推荐牌标记应暴露旋转 3D 圆锥合同，而不是只画牌外框")
+		return
+	var marker: Dictionary = hand_canvas.call("get_recommended_marker_contract")
+	if marker.is_empty():
+		failures.append("AI 推荐牌应在对应麻将中心显示圆锥标记")
+		return
+	if str(marker.get("mode", "")) != "rotating_cone":
+		failures.append("AI 推荐牌标记应是旋转圆锥，当前模式 %s" % str(marker.get("mode", "")))
+	if bool(marker.get("uses_outline", true)):
+		failures.append("AI 推荐牌不要再用麻将外框高亮")
+	if not bool(marker.get("is_rotating", false)):
+		failures.append("AI 推荐圆锥应持续旋转")
+	var center: Vector2 = marker.get("center", Vector2.ZERO)
+	var front_rect: Rect2 = marker.get("front_rect", Rect2())
+	if front_rect.size == Vector2.ZERO or not front_rect.has_point(center):
+		failures.append("AI 推荐圆锥应位于推荐麻将牌中心")
 
 
 func _check_self_winning_tile_not_duplicated(root_node: Node, failures: Array[String]) -> void:
