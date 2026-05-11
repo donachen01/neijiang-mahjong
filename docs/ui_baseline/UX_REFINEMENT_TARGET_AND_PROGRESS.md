@@ -178,6 +178,7 @@
 | 1.0.22 | ee66400 | 2026-05-11 | 统一玩家 HUD 状态标记：报叫/杠状态增加更明确的边框权重，杠数文案改为 `杠xN`，让状态不只依赖颜色识别；顶部内联身份状态同步补边框；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_22_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_22_mobile_1365x768.png` | 91% | 继续步骤 6/7：桌面边缘、牌体厚度、启动图一致性与最终移动端验收 |
 | 1.0.23 | 645c996 | 2026-05-11 | 桌面与牌体资产微调：中心暖光更贴近启动图气质，边缘框线进一步柔化；牌背绿色提亮并保留暗边，牌面侧边和底部阴影更温润；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_23_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_23_mobile_1365x768.png` | 94% | 继续步骤 5/7/8：AI 提示和最终移动端验收，准备 100% 闭环与最终打包 |
 | 1.0.24 | 4a10938 | 2026-05-11 | 最终收尾：AI 推荐玉金悬浮标记半径略收小、透明度更柔并上移安全区，减少压牌纹风险；完成 100% 验收矩阵与最终双截图；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_24_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_24_mobile_1365x768.png` | 100% | 执行最终 Android release 打包并记录 APK 校验信息 |
+| 1.0.24 package | 本次提交 | 2026-05-11 | 最终 Android release 打包闭环：使用 `tools/export_android_release.sh` 导出 1.0.24 APK，继续剥离 `assets/docs/*` 与 UI 基线 mockup/capture 导入缓存，zipalign 后重新签名 | APK `build/android/NeijiangMahjong-release.apk` 114M；SHA256 `7b4535d6084ba273c5c8f7adf3563b97e5f5dc5234a73661ffd8ed4acc8af4ed`；`apksigner verify --verbose` 通过 v2/v3，1 个签名者；APK 内容检查无 `assets/docs` 与 UI 基线导入缓存命中 | 100% | 本轮主牌桌 3D 卡通轻奢 UX 精修与最终打包完成 |
 
 ## 6. 未完成任务池
 
