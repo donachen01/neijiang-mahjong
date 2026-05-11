@@ -1,6 +1,6 @@
 extends SceneTree
 
-const OUTPUT_PATH := "user://capture_main_scene.png"
+const DEFAULT_OUTPUT_PATH := "user://capture_main_scene.png"
 const SCENE_PATH := "res://scenes/table/MainSceneV2.tscn"
 const AUTO_DING_QUE_SUIT := "tong"
 const MAX_AI_STEPS := 24
@@ -17,6 +17,7 @@ func _init() -> void:
 
 
 func _capture() -> void:
+	var output_path := _capture_output_path()
 	var scene: PackedScene = load(SCENE_PATH) as PackedScene
 	if scene == null:
 		push_error("Failed to load scene: %s" % SCENE_PATH)
@@ -44,7 +45,7 @@ func _capture() -> void:
 		quit(1)
 		return
 
-	var path := ProjectSettings.globalize_path(OUTPUT_PATH)
+	var path := ProjectSettings.globalize_path(output_path)
 	var err := image.save_png(path)
 	if err != OK:
 		push_error("Failed to save capture: %s" % path)
@@ -53,6 +54,15 @@ func _capture() -> void:
 
 	print(path)
 	quit()
+
+
+func _capture_output_path() -> String:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--capture-output="):
+			var value := argument.trim_prefix("--capture-output=")
+			if value != "":
+				return value
+	return DEFAULT_OUTPUT_PATH
 
 
 func _force_playable_snapshot() -> void:

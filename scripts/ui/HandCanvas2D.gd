@@ -17,7 +17,7 @@ const SELECTED_LIFT := 10.0
 const NEW_DRAW_LIFT := 8.0
 const FRONT_INSET := Vector2(6.2, 6.4)
 const SHADOW_OFFSET := Vector2(0.0, 7.2)
-const SHADOW_ALPHA := 0.34
+const SHADOW_ALPHA := 0.30
 const SUIT_TEXTURE_Y_OFFSETS := {
 	"wan": 2.0,
 	"tiao": -2.0,
@@ -165,6 +165,7 @@ func _draw_single_tile(layout: Dictionary) -> void:
 	if surface_texture != null:
 		var surface_rect := local_front_rect.grow_individual(-6.0, -3.0, -6.0, 8.0)
 		draw_texture_rect(surface_texture, surface_rect, false)
+		_draw_asset_tile_warmth(local_front_rect)
 		_draw_asset_tile_depth(local_front_rect)
 	else:
 		draw_rect(local_shadow_rect, Color(0.0, 0.0, 0.0, SHADOW_ALPHA), true)
@@ -215,7 +216,7 @@ func _draw_danger_hint(front_rect: Rect2) -> void:
 func _draw_asset_tile_depth(front_rect: Rect2) -> void:
 	var body := front_rect.grow_individual(-7.0, -4.0, -7.0, 5.0)
 	var right_side := StyleBoxFlat.new()
-	right_side.bg_color = Color(0.30, 0.42, 0.23, 0.74)
+	right_side.bg_color = Color(0.38, 0.43, 0.27, 0.42)
 	right_side.corner_radius_top_right = TILE_CORNER_RADIUS - 2
 	right_side.corner_radius_bottom_right = TILE_CORNER_RADIUS - 2
 	draw_style_box(right_side, Rect2(
@@ -224,7 +225,7 @@ func _draw_asset_tile_depth(front_rect: Rect2) -> void:
 	))
 
 	var bottom_side := StyleBoxFlat.new()
-	bottom_side.bg_color = Color(0.36, 0.44, 0.25, 0.78)
+	bottom_side.bg_color = Color(0.43, 0.43, 0.26, 0.45)
 	bottom_side.corner_radius_bottom_left = TILE_CORNER_RADIUS - 2
 	bottom_side.corner_radius_bottom_right = TILE_CORNER_RADIUS - 2
 	draw_style_box(bottom_side, Rect2(
@@ -242,7 +243,7 @@ func _draw_asset_tile_depth(front_rect: Rect2) -> void:
 	))
 
 	var contact_shadow := StyleBoxFlat.new()
-	contact_shadow.bg_color = Color(0.0, 0.0, 0.0, 0.18)
+	contact_shadow.bg_color = Color(0.0, 0.0, 0.0, 0.13)
 	contact_shadow.corner_radius_bottom_left = TILE_CORNER_RADIUS
 	contact_shadow.corner_radius_bottom_right = TILE_CORNER_RADIUS
 	draw_style_box(contact_shadow, Rect2(
@@ -251,12 +252,32 @@ func _draw_asset_tile_depth(front_rect: Rect2) -> void:
 	))
 
 
+func _draw_asset_tile_warmth(front_rect: Rect2) -> void:
+	var body := front_rect.grow_individual(-8.0, -5.0, -8.0, 6.0)
+	var warm_wash := StyleBoxFlat.new()
+	warm_wash.bg_color = Color(0.86, 0.74, 0.46, 0.055)
+	warm_wash.corner_radius_top_left = TILE_CORNER_RADIUS - 2
+	warm_wash.corner_radius_top_right = TILE_CORNER_RADIUS - 2
+	warm_wash.corner_radius_bottom_left = TILE_CORNER_RADIUS - 2
+	warm_wash.corner_radius_bottom_right = TILE_CORNER_RADIUS - 2
+	draw_style_box(warm_wash, body.grow_individual(6.0, 10.0, 6.0, 10.0))
+
+	var lower_shade := StyleBoxFlat.new()
+	lower_shade.bg_color = Color(0.50, 0.42, 0.22, 0.045)
+	lower_shade.corner_radius_bottom_left = TILE_CORNER_RADIUS - 2
+	lower_shade.corner_radius_bottom_right = TILE_CORNER_RADIUS - 2
+	draw_style_box(lower_shade, Rect2(
+		body.position + Vector2(8.0, body.size.y * 0.68),
+		Vector2(body.size.x - 16.0, body.size.y * 0.24)
+	))
+
+
 func _draw_asset_tile_rim(front_rect: Rect2) -> void:
 	var body := front_rect.grow_individual(-7.0, -4.0, -7.0, 5.0)
 	var rim := StyleBoxFlat.new()
 	rim.bg_color = Color(0.0, 0.0, 0.0, 0.0)
-	rim.border_color = Color(0.24, 0.34, 0.19, 0.42)
-	rim.set_border_width_all(2)
+	rim.border_color = Color(0.36, 0.40, 0.24, 0.24)
+	rim.set_border_width_all(1)
 	rim.corner_radius_top_left = TILE_CORNER_RADIUS - 1
 	rim.corner_radius_top_right = TILE_CORNER_RADIUS - 1
 	rim.corner_radius_bottom_left = TILE_CORNER_RADIUS - 1
@@ -264,7 +285,7 @@ func _draw_asset_tile_rim(front_rect: Rect2) -> void:
 	draw_style_box(rim, body.grow_individual(-1.0, -1.0, -1.0, -1.0))
 
 	var bottom_lip := StyleBoxFlat.new()
-	bottom_lip.bg_color = Color(0.19, 0.28, 0.14, 0.58)
+	bottom_lip.bg_color = Color(0.38, 0.39, 0.23, 0.34)
 	bottom_lip.corner_radius_bottom_left = TILE_CORNER_RADIUS
 	bottom_lip.corner_radius_bottom_right = TILE_CORNER_RADIUS
 	draw_style_box(bottom_lip, Rect2(
@@ -273,7 +294,7 @@ func _draw_asset_tile_rim(front_rect: Rect2) -> void:
 	))
 
 	var right_lip := StyleBoxFlat.new()
-	right_lip.bg_color = Color(0.18, 0.28, 0.14, 0.50)
+	right_lip.bg_color = Color(0.34, 0.38, 0.23, 0.30)
 	right_lip.corner_radius_top_right = TILE_CORNER_RADIUS
 	right_lip.corner_radius_bottom_right = TILE_CORNER_RADIUS
 	draw_style_box(right_lip, Rect2(
@@ -456,8 +477,9 @@ func _draw_recommended_cone(front_rect: Rect2) -> void:
 	var spin := time * TAU * RECOMMEND_CONE_SPIN_SPEED
 	var radius := RECOMMEND_CONE_RADIUS
 	var height := RECOMMEND_CONE_HEIGHT
-	var base_center := Vector2(center.x, center.y + height * 0.20)
-	var tip := Vector2(center.x + cos(spin) * radius * 0.18, center.y - height * 0.42)
+	var hover_center := center + Vector2(0.0, -8.0)
+	var base_center := Vector2(hover_center.x, hover_center.y + height * 0.08)
+	var tip := Vector2(hover_center.x + cos(spin) * radius * 0.18, hover_center.y - height * 0.54)
 	var left := base_center + Vector2(cos(spin + PI * 0.88) * radius, sin(spin + PI * 0.88) * radius * 0.34)
 	var right := base_center + Vector2(cos(spin - PI * 0.88) * radius, sin(spin - PI * 0.88) * radius * 0.34)
 	var back := base_center + Vector2(cos(spin + PI) * radius * 0.72, sin(spin + PI) * radius * 0.26)

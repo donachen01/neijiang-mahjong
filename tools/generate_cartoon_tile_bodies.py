@@ -47,16 +47,16 @@ def draw_tile(size: tuple[int, int], back: bool) -> Image.Image:
 	mask = rounded_mask(body_size, radius)
 
 	shadow = Image.new("RGBA", body_size, (0, 0, 0, 0))
-	shadow.putalpha(mask.filter(ImageFilter.GaussianBlur(max(3, int(4.2 * scale)))).point(lambda value: int(value * 0.20)))
+	shadow.putalpha(mask.filter(ImageFilter.GaussianBlur(max(4, int(5.8 * scale)))).point(lambda value: int(value * 0.17)))
 	canvas.alpha_composite(shadow, (body_rect[0] + int(5 * scale), body_rect[1] + int(8 * scale)))
 
-	side_color = (60, 116, 46) if back else (156, 164, 116)
+	side_color = (68, 126, 52) if back else (146, 155, 108)
 	side = Image.new("RGBA", body_size, (*side_color, 255))
 	side.putalpha(mask)
 	canvas.alpha_composite(side, (body_rect[0] + int(4 * scale), body_rect[1] + int(6 * scale)))
 
-	top_color = (111, 194, 48) if back else (255, 251, 228)
-	bottom_color = (62, 144, 34) if back else (238, 224, 174)
+	top_color = (118, 202, 56) if back else (248, 240, 212)
+	bottom_color = (70, 152, 40) if back else (218, 202, 148)
 	face = vertical_gradient(body_size, top_color, bottom_color)
 	face.putalpha(mask)
 	canvas.alpha_composite(face, (body_rect[0], body_rect[1]))
@@ -68,7 +68,7 @@ def draw_tile(size: tuple[int, int], back: bool) -> Image.Image:
 		body_rect[2] - int(4 * scale),
 		body_rect[3] - int(4 * scale),
 	)
-	d.rounded_rectangle(inner, radius=max(4, radius - int(4 * scale)), outline=(255, 255, 235, 78), width=max(1, int(1.2 * scale)))
+	d.rounded_rectangle(inner, radius=max(4, radius - int(4 * scale)), outline=(255, 252, 228, 96), width=max(1, int(1.2 * scale)))
 	d.arc(
 		(inner[0] + int(7 * scale), inner[1] + int(4 * scale), inner[2] - int(7 * scale), inner[1] + int(42 * scale)),
 		188,
@@ -78,13 +78,13 @@ def draw_tile(size: tuple[int, int], back: bool) -> Image.Image:
 	)
 	d.line(
 		(body_rect[2] - int(6 * scale), body_rect[1] + int(18 * scale), body_rect[2] - int(6 * scale), body_rect[3] - int(18 * scale)),
-		fill=(25, 60, 28, 42) if back else (118, 116, 78, 42),
-		width=max(1, int(1.6 * scale)),
+		fill=(32, 72, 32, 30) if back else (116, 108, 70, 42),
+		width=max(1, int(1.25 * scale)),
 	)
 	d.rounded_rectangle(
 		(body_rect[0] + int(18 * scale), body_rect[3] - int(8 * scale), body_rect[2] - int(16 * scale), body_rect[3] - int(4 * scale)),
 		radius=max(1, int(2 * scale)),
-		fill=(27, 72, 30, 48) if back else (120, 111, 66, 42),
+		fill=(32, 78, 34, 28) if back else (118, 108, 68, 38),
 	)
 	if back:
 		d.rounded_rectangle(

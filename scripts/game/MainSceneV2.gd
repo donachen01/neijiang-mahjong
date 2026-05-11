@@ -1554,38 +1554,40 @@ func _apply_floating_action_button_style(button: Button, bg: Color, tooltip: Str
 	if button == null:
 		return
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = bg
-	normal.border_color = Color(0.86, 0.96, 0.92, 0.18)
-	normal.set_border_width_all(1)
+	normal.bg_color = bg.lightened(0.05)
+	normal.border_color = Color(0.95, 1.0, 0.86, 0.30)
+	normal.set_border_width_all(2)
 	normal.corner_radius_top_left = 37
 	normal.corner_radius_top_right = 37
 	normal.corner_radius_bottom_left = 37
 	normal.corner_radius_bottom_right = 37
-	normal.shadow_color = Color(0.0, 0.0, 0.0, 0.18)
-	normal.shadow_size = 8
-	normal.shadow_offset = Vector2(0, 3)
+	normal.shadow_color = Color(0.0, 0.08, 0.05, 0.24)
+	normal.shadow_size = 10
+	normal.shadow_offset = Vector2(0, 4)
 	normal.content_margin_left = 0
 	normal.content_margin_right = 0
 	normal.content_margin_top = 0
 	normal.content_margin_bottom = 0
 
 	var hover := normal.duplicate()
-	hover.bg_color = bg.lightened(0.08)
-	hover.shadow_size = 10
+	hover.bg_color = bg.lightened(0.12)
+	hover.border_color = Color(1.0, 0.96, 0.70, 0.46)
+	hover.shadow_size = 12
 
 	var pressed := normal.duplicate()
-	pressed.bg_color = bg.darkened(0.08)
-	pressed.shadow_size = 3
+	pressed.bg_color = bg.darkened(0.10)
+	pressed.border_color = Color(0.94, 0.84, 0.54, 0.42)
+	pressed.shadow_size = 4
 	pressed.shadow_offset = Vector2(0, 1)
 
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", pressed)
 	button.add_theme_stylebox_override("focus", hover)
-	button.add_theme_font_size_override("font_size", 22)
-	button.add_theme_color_override("font_color", Color(0.97, 0.98, 0.95, 1.0))
-	button.add_theme_color_override("font_outline_color", Color(0.05, 0.16, 0.12, 0.90))
-	button.add_theme_constant_override("outline_size", 1)
+	button.add_theme_font_size_override("font_size", 23)
+	button.add_theme_color_override("font_color", Color(0.99, 0.98, 0.88, 1.0))
+	button.add_theme_color_override("font_outline_color", Color(0.04, 0.12, 0.09, 0.94))
+	button.add_theme_constant_override("outline_size", 2)
 	button.tooltip_text = tooltip
 
 
@@ -1739,10 +1741,10 @@ func _setup_v17_player_info_panels() -> void:
 
 		var margin := MarginContainer.new()
 		margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-		margin.add_theme_constant_override("margin_left", 10)
-		margin.add_theme_constant_override("margin_top", 8)
-		margin.add_theme_constant_override("margin_right", 10)
-		margin.add_theme_constant_override("margin_bottom", 8)
+		margin.add_theme_constant_override("margin_left", 9)
+		margin.add_theme_constant_override("margin_top", 7)
+		margin.add_theme_constant_override("margin_right", 9)
+		margin.add_theme_constant_override("margin_bottom", 7)
 		panel.add_child(margin)
 
 		var row := HBoxContainer.new()
@@ -1752,7 +1754,7 @@ func _setup_v17_player_info_panels() -> void:
 
 		var avatar := Label.new()
 		avatar.name = "AvatarBadge"
-		avatar.custom_minimum_size = Vector2(62, 62)
+		avatar.custom_minimum_size = Vector2(58, 58)
 		avatar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		avatar.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		STYLE_CONFIG.apply_label(avatar, false, true)
@@ -1761,8 +1763,8 @@ func _setup_v17_player_info_panels() -> void:
 		avatar.add_theme_color_override("font_outline_color", Color(1.0, 0.98, 0.88, 0.70))
 		avatar.add_theme_constant_override("outline_size", 1)
 		var avatar_style := StyleBoxFlat.new()
-		avatar_style.bg_color = Color(0.90, 1.0, 0.90, 0.96)
-		avatar_style.border_color = Color(0.72, 0.98, 0.90, 0.62)
+		avatar_style.bg_color = Color(0.91, 1.0, 0.91, 0.94)
+		avatar_style.border_color = Color(0.78, 1.0, 0.91, 0.54)
 		avatar_style.set_border_width_all(2)
 		avatar_style.corner_radius_top_left = 18
 		avatar_style.corner_radius_top_right = 18
@@ -1789,8 +1791,8 @@ func _setup_v17_player_info_panels() -> void:
 		name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		STYLE_CONFIG.apply_label(name_label, false, true)
 		name_label.add_theme_font_size_override("font_size", 21)
-		name_label.add_theme_color_override("font_color", Color(1.0, 0.99, 0.90, 0.98))
-		name_label.add_theme_color_override("font_outline_color", Color(0.04, 0.12, 0.08, 0.86))
+		name_label.add_theme_color_override("font_color", Color(1.0, 0.99, 0.90, 1.0))
+		name_label.add_theme_color_override("font_outline_color", Color(0.03, 0.10, 0.07, 0.96))
 		name_label.add_theme_constant_override("outline_size", 2)
 		vbox.add_child(name_label)
 
@@ -1800,7 +1802,7 @@ func _setup_v17_player_info_panels() -> void:
 		status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		STYLE_CONFIG.apply_label(status_label, false, false)
 		status_label.add_theme_font_size_override("font_size", 17)
-		status_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.42, 1.0))
+		status_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.46, 1.0))
 		status_label.add_theme_color_override("font_outline_color", Color(0.05, 0.08, 0.05, 0.92))
 		status_label.add_theme_constant_override("outline_size", 2)
 		vbox.add_child(status_label)
@@ -1870,8 +1872,8 @@ func _apply_v17_player_info_panel_style(panel: Panel, seat: int) -> void:
 		return
 	panel.clip_contents = true
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.25, 0.20, 0.68)
-	style.border_color = Color(0.86, 1.0, 0.82, 0.28)
+	style.bg_color = Color(0.08, 0.29, 0.22, 0.56)
+	style.border_color = Color(0.93, 1.0, 0.84, 0.24)
 	style.set_border_width_all(1)
 	style.corner_radius_top_left = 20
 	style.corner_radius_top_right = 20
@@ -1881,14 +1883,14 @@ func _apply_v17_player_info_panel_style(panel: Panel, seat: int) -> void:
 	style.content_margin_right = 8
 	style.content_margin_top = 8
 	style.content_margin_bottom = 8
-	style.shadow_color = Color(0.00, 0.08, 0.05, 0.26)
-	style.shadow_size = 14
+	style.shadow_color = Color(0.00, 0.08, 0.05, 0.18)
+	style.shadow_size = 10
 	style.shadow_offset = Vector2(0, 5)
 	style.anti_aliasing = true
 	style.anti_aliasing_size = 1.4
 	panel.add_theme_stylebox_override("panel", style)
 	panel.self_modulate = Color(1.0, 1.0, 1.0, 0.98)
-	_ensure_material_overlay(panel, "V17SeatCardSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.42)
+	_ensure_material_overlay(panel, "V17SeatCardSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.34)
 
 
 func _setup_self_hu_tile_host() -> void:
@@ -5688,29 +5690,30 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 	if button == null:
 		return
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = bg
-	normal.border_color = border
+	normal.bg_color = bg.lightened(0.04 if not emphasized else 0.08)
+	normal.border_color = border.lightened(0.18)
 	normal.set_border_width_all(2 if emphasized else 1)
-	normal.corner_radius_top_left = 24
-	normal.corner_radius_top_right = 24
-	normal.corner_radius_bottom_left = 24
-	normal.corner_radius_bottom_right = 24
+	normal.corner_radius_top_left = 25
+	normal.corner_radius_top_right = 25
+	normal.corner_radius_bottom_left = 25
+	normal.corner_radius_bottom_right = 25
 	normal.content_margin_left = 14
 	normal.content_margin_right = 14
 	normal.content_margin_top = 9
 	normal.content_margin_bottom = 9
-	normal.shadow_color = Color(0.0, 0.08, 0.05, 0.28)
-	normal.shadow_size = 12 if emphasized else 8
+	normal.shadow_color = Color(0.0, 0.08, 0.05, 0.32 if emphasized else 0.22)
+	normal.shadow_size = 13 if emphasized else 9
 	normal.shadow_offset = Vector2(0, 4)
 	normal.anti_aliasing = true
 	normal.anti_aliasing_size = 1.4
 
 	var hover := normal.duplicate()
-	hover.bg_color = bg.lightened(0.08)
+	hover.bg_color = bg.lightened(0.14)
+	hover.border_color = Color(1.0, 0.94, 0.66, 0.50) if emphasized else border.lightened(0.32)
 	hover.shadow_size = normal.shadow_size + 2
 
 	var pressed := normal.duplicate()
-	pressed.bg_color = bg.darkened(0.08)
+	pressed.bg_color = bg.darkened(0.10)
 	pressed.shadow_size = maxi(2, normal.shadow_size - 3)
 	pressed.shadow_offset = Vector2(0, 1)
 
@@ -5725,7 +5728,7 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 	button.add_theme_stylebox_override("focus", hover)
 	button.add_theme_stylebox_override("disabled", disabled)
 	button.add_theme_color_override("font_color", font_color)
-	button.add_theme_color_override("font_outline_color", Color(0.16, 0.09, 0.03, 0.88))
+	button.add_theme_color_override("font_outline_color", Color(0.08, 0.06, 0.03, 0.92))
 	button.add_theme_constant_override("outline_size", 2)
 	button.add_theme_font_size_override("font_size", 17 if button in [top_bar_button, top_ai_tuning_button, top_ai_helper_button, top_settlement_info_button, top_next_round_button, top_exit_button] else font_size)
 
