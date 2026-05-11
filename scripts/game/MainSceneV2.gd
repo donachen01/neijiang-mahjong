@@ -1554,31 +1554,33 @@ func _apply_floating_action_button_style(button: Button, bg: Color, tooltip: Str
 	if button == null:
 		return
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = bg.lightened(0.05)
-	normal.border_color = Color(0.95, 1.0, 0.86, 0.30)
+	normal.bg_color = bg.lightened(0.10)
+	normal.border_color = Color(1.0, 0.96, 0.68, 0.46)
 	normal.set_border_width_all(2)
 	normal.corner_radius_top_left = 37
 	normal.corner_radius_top_right = 37
 	normal.corner_radius_bottom_left = 37
 	normal.corner_radius_bottom_right = 37
-	normal.shadow_color = Color(0.0, 0.08, 0.05, 0.24)
-	normal.shadow_size = 10
-	normal.shadow_offset = Vector2(0, 4)
+	normal.shadow_color = Color(0.0, 0.08, 0.05, 0.28)
+	normal.shadow_size = 12
+	normal.shadow_offset = Vector2(0, 5)
 	normal.content_margin_left = 0
 	normal.content_margin_right = 0
-	normal.content_margin_top = 0
-	normal.content_margin_bottom = 0
+	normal.content_margin_top = 1
+	normal.content_margin_bottom = 3
 
 	var hover := normal.duplicate()
-	hover.bg_color = bg.lightened(0.12)
-	hover.border_color = Color(1.0, 0.96, 0.70, 0.46)
-	hover.shadow_size = 12
+	hover.bg_color = bg.lightened(0.18)
+	hover.border_color = Color(1.0, 0.98, 0.76, 0.64)
+	hover.shadow_size = 15
 
 	var pressed := normal.duplicate()
-	pressed.bg_color = bg.darkened(0.10)
+	pressed.bg_color = bg.darkened(0.08)
 	pressed.border_color = Color(0.94, 0.84, 0.54, 0.42)
-	pressed.shadow_size = 4
+	pressed.shadow_size = 5
 	pressed.shadow_offset = Vector2(0, 1)
+	pressed.content_margin_top = 4
+	pressed.content_margin_bottom = 0
 
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
@@ -1872,8 +1874,8 @@ func _apply_v17_player_info_panel_style(panel: Panel, seat: int) -> void:
 		return
 	panel.clip_contents = true
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.29, 0.22, 0.56)
-	style.border_color = Color(0.93, 1.0, 0.84, 0.24)
+	style.bg_color = Color(0.08, 0.27, 0.21, 0.48)
+	style.border_color = Color(0.96, 1.0, 0.82, 0.16)
 	style.set_border_width_all(1)
 	style.corner_radius_top_left = 20
 	style.corner_radius_top_right = 20
@@ -1883,14 +1885,14 @@ func _apply_v17_player_info_panel_style(panel: Panel, seat: int) -> void:
 	style.content_margin_right = 8
 	style.content_margin_top = 8
 	style.content_margin_bottom = 8
-	style.shadow_color = Color(0.00, 0.08, 0.05, 0.18)
-	style.shadow_size = 10
-	style.shadow_offset = Vector2(0, 5)
+	style.shadow_color = Color(0.00, 0.07, 0.05, 0.14)
+	style.shadow_size = 8
+	style.shadow_offset = Vector2(0, 4)
 	style.anti_aliasing = true
 	style.anti_aliasing_size = 1.4
 	panel.add_theme_stylebox_override("panel", style)
-	panel.self_modulate = Color(1.0, 1.0, 1.0, 0.98)
-	_ensure_material_overlay(panel, "V17SeatCardSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.34)
+	panel.self_modulate = Color(1.0, 1.0, 1.0, 0.94)
+	_ensure_material_overlay(panel, "V17SeatCardSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.48)
 
 
 func _setup_self_hu_tile_host() -> void:
@@ -5690,8 +5692,8 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 	if button == null:
 		return
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = bg.lightened(0.04 if not emphasized else 0.08)
-	normal.border_color = border.lightened(0.18)
+	normal.bg_color = bg.lightened(0.08 if not emphasized else 0.14)
+	normal.border_color = border.lightened(0.26)
 	normal.set_border_width_all(2 if emphasized else 1)
 	normal.corner_radius_top_left = 25
 	normal.corner_radius_top_right = 25
@@ -5701,21 +5703,24 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 	normal.content_margin_right = 14
 	normal.content_margin_top = 9
 	normal.content_margin_bottom = 9
-	normal.shadow_color = Color(0.0, 0.08, 0.05, 0.32 if emphasized else 0.22)
-	normal.shadow_size = 13 if emphasized else 9
-	normal.shadow_offset = Vector2(0, 4)
+	normal.shadow_color = Color(0.0, 0.08, 0.05, 0.34 if emphasized else 0.24)
+	normal.shadow_size = 15 if emphasized else 10
+	normal.shadow_offset = Vector2(0, 5)
 	normal.anti_aliasing = true
 	normal.anti_aliasing_size = 1.4
 
 	var hover := normal.duplicate()
-	hover.bg_color = bg.lightened(0.14)
-	hover.border_color = Color(1.0, 0.94, 0.66, 0.50) if emphasized else border.lightened(0.32)
+	hover.bg_color = bg.lightened(0.18)
+	hover.border_color = Color(1.0, 0.96, 0.70, 0.62) if emphasized else border.lightened(0.42)
 	hover.shadow_size = normal.shadow_size + 2
 
 	var pressed := normal.duplicate()
 	pressed.bg_color = bg.darkened(0.10)
-	pressed.shadow_size = maxi(2, normal.shadow_size - 3)
+	pressed.border_color = border.darkened(0.05)
+	pressed.shadow_size = maxi(2, normal.shadow_size - 5)
 	pressed.shadow_offset = Vector2(0, 1)
+	pressed.content_margin_top = 12
+	pressed.content_margin_bottom = 6
 
 	var disabled := normal.duplicate()
 	disabled.bg_color = Color(bg.r, bg.g, bg.b, 0.40)
@@ -6309,8 +6314,8 @@ func _clamp_ai_tuning_panel_position() -> void:
 
 func _apply_action_panel_visual_style() -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.06, 0.22, 0.17, 0.44)
-	style.border_color = Color(0.88, 1.0, 0.82, 0.20)
+	style.bg_color = Color(0.06, 0.22, 0.17, 0.38)
+	style.border_color = Color(0.88, 1.0, 0.82, 0.14)
 	style.set_border_width_all(1)
 	style.corner_radius_top_left = 28
 	style.corner_radius_top_right = 28
@@ -6320,19 +6325,19 @@ func _apply_action_panel_visual_style() -> void:
 	style.content_margin_right = 10
 	style.content_margin_top = 8
 	style.content_margin_bottom = 10
-	style.shadow_color = Color(0.00, 0.08, 0.05, 0.24)
-	style.shadow_size = 14
-	style.shadow_offset = Vector2(0, 5)
+	style.shadow_color = Color(0.00, 0.08, 0.05, 0.18)
+	style.shadow_size = 11
+	style.shadow_offset = Vector2(0, 4)
 	style.anti_aliasing = true
 	style.anti_aliasing_size = 1.4
 	action_panel.add_theme_stylebox_override("panel", style)
-	_ensure_material_overlay(action_panel, "ActionPanelSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.38)
+	_ensure_material_overlay(action_panel, "ActionPanelSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.52)
 
 
 func _apply_action_button_style(button: Button, bg: Color, border: Color, font_size: int, emphasized: bool = false) -> void:
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = bg
-	normal.border_color = border
+	normal.bg_color = bg.lightened(0.06)
+	normal.border_color = border.lightened(0.10)
 	normal.set_border_width_all(3 if emphasized else 2)
 	normal.corner_radius_top_left = 30
 	normal.corner_radius_top_right = 30
@@ -6342,21 +6347,24 @@ func _apply_action_button_style(button: Button, bg: Color, border: Color, font_s
 	normal.content_margin_right = 10
 	normal.content_margin_top = 8
 	normal.content_margin_bottom = 8
-	normal.shadow_color = Color(0.00, 0.08, 0.05, 0.30)
-	normal.shadow_size = 13 if emphasized else 9
-	normal.shadow_offset = Vector2(0, 4)
+	normal.shadow_color = Color(0.00, 0.08, 0.05, 0.34 if emphasized else 0.26)
+	normal.shadow_size = 15 if emphasized else 11
+	normal.shadow_offset = Vector2(0, 5)
 	normal.anti_aliasing = true
 	normal.anti_aliasing_size = 1.4
 
 	var hover := normal.duplicate()
-	hover.bg_color = bg.lightened(0.055)
+	hover.bg_color = bg.lightened(0.14)
 	hover.border_color = Color(1.0, 0.94, 0.68, 0.74)
-	hover.shadow_size = 16 if emphasized else 12
+	hover.shadow_size = 18 if emphasized else 14
 
 	var pressed := normal.duplicate()
 	pressed.bg_color = bg.darkened(0.08)
-	pressed.shadow_size = 4
-	pressed.shadow_offset = Vector2(0, 3)
+	pressed.border_color = border.darkened(0.08)
+	pressed.shadow_size = 5
+	pressed.shadow_offset = Vector2(0, 1)
+	pressed.content_margin_top = 11
+	pressed.content_margin_bottom = 5
 
 	var disabled := normal.duplicate()
 	disabled.bg_color = Color(bg.r, bg.g, bg.b, 0.36)

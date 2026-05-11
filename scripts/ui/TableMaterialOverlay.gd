@@ -110,6 +110,18 @@ func _draw_soft_panel_texture() -> void:
 	draw_rect(Rect2(Vector2(7.0, maxf(0.0, size.y - 8.0)), Vector2(maxf(0.0, size.x - 14.0), 4.0)), Color(0.0, 0.11, 0.05, 0.055 * opacity), true)
 	draw_rect(Rect2(Vector2(0.0, 0.0), Vector2(2.0, size.y)), Color(1.0, 1.0, 0.78, 0.015 * opacity), true)
 	draw_rect(Rect2(Vector2(maxf(0.0, size.x - 2.0), 0.0), Vector2(2.0, size.y)), Color(0.0, 0.14, 0.07, 0.020 * opacity), true)
+	var gloss_rect := Rect2(Vector2(9.0, 7.0), Vector2(maxf(0.0, size.x - 18.0), maxf(3.0, size.y * 0.22)))
+	for band in range(5):
+		var t := float(band) / 4.0
+		var y := gloss_rect.position.y + gloss_rect.size.y * t
+		draw_rect(
+			Rect2(gloss_rect.position.x + t * 3.0, y, maxf(0.0, gloss_rect.size.x - t * 6.0), 2.0),
+			Color(1.0, 1.0, 0.86, 0.030 * opacity * (1.0 - t)),
+			true
+		)
+	var inset := minf(size.x, size.y) * 0.045
+	var inner_rect := Rect2(Vector2(inset, inset), size - Vector2(inset * 2.0, inset * 2.0))
+	draw_rect(inner_rect, Color(1.0, 0.98, 0.78, 0.028 * opacity), false, 1.0, true)
 
 
 func _draw_wood_texture() -> void:
