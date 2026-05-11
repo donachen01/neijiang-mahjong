@@ -58,12 +58,12 @@ const TILE_SYMBOL_DIR := "res://res/art/ui_3d_cartoon/tile_symbols"
 const USE_SELF_TILE_SURFACE := true
 const DANGER_OUTLINE := Color(0.72, 0.28, 0.24, 0.92)
 const DANGER_BANNER := Color(0.50, 0.14, 0.12, 0.92)
-const RECOMMEND_MARKER_RADIUS := 12.0
+const RECOMMEND_MARKER_RADIUS := 10.5
 const RECOMMEND_MARKER_BOB_SPEED := 3.2
-const RECOMMEND_MARKER_TOP := Color(1.0, 0.92, 0.42, 0.94)
-const RECOMMEND_MARKER_SIDE := Color(0.32, 0.76, 0.56, 0.88)
-const RECOMMEND_MARKER_CORE := Color(0.98, 1.0, 0.86, 0.94)
-const RECOMMEND_MARKER_SHADOW := Color(0.12, 0.08, 0.02, 0.22)
+const RECOMMEND_MARKER_TOP := Color(1.0, 0.90, 0.48, 0.90)
+const RECOMMEND_MARKER_SIDE := Color(0.30, 0.72, 0.54, 0.84)
+const RECOMMEND_MARKER_CORE := Color(0.98, 1.0, 0.88, 0.90)
+const RECOMMEND_MARKER_SHADOW := Color(0.12, 0.08, 0.02, 0.18)
 
 var hand_tiles: Array = []
 var selected_tile_id: int = -1
@@ -495,7 +495,7 @@ func _draw_recommended_marker(front_rect: Rect2) -> void:
 
 
 func _recommended_marker_center(front_rect: Rect2, bob: float) -> Vector2:
-	return Vector2(front_rect.get_center().x, front_rect.position.y + 15.0 + bob)
+	return Vector2(front_rect.get_center().x, front_rect.position.y + 13.0 + bob)
 
 
 func _ellipse_points(center: Vector2, radius_x: float, radius_y: float, segments: int) -> PackedVector2Array:
