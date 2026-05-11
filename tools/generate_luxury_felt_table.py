@@ -24,8 +24,8 @@ def main() -> None:
 	w, h = SIZE
 	img = Image.new("RGBA", SIZE, (0, 0, 0, 255))
 	pixels = img.load()
-	center = (w * 0.50, h * 0.46)
-	warm_spot = (w * 0.44, h * 0.60)
+	center = (w * 0.50, h * 0.47)
+	warm_spot = (w * 0.46, h * 0.58)
 	for y in range(h):
 		for x in range(w):
 			nx = (x - center[0]) / (w * 0.62)
@@ -39,9 +39,9 @@ def main() -> None:
 			weave = math.sin(x * 0.045) * 1.8 + math.cos(y * 0.058) * 1.35
 			fiber = random.randint(-3, 3)
 			base = (
-				int(lerp(16, 42, spot) + warm * 14 - vignette * 11 + weave + fiber),
-				int(lerp(102, 154, spot) + warm * 22 - vignette * 28 + weave * 0.45 + fiber),
-				int(lerp(70, 100, spot) + warm * 13 - vignette * 17 + fiber),
+				int(lerp(18, 46, spot) + warm * 16 - vignette * 9 + weave + fiber),
+				int(lerp(104, 158, spot) + warm * 24 - vignette * 24 + weave * 0.45 + fiber),
+				int(lerp(72, 104, spot) + warm * 15 - vignette * 14 + fiber),
 			)
 			pixels[x, y] = (max(0, min(255, base[0])), max(0, min(255, base[1])), max(0, min(255, base[2])), 255)
 
@@ -72,13 +72,13 @@ def main() -> None:
 	for radius, alpha in [(840, 18), (620, 20), (420, 16), (260, 11)]:
 		bbox = (center[0] - radius, center[1] - radius * 0.52, center[0] + radius, center[1] + radius * 0.52)
 		ld.ellipse(bbox, fill=(142, 224, 142, alpha))
-	for radius, alpha in [(620, 9), (420, 8)]:
+	for radius, alpha in [(660, 12), (440, 10)]:
 		bbox = (warm_spot[0] - radius, warm_spot[1] - radius * 0.44, warm_spot[0] + radius, warm_spot[1] + radius * 0.44)
 		ld.ellipse(bbox, fill=(236, 196, 112, alpha))
 	light = light.filter(ImageFilter.GaussianBlur(42))
 	img.alpha_composite(light)
 
-	for radius, alpha in [(1560, 58), (1260, 38), (980, 20)]:
+	for radius, alpha in [(1560, 46), (1260, 30), (980, 16)]:
 		layer = Image.new("RGBA", SIZE, (0, 0, 0, 0))
 		ld = ImageDraw.Draw(layer, "RGBA")
 		ld.ellipse((center[0] - radius, center[1] - radius * 0.68, center[0] + radius, center[1] + radius * 0.68), outline=(0, 38, 25, alpha), width=90)
@@ -87,9 +87,9 @@ def main() -> None:
 
 	edge = Image.new("RGBA", SIZE, (0, 0, 0, 0))
 	ed = ImageDraw.Draw(edge, "RGBA")
-	ed.rounded_rectangle((18, 18, w - 18, h - 18), radius=54, outline=(220, 202, 132, 20), width=2)
-	ed.rounded_rectangle((32, 32, w - 32, h - 32), radius=42, outline=(0, 42, 26, 42), width=6)
-	edge = edge.filter(ImageFilter.GaussianBlur(1.2))
+	ed.rounded_rectangle((18, 18, w - 18, h - 18), radius=54, outline=(220, 202, 132, 13), width=2)
+	ed.rounded_rectangle((32, 32, w - 32, h - 32), radius=42, outline=(0, 42, 26, 30), width=5)
+	edge = edge.filter(ImageFilter.GaussianBlur(1.8))
 	img.alpha_composite(edge)
 	img = img.filter(ImageFilter.GaussianBlur(0.25))
 

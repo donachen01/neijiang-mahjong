@@ -50,13 +50,13 @@ def draw_tile(size: tuple[int, int], back: bool) -> Image.Image:
 	shadow.putalpha(mask.filter(ImageFilter.GaussianBlur(max(4, int(5.8 * scale)))).point(lambda value: int(value * 0.17)))
 	canvas.alpha_composite(shadow, (body_rect[0] + int(5 * scale), body_rect[1] + int(8 * scale)))
 
-	side_color = (68, 126, 52) if back else (146, 155, 108)
+	side_color = (78, 140, 58) if back else (150, 158, 112)
 	side = Image.new("RGBA", body_size, (*side_color, 255))
 	side.putalpha(mask)
 	canvas.alpha_composite(side, (body_rect[0] + int(4 * scale), body_rect[1] + int(6 * scale)))
 
-	top_color = (118, 202, 56) if back else (248, 240, 212)
-	bottom_color = (70, 152, 40) if back else (218, 202, 148)
+	top_color = (132, 212, 70) if back else (250, 242, 216)
+	bottom_color = (82, 164, 48) if back else (222, 206, 152)
 	face = vertical_gradient(body_size, top_color, bottom_color)
 	face.putalpha(mask)
 	canvas.alpha_composite(face, (body_rect[0], body_rect[1]))
@@ -90,8 +90,8 @@ def draw_tile(size: tuple[int, int], back: bool) -> Image.Image:
 		d.rounded_rectangle(
 			(body_rect[0] + int(28 * scale), body_rect[1] + int(58 * scale), body_rect[2] - int(28 * scale), body_rect[1] + int(64 * scale)),
 			radius=max(1, int(3 * scale)),
-			fill=(162, 222, 88, 70),
-		)
+		fill=(188, 232, 106, 82),
+	)
 	return canvas
 
 
