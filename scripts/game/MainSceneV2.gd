@@ -1506,6 +1506,12 @@ func _ensure_material_overlay(parent: Control, overlay_name: String, mode: int, 
 	overlay.offset_bottom = 0.0
 
 
+func _ensure_button_gloss_overlay(button: Button, overlay_opacity: float = 0.80) -> void:
+	if button == null:
+		return
+	_ensure_material_overlay(button, "ButtonGlossLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.BUTTON_GLOSS, overlay_opacity)
+
+
 func _remove_material_overlay(parent: Control, overlay_name: String) -> void:
 	if parent == null:
 		return
@@ -1591,6 +1597,7 @@ func _apply_floating_action_button_style(button: Button, bg: Color, tooltip: Str
 	button.add_theme_color_override("font_outline_color", Color(0.04, 0.12, 0.09, 0.94))
 	button.add_theme_constant_override("outline_size", 2)
 	button.tooltip_text = tooltip
+	_ensure_button_gloss_overlay(button, 0.58)
 
 
 func _update_floating_button_texts() -> void:
@@ -5692,7 +5699,7 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 	if button == null:
 		return
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = bg.lightened(0.08 if not emphasized else 0.14)
+	normal.bg_color = bg.lightened(0.07 if not emphasized else 0.12)
 	normal.border_color = border.lightened(0.26)
 	normal.set_border_width_all(2 if emphasized else 1)
 	normal.corner_radius_top_left = 25
@@ -5744,6 +5751,7 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 	button.add_theme_color_override("font_disabled_outline_color", Color(0.08, 0.06, 0.03, 0.48))
 	button.add_theme_constant_override("outline_size", 2)
 	button.add_theme_font_size_override("font_size", 17 if button in [top_bar_button, top_ai_tuning_button, top_ai_helper_button, top_settlement_info_button, top_next_round_button, top_exit_button] else font_size)
+	_ensure_button_gloss_overlay(button, 0.56 if not emphasized else 0.74)
 
 
 func _setup_ai_tuning_overlay() -> void:
@@ -6344,7 +6352,7 @@ func _apply_action_panel_visual_style() -> void:
 
 func _apply_action_button_style(button: Button, bg: Color, border: Color, font_size: int, emphasized: bool = false) -> void:
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = bg.lightened(0.06)
+	normal.bg_color = bg.lightened(0.05)
 	normal.border_color = border.lightened(0.10)
 	normal.set_border_width_all(3 if emphasized else 2)
 	normal.corner_radius_top_left = 30
@@ -6397,6 +6405,7 @@ func _apply_action_button_style(button: Button, bg: Color, border: Color, font_s
 	if button.custom_minimum_size == Vector2.ZERO:
 		button.custom_minimum_size = Vector2(86, 86)
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ensure_button_gloss_overlay(button, 0.70 if emphasized else 0.58)
 
 
 func _hand_contains_tile(hand_tiles: Array, tile_id: int) -> bool:

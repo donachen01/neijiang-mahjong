@@ -6,6 +6,7 @@ enum MaterialMode {
 	FELT,
 	WOOD,
 	SOFT_PANEL,
+	BUTTON_GLOSS,
 }
 
 const FELT_TEXTURE_PATH := "res://res/art/ui_3d_cartoon/felt_table_luxury.png"
@@ -37,6 +38,8 @@ func _draw() -> void:
 			_draw_wood_texture()
 		MaterialMode.SOFT_PANEL:
 			_draw_soft_panel_texture()
+		MaterialMode.BUTTON_GLOSS:
+			_draw_button_gloss_texture()
 
 
 func _draw_felt_texture() -> void:
@@ -122,6 +125,38 @@ func _draw_soft_panel_texture() -> void:
 	var inset := minf(size.x, size.y) * 0.045
 	var inner_rect := Rect2(Vector2(inset, inset), size - Vector2(inset * 2.0, inset * 2.0))
 	draw_rect(inner_rect, Color(1.0, 0.98, 0.78, 0.028 * opacity), false, 1.0, true)
+
+
+func _draw_button_gloss_texture() -> void:
+	var w := size.x
+	var h := size.y
+	var radius := minf(w, h) * 0.46
+	var upper_center := Vector2(w * 0.34, h * 0.16)
+	var lower_center := Vector2(w * 0.70, h * 0.88)
+	for band in range(5):
+		var t := float(band) / 4.0
+		draw_circle(
+			upper_center,
+			lerpf(radius * 0.35, radius * 1.05, t),
+			Color(1.0, 1.0, 0.82, 0.030 * opacity * (1.0 - t))
+		)
+	for band in range(4):
+		var t := float(band) / 3.0
+		draw_circle(
+			lower_center,
+			lerpf(radius * 0.34, radius * 0.96, t),
+			Color(0.0, 0.08, 0.035, 0.030 * opacity * (1.0 - t))
+		)
+	var top_gloss := Rect2(Vector2(w * 0.15, h * 0.10), Vector2(w * 0.70, maxf(2.0, h * 0.10)))
+	for band in range(4):
+		var t := float(band) / 3.0
+		draw_rect(
+			Rect2(top_gloss.position.x + w * 0.025 * t, top_gloss.position.y + h * 0.035 * t, maxf(0.0, top_gloss.size.x - w * 0.050 * t), 2.0),
+			Color(1.0, 1.0, 0.88, 0.044 * opacity * (1.0 - t)),
+			true
+		)
+	draw_rect(Rect2(Vector2(w * 0.12, h * 0.08), Vector2(w * 0.76, h * 0.84)), Color(1.0, 0.97, 0.70, 0.034 * opacity), false, 1.0, true)
+	draw_rect(Rect2(Vector2(w * 0.18, h - 5.0), Vector2(w * 0.64, 2.0)), Color(0.0, 0.10, 0.04, 0.052 * opacity), true)
 
 
 func _draw_wood_texture() -> void:
