@@ -1758,19 +1758,21 @@ func _setup_v17_player_info_panels() -> void:
 		STYLE_CONFIG.apply_label(avatar, false, true)
 		avatar.add_theme_font_size_override("font_size", 24)
 		avatar.add_theme_color_override("font_color", Color(0.12, 0.36, 0.24, 1.0))
-		avatar.add_theme_color_override("font_outline_color", Color(1.0, 0.97, 0.78, 0.78))
+		avatar.add_theme_color_override("font_outline_color", Color(1.0, 0.98, 0.88, 0.70))
 		avatar.add_theme_constant_override("outline_size", 1)
 		var avatar_style := StyleBoxFlat.new()
-		avatar_style.bg_color = Color(0.90, 0.98, 0.86, 0.98)
-		avatar_style.border_color = Color(0.54, 0.92, 0.96, 0.92)
-		avatar_style.set_border_width_all(3)
+		avatar_style.bg_color = Color(0.90, 1.0, 0.90, 0.96)
+		avatar_style.border_color = Color(0.72, 0.98, 0.90, 0.62)
+		avatar_style.set_border_width_all(2)
 		avatar_style.corner_radius_top_left = 18
 		avatar_style.corner_radius_top_right = 18
 		avatar_style.corner_radius_bottom_left = 18
 		avatar_style.corner_radius_bottom_right = 18
-		avatar_style.shadow_color = Color(0.0, 0.0, 0.0, 0.22)
-		avatar_style.shadow_size = 10
-		avatar_style.shadow_offset = Vector2(0, 4)
+		avatar_style.shadow_color = Color(0.34, 0.72, 0.54, 0.18)
+		avatar_style.shadow_size = 12
+		avatar_style.shadow_offset = Vector2(0, 3)
+		avatar_style.anti_aliasing = true
+		avatar_style.anti_aliasing_size = 1.3
 		avatar.add_theme_stylebox_override("normal", avatar_style)
 		row.add_child(avatar)
 		v17_player_info_avatar_labels[seat] = avatar
@@ -1786,9 +1788,9 @@ func _setup_v17_player_info_panels() -> void:
 		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		STYLE_CONFIG.apply_label(name_label, false, true)
-		name_label.add_theme_font_size_override("font_size", 20)
-		name_label.add_theme_color_override("font_color", IVORY_SOFT)
-		name_label.add_theme_color_override("font_outline_color", Color(0.06, 0.10, 0.07, 0.95))
+		name_label.add_theme_font_size_override("font_size", 21)
+		name_label.add_theme_color_override("font_color", Color(1.0, 0.99, 0.90, 0.98))
+		name_label.add_theme_color_override("font_outline_color", Color(0.04, 0.12, 0.08, 0.86))
 		name_label.add_theme_constant_override("outline_size", 2)
 		vbox.add_child(name_label)
 
@@ -1797,8 +1799,8 @@ func _setup_v17_player_info_panels() -> void:
 		status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		STYLE_CONFIG.apply_label(status_label, false, false)
-		status_label.add_theme_font_size_override("font_size", 16)
-		status_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.48, 1.0))
+		status_label.add_theme_font_size_override("font_size", 17)
+		status_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.42, 1.0))
 		status_label.add_theme_color_override("font_outline_color", Color(0.05, 0.08, 0.05, 0.92))
 		status_label.add_theme_constant_override("outline_size", 2)
 		vbox.add_child(status_label)
@@ -1820,8 +1822,8 @@ func _setup_v17_player_info_panels() -> void:
 		STYLE_CONFIG.apply_label(dealer_badge, false, false)
 		dealer_badge.add_theme_font_size_override("font_size", 16)
 		var dealer_style := StyleBoxFlat.new()
-		dealer_style.bg_color = Color(0.98, 0.62, 0.18, 0.98)
-		dealer_style.border_color = Color(1.0, 0.95, 0.78, 0.92)
+		dealer_style.bg_color = Color(0.98, 0.64, 0.18, 0.96)
+		dealer_style.border_color = Color(1.0, 0.95, 0.78, 0.72)
 		dealer_style.set_border_width_all(2)
 		dealer_style.corner_radius_top_left = 10
 		dealer_style.corner_radius_top_right = 10
@@ -1847,8 +1849,8 @@ func _setup_v17_player_info_panels() -> void:
 		STYLE_CONFIG.apply_label(ding_que_badge, false, false)
 		ding_que_badge.add_theme_font_size_override("font_size", 14)
 		var ding_que_style := StyleBoxFlat.new()
-		ding_que_style.bg_color = Color(0.20, 0.58, 0.38, 0.98)
-		ding_que_style.border_color = Color(0.95, 1.0, 0.82, 0.90)
+		ding_que_style.bg_color = Color(0.18, 0.50, 0.34, 0.94)
+		ding_que_style.border_color = Color(0.95, 1.0, 0.82, 0.64)
 		ding_que_style.set_border_width_all(2)
 		ding_que_style.corner_radius_top_left = 10
 		ding_que_style.corner_radius_top_right = 10
@@ -1868,23 +1870,25 @@ func _apply_v17_player_info_panel_style(panel: Panel, seat: int) -> void:
 		return
 	panel.clip_contents = true
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.11, 0.34, 0.24, 0.90)
-	style.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.78)
-	style.set_border_width_all(2)
-	style.corner_radius_top_left = 16
-	style.corner_radius_top_right = 16
-	style.corner_radius_bottom_left = 16
-	style.corner_radius_bottom_right = 16
+	style.bg_color = Color(0.08, 0.25, 0.20, 0.68)
+	style.border_color = Color(0.86, 1.0, 0.82, 0.28)
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = 20
+	style.corner_radius_top_right = 20
+	style.corner_radius_bottom_left = 20
+	style.corner_radius_bottom_right = 20
 	style.content_margin_left = 8
 	style.content_margin_right = 8
 	style.content_margin_top = 8
 	style.content_margin_bottom = 8
-	style.shadow_color = Color(0.05, 0.18, 0.10, 0.18)
-	style.shadow_size = 9
-	style.shadow_offset = Vector2(0, 4)
+	style.shadow_color = Color(0.00, 0.08, 0.05, 0.26)
+	style.shadow_size = 14
+	style.shadow_offset = Vector2(0, 5)
+	style.anti_aliasing = true
+	style.anti_aliasing_size = 1.4
 	panel.add_theme_stylebox_override("panel", style)
 	panel.self_modulate = Color(1.0, 1.0, 1.0, 0.98)
-	_ensure_material_overlay(panel, "V17SeatCardSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.70)
+	_ensure_material_overlay(panel, "V17SeatCardSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.42)
 
 
 func _setup_self_hu_tile_host() -> void:
@@ -5687,16 +5691,16 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 	normal.bg_color = bg
 	normal.border_color = border
 	normal.set_border_width_all(2 if emphasized else 1)
-	normal.corner_radius_top_left = 18
-	normal.corner_radius_top_right = 18
-	normal.corner_radius_bottom_left = 18
-	normal.corner_radius_bottom_right = 18
+	normal.corner_radius_top_left = 24
+	normal.corner_radius_top_right = 24
+	normal.corner_radius_bottom_left = 24
+	normal.corner_radius_bottom_right = 24
 	normal.content_margin_left = 14
 	normal.content_margin_right = 14
 	normal.content_margin_top = 9
 	normal.content_margin_bottom = 9
-	normal.shadow_color = Color(0.0, 0.0, 0.0, 0.28)
-	normal.shadow_size = 10 if emphasized else 6
+	normal.shadow_color = Color(0.0, 0.08, 0.05, 0.28)
+	normal.shadow_size = 12 if emphasized else 8
 	normal.shadow_offset = Vector2(0, 4)
 	normal.anti_aliasing = true
 	normal.anti_aliasing_size = 1.4
@@ -6302,22 +6306,24 @@ func _clamp_ai_tuning_panel_position() -> void:
 
 func _apply_action_panel_visual_style() -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.10, 0.38, 0.27, 0.82)
-	style.border_color = Color(0.86, 0.98, 0.76, 0.40)
+	style.bg_color = Color(0.06, 0.22, 0.17, 0.44)
+	style.border_color = Color(0.88, 1.0, 0.82, 0.20)
 	style.set_border_width_all(1)
-	style.corner_radius_top_left = 24
-	style.corner_radius_top_right = 24
-	style.corner_radius_bottom_left = 24
-	style.corner_radius_bottom_right = 24
+	style.corner_radius_top_left = 28
+	style.corner_radius_top_right = 28
+	style.corner_radius_bottom_left = 28
+	style.corner_radius_bottom_right = 28
 	style.content_margin_left = 10
 	style.content_margin_right = 10
 	style.content_margin_top = 8
 	style.content_margin_bottom = 10
-	style.shadow_color = Color(0.06, 0.18, 0.10, 0.20)
-	style.shadow_size = 10
+	style.shadow_color = Color(0.00, 0.08, 0.05, 0.24)
+	style.shadow_size = 14
 	style.shadow_offset = Vector2(0, 5)
+	style.anti_aliasing = true
+	style.anti_aliasing_size = 1.4
 	action_panel.add_theme_stylebox_override("panel", style)
-	_ensure_material_overlay(action_panel, "ActionPanelSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.70)
+	_ensure_material_overlay(action_panel, "ActionPanelSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.38)
 
 
 func _apply_action_button_style(button: Button, bg: Color, border: Color, font_size: int, emphasized: bool = false) -> void:
@@ -6325,21 +6331,23 @@ func _apply_action_button_style(button: Button, bg: Color, border: Color, font_s
 	normal.bg_color = bg
 	normal.border_color = border
 	normal.set_border_width_all(3 if emphasized else 2)
-	normal.corner_radius_top_left = 22
-	normal.corner_radius_top_right = 22
-	normal.corner_radius_bottom_left = 22
-	normal.corner_radius_bottom_right = 22
+	normal.corner_radius_top_left = 30
+	normal.corner_radius_top_right = 30
+	normal.corner_radius_bottom_left = 30
+	normal.corner_radius_bottom_right = 30
 	normal.content_margin_left = 10
 	normal.content_margin_right = 10
 	normal.content_margin_top = 8
 	normal.content_margin_bottom = 8
-	normal.shadow_color = Color(0.06, 0.18, 0.10, 0.20)
-	normal.shadow_size = 9 if emphasized else 6
+	normal.shadow_color = Color(0.00, 0.08, 0.05, 0.30)
+	normal.shadow_size = 13 if emphasized else 9
 	normal.shadow_offset = Vector2(0, 4)
+	normal.anti_aliasing = true
+	normal.anti_aliasing_size = 1.4
 
 	var hover := normal.duplicate()
 	hover.bg_color = bg.lightened(0.055)
-	hover.border_color = Color(0.92, 0.78, 0.52, 0.92)
+	hover.border_color = Color(1.0, 0.94, 0.68, 0.74)
 	hover.shadow_size = 16 if emphasized else 12
 
 	var pressed := normal.duplicate()
