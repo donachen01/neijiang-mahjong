@@ -16,39 +16,42 @@ from PIL import Image, ImageEnhance, ImageFilter
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "res/art/tiles"
 OUT_DIR = ROOT / "res/art/ui_3d_cartoon/tile_symbols"
-CONTACT_SHEET = ROOT / "docs/ui_baseline/mockups/tile_symbols_v1_0_14_contact_sheet.png"
+CONTACT_SHEET = ROOT / "docs/ui_baseline/mockups/tile_symbols_v1_0_17_contact_sheet.png"
 SYMBOL_SIZE = (196, 288)
 SUITS = ("tiao", "tong", "wan")
 SUIT_PARAMS = {
 	"tiao": {
-		"thicken": 3,
-		"alpha": 1.18,
-		"color": 1.08,
-		"contrast": 1.05,
-		"glow": 0.20,
-		"shadow": 0.38,
-		"highlight": 0.18,
-		"rim": (32, 100, 42, 0),
+		"thicken": 5,
+		"alpha": 1.30,
+		"color": 1.12,
+		"contrast": 1.12,
+		"glow": 0.18,
+		"shadow": 0.40,
+		"highlight": 0.24,
+		"rim": (22, 118, 48, 0),
+		"core": (22, 138, 58, 0),
 	},
 	"tong": {
-		"thicken": 3,
-		"alpha": 1.15,
-		"color": 1.10,
-		"contrast": 1.08,
-		"glow": 0.18,
-		"shadow": 0.36,
-		"highlight": 0.16,
-		"rim": (36, 78, 120, 0),
+		"thicken": 4,
+		"alpha": 1.25,
+		"color": 1.13,
+		"contrast": 1.13,
+		"glow": 0.17,
+		"shadow": 0.38,
+		"highlight": 0.22,
+		"rim": (26, 74, 138, 0),
+		"core": (20, 116, 72, 0),
 	},
 	"wan": {
-		"thicken": 5,
-		"alpha": 1.22,
-		"color": 1.06,
-		"contrast": 1.10,
-		"glow": 0.16,
+		"thicken": 6,
+		"alpha": 1.34,
+		"color": 1.10,
+		"contrast": 1.18,
+		"glow": 0.15,
 		"shadow": 0.42,
-		"highlight": 0.16,
-		"rim": (110, 30, 44, 0),
+		"highlight": 0.22,
+		"rim": (138, 26, 42, 0),
+		"core": (26, 92, 138, 0),
 	},
 }
 
@@ -58,12 +61,17 @@ def _mask(alpha: Image.Image, multiplier: float, blur: float = 0.0) -> Image.Ima
 	return mask.point(lambda value: min(255, int(value * multiplier)))
 
 
+def _odd_filter_size(value: int) -> int:
+	size = max(3, int(value))
+	return size if size % 2 == 1 else size + 1
+
+
 def soften_symbol(source_path: Path, suit: str) -> Image.Image:
 	params = SUIT_PARAMS[suit]
 	source = Image.open(source_path).convert("RGBA").resize(SYMBOL_SIZE, Image.Resampling.LANCZOS)
 	r, g, b, alpha = source.split()
 
-	expanded_alpha = alpha.filter(ImageFilter.MaxFilter(int(params["thicken"])))
+	expanded_alpha = alpha.filter(ImageFilter.MaxFilter(_odd_filter_size(int(params["thicken"]))))
 	soft_alpha = expanded_alpha.filter(ImageFilter.GaussianBlur(0.25)).point(
 		lambda value: min(255, int(value * float(params["alpha"])))
 	)
@@ -78,20 +86,28 @@ def soften_symbol(source_path: Path, suit: str) -> Image.Image:
 	contact_shadow.putalpha(_mask(soft_alpha, float(params["shadow"]), 1.35))
 
 	pressed_shadow = Image.new("RGBA", SYMBOL_SIZE, (52, 42, 24, 0))
-	pressed_shadow.putalpha(_mask(expanded_alpha, 0.20, 0.45))
+	pressed_shadow.putalpha(_mask(expanded_alpha, 0.18, 0.55))
 
 	rim = Image.new("RGBA", SYMBOL_SIZE, tuple(params["rim"]))
-	rim.putalpha(_mask(expanded_alpha, 0.24, 0.15))
+	rim.putalpha(_mask(expanded_alpha, 0.24, 0.20))
+
+	core_rim = Image.new("RGBA", SYMBOL_SIZE, tuple(params["core"]))
+	core_rim.putalpha(_mask(alpha, 0.14, 0.10))
 
 	highlight = Image.new("RGBA", SYMBOL_SIZE, (255, 250, 210, 0))
-	highlight.putalpha(_mask(alpha, float(params["highlight"]), 0.35))
+	highlight.putalpha(_mask(alpha, float(params["highlight"]), 0.28))
+
+	edge_light = Image.new("RGBA", SYMBOL_SIZE, (255, 246, 204, 0))
+	edge_light.putalpha(_mask(expanded_alpha, 0.16, 0.70))
 
 	composed = Image.new("RGBA", SYMBOL_SIZE, (0, 0, 0, 0))
 	composed.alpha_composite(contact_shadow, (3, 4))
 	composed.alpha_composite(pressed_shadow, (1, 2))
 	composed.alpha_composite(glow, (-1, -1))
-	composed.alpha_composite(highlight, (-1, -2))
 	composed.alpha_composite(rim, (1, 1))
+	composed.alpha_composite(core_rim, (0, 0))
+	composed.alpha_composite(edge_light, (-1, -2))
+	composed.alpha_composite(highlight, (-1, -2))
 	composed.alpha_composite(symbol)
 	return composed
 
