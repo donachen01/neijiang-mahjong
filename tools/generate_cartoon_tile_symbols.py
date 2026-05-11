@@ -16,7 +16,7 @@ from PIL import Image, ImageEnhance, ImageFilter
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "res/art/tiles"
 OUT_DIR = ROOT / "res/art/ui_3d_cartoon/tile_symbols"
-CONTACT_SHEET = ROOT / "docs/ui_baseline/mockups/tile_symbols_v1_0_17_contact_sheet.png"
+CONTACT_SHEET = ROOT / "docs/ui_baseline/mockups/tile_symbols_v1_0_21_contact_sheet.png"
 SYMBOL_SIZE = (196, 288)
 SUITS = ("tiao", "tong", "wan")
 SUIT_PARAMS = {
@@ -30,6 +30,8 @@ SUIT_PARAMS = {
 		"highlight": 0.24,
 		"rim": (22, 118, 48, 0),
 		"core": (22, 138, 58, 0),
+		"outline_tint": (22, 60, 42),
+		"outline_strength": 0.42,
 	},
 	"tong": {
 		"thicken": 4,
@@ -41,17 +43,38 @@ SUIT_PARAMS = {
 		"highlight": 0.22,
 		"rim": (26, 74, 138, 0),
 		"core": (20, 116, 72, 0),
+		"outline_tint": (18, 48, 92),
+		"outline_strength": 0.34,
 	},
 	"wan": {
-		"thicken": 6,
-		"alpha": 1.34,
-		"color": 1.10,
-		"contrast": 1.18,
-		"glow": 0.15,
-		"shadow": 0.42,
-		"highlight": 0.22,
+		"thicken": 5,
+		"alpha": 1.30,
+		"color": 1.08,
+		"contrast": 1.12,
+		"glow": 0.13,
+		"shadow": 0.32,
+		"highlight": 0.18,
 		"rim": (138, 26, 42, 0),
 		"core": (26, 92, 138, 0),
+		"outline_tint": (92, 36, 58),
+		"outline_strength": 0.66,
+	},
+}
+TILE_PARAM_OVERRIDES = {
+	("tiao", 1): {
+		"thicken": 3,
+		"alpha": 1.18,
+		"color": 1.08,
+		"contrast": 1.06,
+		"glow": 0.12,
+		"shadow": 0.24,
+		"highlight": 0.16,
+		"pressed": 0.10,
+		"rim_alpha": 0.16,
+		"core_alpha": 0.10,
+		"edge_alpha": 0.10,
+		"outline_tint": (44, 74, 52),
+		"outline_strength": 0.76,
 	},
 }
 
@@ -66,8 +89,30 @@ def _odd_filter_size(value: int) -> int:
 	return size if size % 2 == 1 else size + 1
 
 
-def soften_symbol(source_path: Path, suit: str) -> Image.Image:
-	params = SUIT_PARAMS[suit]
+def _soften_dark_ink(image: Image.Image, tint: tuple[int, int, int], strength: float) -> Image.Image:
+	pixels = image.load()
+	width, height = image.size
+	for y in range(height):
+		for x in range(width):
+			r, g, b, a = pixels[x, y]
+			if a == 0:
+				continue
+			luma = int(r * 0.299 + g * 0.587 + b * 0.114)
+			if luma >= 62:
+				continue
+			weight = strength * (1.0 - float(luma) / 62.0)
+			pixels[x, y] = (
+				int(r * (1.0 - weight) + tint[0] * weight),
+				int(g * (1.0 - weight) + tint[1] * weight),
+				int(b * (1.0 - weight) + tint[2] * weight),
+				a,
+			)
+	return image
+
+
+def soften_symbol(source_path: Path, suit: str, rank: int) -> Image.Image:
+	params = SUIT_PARAMS[suit].copy()
+	params.update(TILE_PARAM_OVERRIDES.get((suit, rank), {}))
 	source = Image.open(source_path).convert("RGBA").resize(SYMBOL_SIZE, Image.Resampling.LANCZOS)
 	r, g, b, alpha = source.split()
 
@@ -78,6 +123,11 @@ def soften_symbol(source_path: Path, suit: str) -> Image.Image:
 	symbol = Image.merge("RGBA", (r, g, b, soft_alpha))
 	symbol = ImageEnhance.Color(symbol).enhance(float(params["color"]))
 	symbol = ImageEnhance.Contrast(symbol).enhance(float(params["contrast"]))
+	symbol = _soften_dark_ink(
+		symbol,
+		tuple(params["outline_tint"]),
+		float(params["outline_strength"]),
+	)
 
 	glow = Image.new("RGBA", SYMBOL_SIZE, (255, 235, 190, 0))
 	glow.putalpha(_mask(soft_alpha, float(params["glow"]), 1.8))
@@ -86,19 +136,19 @@ def soften_symbol(source_path: Path, suit: str) -> Image.Image:
 	contact_shadow.putalpha(_mask(soft_alpha, float(params["shadow"]), 1.35))
 
 	pressed_shadow = Image.new("RGBA", SYMBOL_SIZE, (52, 42, 24, 0))
-	pressed_shadow.putalpha(_mask(expanded_alpha, 0.18, 0.55))
+	pressed_shadow.putalpha(_mask(expanded_alpha, float(params.get("pressed", 0.18)), 0.55))
 
 	rim = Image.new("RGBA", SYMBOL_SIZE, tuple(params["rim"]))
-	rim.putalpha(_mask(expanded_alpha, 0.24, 0.20))
+	rim.putalpha(_mask(expanded_alpha, float(params.get("rim_alpha", 0.24)), 0.20))
 
 	core_rim = Image.new("RGBA", SYMBOL_SIZE, tuple(params["core"]))
-	core_rim.putalpha(_mask(alpha, 0.14, 0.10))
+	core_rim.putalpha(_mask(alpha, float(params.get("core_alpha", 0.14)), 0.10))
 
 	highlight = Image.new("RGBA", SYMBOL_SIZE, (255, 250, 210, 0))
 	highlight.putalpha(_mask(alpha, float(params["highlight"]), 0.28))
 
 	edge_light = Image.new("RGBA", SYMBOL_SIZE, (255, 246, 204, 0))
-	edge_light.putalpha(_mask(expanded_alpha, 0.16, 0.70))
+	edge_light.putalpha(_mask(expanded_alpha, float(params.get("edge_alpha", 0.16)), 0.70))
 
 	composed = Image.new("RGBA", SYMBOL_SIZE, (0, 0, 0, 0))
 	composed.alpha_composite(contact_shadow, (3, 4))
@@ -130,7 +180,7 @@ def main() -> None:
 	OUT_DIR.mkdir(parents=True, exist_ok=True)
 	for suit in SUITS:
 		for rank in range(1, 10):
-			soften_symbol(SOURCE_DIR / f"{suit}_{rank}.png", suit).save(OUT_DIR / f"{suit}_{rank}.png")
+			soften_symbol(SOURCE_DIR / f"{suit}_{rank}.png", suit, rank).save(OUT_DIR / f"{suit}_{rank}.png")
 	build_contact_sheet()
 	print(f"generated {OUT_DIR}")
 	print(f"contact_sheet {CONTACT_SHEET}")
