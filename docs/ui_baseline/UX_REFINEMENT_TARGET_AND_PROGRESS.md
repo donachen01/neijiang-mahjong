@@ -173,7 +173,7 @@
 | 1.0.17 | `7bc255e` | 2026-05-11 | 重新调参生成整套 27 张正面牌纹：条/筒/万整体提升厚度、不透明度、对比度和柔和高光；万字保留红蓝分层并增强远景识别；新增 `tile_symbols_v1_0_17_contact_sheet.png`；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_17_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_17_mobile_1365x768.png`；牌纹对照 `docs/ui_baseline/mockups/tile_symbols_v1_0_17_contact_sheet.png` | 82% | 继续步骤 4/5/6/7：HUD/按钮贴图资产化、启动图一致性提升、移动端文字与桌面边缘继续评审 |
 | 1.0.18 | `032367a` | 2026-05-11 | 重新调校连续绒布桌面：中心光更暖更柔，边缘暗角更接近启动界面木桌/绿毡气质；减少会被看成划痕的随机纤维线，保留轻微绒布纹理；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_18_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_18_mobile_1365x768.png` | 84% | 继续步骤 4/5/7：HUD/按钮贴图资产化、移动端文字可读性、幺鸡/万字细节继续精修 |
 | 1.0.19 | aefa5c5 | 2026-05-11 | 提升移动端边缘玩家身份 HUD 可读性：侧边身份牌扩大内部可读区，姓名/分数和定缺/报叫状态字号提高，边缘卡片仍保持贴边且不侵入手牌列；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_19_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_19_mobile_1365x768.png` | 86% | 继续步骤 4/5/7：HUD 贴图资产化、右上/动作按钮图标化、幺鸡和万字细节最终修正 |
-| 1.0.20 | 本次提交 | 2026-05-11 | 为右上按钮、浮动小圆按钮和底部动作按钮补充同源程序化玉石高光层，按钮 pressed/hover/disabled 状态继续保留，整体更接近 3D 卡通轻奢控件体系；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_20_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_20_mobile_1365x768.png` | 88% | 继续步骤 2/4/7：幺鸡和万字细节最终修正、HUD 状态标记统一、启动图一致性最后拉齐 |
+| 1.0.20 | 068119d | 2026-05-11 | 为右上按钮、浮动小圆按钮和底部动作按钮补充同源程序化玉石高光层，按钮 pressed/hover/disabled 状态继续保留，整体更接近 3D 卡通轻奢控件体系；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_20_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_20_mobile_1365x768.png` | 88% | 继续步骤 2/4/7：幺鸡和万字细节最终修正、HUD 状态标记统一、启动图一致性最后拉齐 |
 
 ## 6. 未完成任务池
 
