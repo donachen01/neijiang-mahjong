@@ -168,6 +168,7 @@
 | 1.0.13 | `e852919` | 2026-05-11 | 继续暖化厚玉牌底和手牌接触阴影；弱化玩家 HUD 面板感；统一右上/浮动按钮为更接近玉石胶囊的控件；AI 推荐锥体上移到推荐牌中心上方；补充 `1365x768` 移动端截图 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_13_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_13_mobile_1365x768.png` | 73% | 继续步骤 2/4/5：正面牌纹精细化、HUD/按钮资产化、启动图一致性提升 |
 | 1.0.14 | `f16e889` | 2026-05-11 | 重做牌纹柔化生成参数：条/筒/万按花色分别加厚、增强浮雕接触阴影和暖光；新增 `tile_symbols_v1_0_14_contact_sheet.png`；AI 推荐从压牌纹的旋转锥体改为牌面上沿安全区的玉金悬浮标记，并同步更新布局合同 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_14_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_14_mobile_1365x768.png` | 75% | 继续步骤 3/4/5/6：统一大小牌材质比例、HUD/按钮资产化、进一步贴近启动图 |
 | 1.0.15 | `797d5ea` | 2026-05-11 | 弱化玩家 HUD 旧式面板边框与阴影，增强软高光层；动作按钮、右上按钮和浮动按钮补充更明显的玉石高光、hover/pressed 层次与按压位移；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_15_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_15_mobile_1365x768.png` | 77% | 继续步骤 3/4/5/6：HUD 九宫格资产化、按钮贴图化、大小牌材质统一 |
+| 1.0.15 package | `b3c7304` | 2026-05-11 | 打包链路闭环：Android release 导出版本号跟随 `project.godot`；导出后剥离 `assets/docs/*` 与 UI 基线 mockup/capture 导入缓存，zipalign 后重新签名，避免文档截图进入安装包 | `tools/export_android_release.sh` 成功；APK `build/android/NeijiangMahjong-release.apk` 114M；SHA256 `cbebf9aeb6bb6e3522015e4ebf304d061baad5bcaf50c0a4fe7c4f35a28a5587`；`apksigner verify --verbose` 通过 v2/v3；APK 内容检查无 `assets/docs` 命中 | 77% | 继续 1.0.16：HUD 九宫格资产化、按钮贴图化、大小牌材质统一 |
 
 ## 6. 未完成任务池
 
