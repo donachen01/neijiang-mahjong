@@ -175,7 +175,7 @@
 | 1.0.19 | aefa5c5 | 2026-05-11 | 提升移动端边缘玩家身份 HUD 可读性：侧边身份牌扩大内部可读区，姓名/分数和定缺/报叫状态字号提高，边缘卡片仍保持贴边且不侵入手牌列；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_19_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_19_mobile_1365x768.png` | 86% | 继续步骤 4/5/7：HUD 贴图资产化、右上/动作按钮图标化、幺鸡和万字细节最终修正 |
 | 1.0.20 | 068119d | 2026-05-11 | 为右上按钮、浮动小圆按钮和底部动作按钮补充同源程序化玉石高光层，按钮 pressed/hover/disabled 状态继续保留，整体更接近 3D 卡通轻奢控件体系；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_20_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_20_mobile_1365x768.png` | 88% | 继续步骤 2/4/7：幺鸡和万字细节最终修正、HUD 状态标记统一、启动图一致性最后拉齐 |
 | 1.0.21 | 6087a72 | 2026-05-11 | 针对幺鸡和万字做牌纹生成细修：新增单牌覆盖参数，降低幺鸡贴纸黑边感；万字整体减厚、减影并将硬黑描边转为深色彩墨结构线；新增 `tile_symbols_v1_0_21_contact_sheet.png`；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_21_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_21_mobile_1365x768.png`；牌纹对照 `docs/ui_baseline/mockups/tile_symbols_v1_0_21_contact_sheet.png` | 90% | 继续步骤 4/7：HUD 状态标记统一、移动端最终检查、启动图一致性最后拉齐 |
-| 1.0.22 | 本次提交 | 2026-05-11 | 统一玩家 HUD 状态标记：报叫/杠状态增加更明确的边框权重，杠数文案改为 `杠xN`，让状态不只依赖颜色识别；顶部内联身份状态同步补边框；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_22_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_22_mobile_1365x768.png` | 91% | 继续步骤 6/7：桌面边缘、牌体厚度、启动图一致性与最终移动端验收 |
+| 1.0.22 | ee66400 | 2026-05-11 | 统一玩家 HUD 状态标记：报叫/杠状态增加更明确的边框权重，杠数文案改为 `杠xN`，让状态不只依赖颜色识别；顶部内联身份状态同步补边框；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_22_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_22_mobile_1365x768.png` | 91% | 继续步骤 6/7：桌面边缘、牌体厚度、启动图一致性与最终移动端验收 |
 
 ## 6. 未完成任务池
 
