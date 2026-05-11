@@ -220,9 +220,9 @@ func _apply_orientation() -> void:
 			opponent_band.custom_minimum_size = Vector2(340, 660)
 			_apply_shell_style(Color(0.0, 0.0, 0.0, 0.0), Color(1.0, 1.0, 1.0, 0.0), 0, 0)
 			if seat_dock == SeatDock.LEFT:
-				_place_identity_overlay(Vector2(0.0, 0.50), Vector2(16, -72), HORIZONTAL_ALIGNMENT_CENTER, Vector2(120, 144))
+				_place_identity_overlay(Vector2(0.0, 0.50), Vector2(12, -76), HORIZONTAL_ALIGNMENT_CENTER, Vector2(132, 152))
 			else:
-				_place_identity_overlay(Vector2(1.0, 0.50), Vector2(-136, -72), HORIZONTAL_ALIGNMENT_CENTER, Vector2(120, 144))
+				_place_identity_overlay(Vector2(1.0, 0.50), Vector2(-144, -76), HORIZONTAL_ALIGNMENT_CENTER, Vector2(132, 152))
 
 	title_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	meta_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1327,21 +1327,29 @@ func _apply_player_win_state(player: Dictionary) -> void:
 
 
 func _apply_identity_name_style() -> void:
-	var style := _build_identity_plate_style(Color(0.08, 0.30, 0.23, 0.78), Color(0.92, 1.0, 0.88, 0.20), 18, 7)
+	var style := _build_identity_plate_style(Color(0.08, 0.30, 0.23, 0.82), Color(0.92, 1.0, 0.88, 0.24), 18, 8)
 	identity_name_label.add_theme_stylebox_override("normal", style)
 	identity_name_label.remove_theme_font_override("font")
-	identity_name_label.add_theme_font_size_override("font_size", 20 if seat_dock == SeatDock.SELF else 21)
+	identity_name_label.add_theme_font_size_override("font_size", _identity_name_font_size())
 	identity_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	identity_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	identity_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	identity_name_label.custom_minimum_size = Vector2(124, 60 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else 48)
+	identity_name_label.custom_minimum_size = Vector2(132 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else 124, 66 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else 50)
 	identity_name_label.add_theme_color_override("font_color", Color(0.98, 0.99, 0.96, 1.0))
-	identity_name_label.add_theme_color_override("font_outline_color", Color(0.04, 0.14, 0.10, 0.86))
+	identity_name_label.add_theme_color_override("font_outline_color", Color(0.03, 0.12, 0.08, 0.92))
 	identity_name_label.add_theme_constant_override("outline_size", 2 if seat_dock != SeatDock.SELF else 1)
-	identity_name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.14))
+	identity_name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.18))
 	identity_name_label.add_theme_constant_override("shadow_offset_x", 0)
 	identity_name_label.add_theme_constant_override("shadow_offset_y", 2)
 	identity_name_label.add_theme_constant_override("line_spacing", 4)
+
+
+func _identity_name_font_size() -> int:
+	if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT]:
+		return 22
+	if seat_dock == SeatDock.TOP:
+		return 21
+	return 20
 
 
 func _apply_identity_win_stamp_style() -> void:
@@ -1434,10 +1442,10 @@ func _apply_identity_ding_que_style(suit: String) -> void:
 	style.content_margin_top = 7
 	style.content_margin_bottom = 7
 	identity_ding_que_label.add_theme_stylebox_override("normal", style)
-	identity_ding_que_label.add_theme_font_size_override("font_size", 19 if seat_dock == SeatDock.SELF else 17)
+	identity_ding_que_label.add_theme_font_size_override("font_size", 19 if seat_dock == SeatDock.SELF else (18 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else 17))
 	identity_ding_que_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	identity_ding_que_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	identity_ding_que_label.custom_minimum_size = Vector2(124, 36 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT, SeatDock.TOP] else 0)
+	identity_ding_que_label.custom_minimum_size = Vector2(132 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else 124, 38 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT, SeatDock.TOP] else 0)
 	identity_ding_que_label.add_theme_color_override("font_color", Color(1.0, 0.96, 0.82, 1.0) if has_bao_gang else Color(0.96, 0.94, 0.86, 1.0))
 	identity_ding_que_label.add_theme_color_override("font_outline_color", Color(0.22, 0.10, 0.03, 0.96) if has_bao_gang else Color(0.04, 0.12, 0.10, 0.88))
 	identity_ding_que_label.add_theme_constant_override("outline_size", 2)
