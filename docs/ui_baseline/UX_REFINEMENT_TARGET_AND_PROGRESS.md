@@ -177,7 +177,7 @@
 | 1.0.21 | 6087a72 | 2026-05-11 | 针对幺鸡和万字做牌纹生成细修：新增单牌覆盖参数，降低幺鸡贴纸黑边感；万字整体减厚、减影并将硬黑描边转为深色彩墨结构线；新增 `tile_symbols_v1_0_21_contact_sheet.png`；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_21_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_21_mobile_1365x768.png`；牌纹对照 `docs/ui_baseline/mockups/tile_symbols_v1_0_21_contact_sheet.png` | 90% | 继续步骤 4/7：HUD 状态标记统一、移动端最终检查、启动图一致性最后拉齐 |
 | 1.0.22 | ee66400 | 2026-05-11 | 统一玩家 HUD 状态标记：报叫/杠状态增加更明确的边框权重，杠数文案改为 `杠xN`，让状态不只依赖颜色识别；顶部内联身份状态同步补边框；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_22_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_22_mobile_1365x768.png` | 91% | 继续步骤 6/7：桌面边缘、牌体厚度、启动图一致性与最终移动端验收 |
 | 1.0.23 | 645c996 | 2026-05-11 | 桌面与牌体资产微调：中心暖光更贴近启动图气质，边缘框线进一步柔化；牌背绿色提亮并保留暗边，牌面侧边和底部阴影更温润；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_23_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_23_mobile_1365x768.png` | 94% | 继续步骤 5/7/8：AI 提示和最终移动端验收，准备 100% 闭环与最终打包 |
-| 1.0.24 | 本次提交 | 2026-05-11 | 最终收尾：AI 推荐玉金悬浮标记半径略收小、透明度更柔并上移安全区，减少压牌纹风险；完成 100% 验收矩阵与最终双截图；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_24_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_24_mobile_1365x768.png` | 100% | 执行最终 Android release 打包并记录 APK 校验信息 |
+| 1.0.24 | 4a10938 | 2026-05-11 | 最终收尾：AI 推荐玉金悬浮标记半径略收小、透明度更柔并上移安全区，减少压牌纹风险；完成 100% 验收矩阵与最终双截图；同步版本号 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_24_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_24_mobile_1365x768.png` | 100% | 执行最终 Android release 打包并记录 APK 校验信息 |
 
 ## 6. 未完成任务池
 
