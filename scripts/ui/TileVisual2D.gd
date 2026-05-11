@@ -36,6 +36,7 @@ const TILE_BACK_SIDE_SHADE := Color(0.035, 0.20, 0.055, 0.62)
 const TILE_CORNER_RADIUS := 16
 const TILE_FACE_SURFACE_PATH := "res://res/art/ui_3d_cartoon/tile_face_table.png"
 const TILE_BACK_SURFACE_PATH := "res://res/art/ui_3d_cartoon/tile_back_table.png"
+const TILE_SYMBOL_DIR := "res://res/art/ui_3d_cartoon/tile_symbols"
 const HIGHLIGHT_COLOR := Color(1.0, 0.82, 0.28, 1.0)
 const SELECT_COLOR := Color(0.97, 0.93, 0.84, 0.92)
 const RECENT_DISCARD_PULSE_SPEED := 0.0064
@@ -263,6 +264,7 @@ func _resolve_texture() -> Texture2D:
 	if suit == "" or rank <= 0:
 		return null
 	return _load_preferred_texture([
+		"%s/%s_%d.png" % [TILE_SYMBOL_DIR, suit, rank],
 		"res://res/art/tiles/%s_%d.png" % [suit, rank],
 		"res://res/art/tiles/%s_%d.jpg" % [suit, rank],
 	])

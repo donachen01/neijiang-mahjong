@@ -54,6 +54,7 @@ const TILE_INNER_SHADOW := Color(0.40, 0.36, 0.22, 0.16)
 const TILE_SIDE_COLOR := Color(0.70, 0.76, 0.54, 1.0)
 const TILE_SIDE_SHADE := Color(0.28, 0.36, 0.22, 0.56)
 const TILE_FACE_SURFACE_PATH := "res://res/art/ui_3d_cartoon/tile_face_large.png"
+const TILE_SYMBOL_DIR := "res://res/art/ui_3d_cartoon/tile_symbols"
 const USE_SELF_TILE_SURFACE := true
 const DANGER_OUTLINE := Color(0.72, 0.28, 0.24, 0.92)
 const DANGER_BANNER := Color(0.50, 0.14, 0.12, 0.92)
@@ -599,6 +600,7 @@ func _resolve_texture(tile: Dictionary) -> Texture2D:
 	if texture_cache.has(cache_key):
 		return texture_cache[cache_key]
 	var texture := _load_preferred_texture([
+		"%s/%s_%d.png" % [TILE_SYMBOL_DIR, suit, rank],
 		"res://res/art/tiles/%s_%d.png" % [suit, rank],
 		"res://res/art/tiles/%s_%d.jpg" % [suit, rank],
 	])
