@@ -743,31 +743,35 @@ func _check_self_hand_fill_contract(root_node: Node, failures: Array[String]) ->
 func _check_ai_recommended_cone_contract(root_node: Node, failures: Array[String]) -> void:
 	var hand_host: Control = _find_control(root_node, "SelfHandHost")
 	if hand_host == null:
-		failures.append("缺少本家手牌横排，无法验证 AI 推荐圆锥标记")
+		failures.append("缺少本家手牌横排，无法验证 AI 推荐悬浮标记")
 		return
 	hand_host.call("configure_hand", _fake_tiles(6), -1, -1, true, {"recommended_tile_id": 9002}, {})
 	await process_frame
 	var hand_canvas: Node = hand_host.find_child("HandCanvas", true, false)
 	if hand_canvas == null:
-		failures.append("本家手牌画布缺失，无法验证 AI 推荐圆锥标记")
+		failures.append("本家手牌画布缺失，无法验证 AI 推荐悬浮标记")
 		return
 	if not hand_canvas.has_method("get_recommended_marker_contract"):
-		failures.append("AI 推荐牌标记应暴露旋转 3D 圆锥合同，而不是只画牌外框")
+		failures.append("AI 推荐牌标记应暴露悬浮 3D 标记合同，而不是只画牌外框")
 		return
 	var marker: Dictionary = hand_canvas.call("get_recommended_marker_contract")
 	if marker.is_empty():
-		failures.append("AI 推荐牌应在对应麻将中心显示圆锥标记")
+		failures.append("AI 推荐牌应在对应麻将上方显示悬浮标记")
 		return
-	if str(marker.get("mode", "")) != "rotating_cone":
-		failures.append("AI 推荐牌标记应是旋转圆锥，当前模式 %s" % str(marker.get("mode", "")))
+	if str(marker.get("mode", "")) != "hovering_jade_marker":
+		failures.append("AI 推荐牌标记应是轻量玉金悬浮标记，当前模式 %s" % str(marker.get("mode", "")))
 	if bool(marker.get("uses_outline", true)):
 		failures.append("AI 推荐牌不要再用麻将外框高亮")
-	if not bool(marker.get("is_rotating", false)):
-		failures.append("AI 推荐圆锥应持续旋转")
+	if not bool(marker.get("is_animating", false)):
+		failures.append("AI 推荐悬浮标记应持续有轻微动效")
 	var center: Vector2 = marker.get("center", Vector2.ZERO)
 	var front_rect: Rect2 = marker.get("front_rect", Rect2())
-	if front_rect.size == Vector2.ZERO or not front_rect.has_point(center):
-		failures.append("AI 推荐圆锥应位于推荐麻将牌中心")
+	if front_rect.size == Vector2.ZERO:
+		failures.append("AI 推荐悬浮标记缺少推荐牌矩形合同")
+	elif center.y < front_rect.position.y or center.y > front_rect.position.y + 28.0:
+		failures.append("AI 推荐悬浮标记应位于推荐牌上沿安全区，避免遮挡牌纹")
+	elif absf(center.x - front_rect.get_center().x) > 2.0:
+		failures.append("AI 推荐悬浮标记应水平对齐推荐麻将中心")
 
 
 func _check_self_winning_tile_not_duplicated(root_node: Node, failures: Array[String]) -> void:
