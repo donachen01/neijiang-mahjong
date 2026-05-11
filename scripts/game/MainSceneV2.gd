@@ -5715,17 +5715,21 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 	hover.shadow_size = normal.shadow_size + 2
 
 	var pressed := normal.duplicate()
-	pressed.bg_color = bg.darkened(0.10)
-	pressed.border_color = border.darkened(0.05)
+	pressed.bg_color = bg.darkened(0.06)
+	pressed.border_color = border.darkened(0.03)
 	pressed.shadow_size = maxi(2, normal.shadow_size - 5)
 	pressed.shadow_offset = Vector2(0, 1)
 	pressed.content_margin_top = 12
 	pressed.content_margin_bottom = 6
 
 	var disabled := normal.duplicate()
-	disabled.bg_color = Color(bg.r, bg.g, bg.b, 0.40)
-	disabled.border_color = Color(border.r, border.g, border.b, 0.32)
-	disabled.shadow_size = 0
+	disabled.bg_color = Color(bg.r, bg.g, bg.b, 0.30).lightened(0.06)
+	disabled.border_color = Color(border.r, border.g, border.b, 0.22)
+	disabled.shadow_color = Color(0.0, 0.06, 0.04, 0.12)
+	disabled.shadow_size = 4
+	disabled.shadow_offset = Vector2(0, 1)
+	disabled.content_margin_top = 9
+	disabled.content_margin_bottom = 9
 
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
@@ -5733,7 +5737,11 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 	button.add_theme_stylebox_override("focus", hover)
 	button.add_theme_stylebox_override("disabled", disabled)
 	button.add_theme_color_override("font_color", font_color)
+	button.add_theme_color_override("font_hover_color", font_color.lightened(0.08))
+	button.add_theme_color_override("font_pressed_color", font_color.darkened(0.08))
+	button.add_theme_color_override("font_disabled_color", Color(font_color.r, font_color.g, font_color.b, 0.46))
 	button.add_theme_color_override("font_outline_color", Color(0.08, 0.06, 0.03, 0.92))
+	button.add_theme_color_override("font_disabled_outline_color", Color(0.08, 0.06, 0.03, 0.48))
 	button.add_theme_constant_override("outline_size", 2)
 	button.add_theme_font_size_override("font_size", 17 if button in [top_bar_button, top_ai_tuning_button, top_ai_helper_button, top_settlement_info_button, top_next_round_button, top_exit_button] else font_size)
 
@@ -6367,9 +6375,11 @@ func _apply_action_button_style(button: Button, bg: Color, border: Color, font_s
 	pressed.content_margin_bottom = 5
 
 	var disabled := normal.duplicate()
-	disabled.bg_color = Color(bg.r, bg.g, bg.b, 0.36)
-	disabled.border_color = Color(border.r, border.g, border.b, 0.24)
-	disabled.shadow_size = 0
+	disabled.bg_color = Color(bg.r, bg.g, bg.b, 0.34).lightened(0.05)
+	disabled.border_color = Color(border.r, border.g, border.b, 0.22)
+	disabled.shadow_color = Color(0.00, 0.08, 0.05, 0.12)
+	disabled.shadow_size = 4
+	disabled.shadow_offset = Vector2(0, 1)
 
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
@@ -6380,8 +6390,9 @@ func _apply_action_button_style(button: Button, bg: Color, border: Color, font_s
 	button.add_theme_color_override("font_color", Color(1.0, 0.96, 0.86, 1.0))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.90, 1.0))
 	button.add_theme_color_override("font_pressed_color", Color(0.96, 0.90, 0.76, 1.0))
-	button.add_theme_color_override("font_disabled_color", Color(0.72, 0.70, 0.62, 0.54))
+	button.add_theme_color_override("font_disabled_color", Color(0.86, 0.82, 0.70, 0.48))
 	button.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.03, 0.92))
+	button.add_theme_color_override("font_disabled_outline_color", Color(0.08, 0.05, 0.03, 0.42))
 	button.add_theme_constant_override("outline_size", 2 if emphasized else 1)
 	if button.custom_minimum_size == Vector2.ZERO:
 		button.custom_minimum_size = Vector2(86, 86)

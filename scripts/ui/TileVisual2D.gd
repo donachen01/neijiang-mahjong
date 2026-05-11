@@ -33,6 +33,11 @@ const TILE_SIDE_COLOR := Color(0.82, 0.88, 0.68, 1.0)
 const TILE_SIDE_SHADE := Color(0.40, 0.51, 0.34, 0.52)
 const TILE_BACK_SIDE_COLOR := Color(0.18, 0.40, 0.12, 1.0)
 const TILE_BACK_SIDE_SHADE := Color(0.035, 0.20, 0.055, 0.62)
+const FACE_INNER_RIM := Color(0.68, 0.58, 0.36, 0.18)
+const FACE_INNER_LIGHT := Color(1.0, 1.0, 0.91, 0.20)
+const FACE_RIGHT_GLAZE := Color(0.46, 0.38, 0.23, 0.10)
+const BACK_INNER_RIM := Color(0.08, 0.24, 0.06, 0.20)
+const BACK_INNER_LIGHT := Color(0.88, 1.0, 0.52, 0.13)
 const TILE_CORNER_RADIUS := 16
 const TILE_FACE_SURFACE_PATH := "res://res/art/ui_3d_cartoon/tile_face_table.png"
 const TILE_BACK_SURFACE_PATH := "res://res/art/ui_3d_cartoon/tile_back_table.png"
@@ -99,14 +104,13 @@ func _draw() -> void:
 	if surface_texture != null:
 		var surface_rect := front_rect.grow_individual(5.0 * tile_scale, 3.0 * tile_scale, 13.0 * tile_scale, 17.0 * tile_scale)
 		draw_texture_rect(surface_texture, surface_rect, false)
+		_draw_inset_face_rim(front_rect)
 	else:
 		draw_rect(shadow_rect, SHADOW_COLOR, true)
 		_draw_tile_side(front_rect, show_back)
 		draw_style_box(back_stylebox if show_back else face_stylebox, front_rect)
 		_draw_gloss_overlay(front_rect)
-		draw_rect(Rect2(front_rect.position + Vector2(2.0, 0.32) * tile_scale, Vector2(front_rect.size.x - 4.0 * tile_scale, 1.2 * tile_scale)), FACE_TOP_SHADOW, true)
-		draw_rect(Rect2(front_rect.position + Vector2(2.6, front_rect.size.y - 8.0 * tile_scale), Vector2(front_rect.size.x - 5.2 * tile_scale, 3.4 * tile_scale)), FACE_BOTTOM_SOFT_SHADE, true)
-		draw_line(front_rect.position + Vector2(front_rect.size.x - 1.4 * tile_scale, 2.4 * tile_scale), front_rect.position + Vector2(front_rect.size.x - 1.4 * tile_scale, front_rect.size.y - 3.0 * tile_scale), EDGE_SHADE_COLOR, maxf(1.0, 1.25 * tile_scale))
+		_draw_inset_face_rim(front_rect)
 
 	var texture: Texture2D = _resolve_texture()
 	if texture != null and not show_back:
@@ -145,6 +149,45 @@ func _draw_gloss_overlay(front_rect: Rect2) -> void:
 		band.corner_radius_bottom_left = maxi(3, TILE_CORNER_RADIUS - 7)
 		band.corner_radius_bottom_right = maxi(3, TILE_CORNER_RADIUS - 7)
 		draw_style_box(band, band_rect)
+
+
+func _draw_inset_face_rim(front_rect: Rect2) -> void:
+	var radius := maxi(4, int(round((TILE_CORNER_RADIUS - 5) * tile_scale)))
+	var inset := maxf(2.4, 3.6 * tile_scale)
+	var rim_rect := front_rect.grow(-inset)
+	if rim_rect.size.x <= 0.0 or rim_rect.size.y <= 0.0:
+		return
+
+	var rim := StyleBoxFlat.new()
+	rim.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	rim.border_color = BACK_INNER_RIM if show_back else FACE_INNER_RIM
+	rim.set_border_width_all(maxi(1, int(round(1.35 * tile_scale))))
+	rim.corner_radius_top_left = radius
+	rim.corner_radius_top_right = radius
+	rim.corner_radius_bottom_left = radius
+	rim.corner_radius_bottom_right = radius
+	rim.anti_aliasing = true
+	rim.anti_aliasing_size = 1.2
+	draw_style_box(rim, rim_rect)
+
+	var top_highlight := Rect2(
+		rim_rect.position + Vector2(2.2, 1.6) * tile_scale,
+		Vector2(rim_rect.size.x - 4.4 * tile_scale, maxf(1.0, 1.7 * tile_scale))
+	)
+	var left_highlight := Rect2(
+		rim_rect.position + Vector2(1.7, 4.0) * tile_scale,
+		Vector2(maxf(1.0, 1.4 * tile_scale), rim_rect.size.y * 0.46)
+	)
+	var right_shade := Rect2(
+		rim_rect.position + Vector2(rim_rect.size.x - 3.3 * tile_scale, rim_rect.size.y * 0.18),
+		Vector2(maxf(1.0, 1.5 * tile_scale), rim_rect.size.y * 0.68)
+	)
+	draw_rect(top_highlight, BACK_INNER_LIGHT if show_back else FACE_INNER_LIGHT, true)
+	draw_rect(left_highlight, BACK_INNER_LIGHT if show_back else FACE_INNER_LIGHT, true)
+	draw_rect(right_shade, BACK_EDGE_SHADE if show_back else FACE_RIGHT_GLAZE, true)
+	draw_rect(Rect2(front_rect.position + Vector2(2.0, 0.32) * tile_scale, Vector2(front_rect.size.x - 4.0 * tile_scale, 1.2 * tile_scale)), FACE_TOP_SHADOW if not show_back else BACK_EDGE_LIGHT, true)
+	draw_rect(Rect2(front_rect.position + Vector2(2.6, front_rect.size.y - 8.0 * tile_scale), Vector2(front_rect.size.x - 5.2 * tile_scale, 3.4 * tile_scale)), FACE_BOTTOM_SOFT_SHADE if not show_back else BACK_BOTTOM_SHADE, true)
+	draw_line(front_rect.position + Vector2(front_rect.size.x - 1.4 * tile_scale, 2.4 * tile_scale), front_rect.position + Vector2(front_rect.size.x - 1.4 * tile_scale, front_rect.size.y - 3.0 * tile_scale), EDGE_SHADE_COLOR if not show_back else BACK_EDGE_SHADE, maxf(1.0, 1.25 * tile_scale))
 
 
 func _draw_tile_side(front_rect: Rect2, use_back_side: bool) -> void:

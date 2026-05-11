@@ -1327,21 +1327,7 @@ func _apply_player_win_state(player: Dictionary) -> void:
 
 
 func _apply_identity_name_style() -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.29, 0.22, 0.80)
-	style.border_color = Color(0.82, 0.95, 0.89, 0.16)
-	style.set_border_width_all(1)
-	style.corner_radius_top_left = 16
-	style.corner_radius_top_right = 16
-	style.corner_radius_bottom_left = 16
-	style.corner_radius_bottom_right = 16
-	style.content_margin_left = 16
-	style.content_margin_right = 16
-	style.content_margin_top = 9
-	style.content_margin_bottom = 9
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.16)
-	style.shadow_size = 4
-	style.shadow_offset = Vector2(0, 2)
+	var style := _build_identity_plate_style(Color(0.08, 0.30, 0.23, 0.78), Color(0.92, 1.0, 0.88, 0.20), 18, 7)
 	identity_name_label.add_theme_stylebox_override("normal", style)
 	identity_name_label.remove_theme_font_override("font")
 	identity_name_label.add_theme_font_size_override("font_size", 20 if seat_dock == SeatDock.SELF else 21)
@@ -1427,35 +1413,24 @@ func _position_identity_dealer_badge() -> void:
 
 
 func _apply_identity_ding_que_style(suit: String) -> void:
-	var style := StyleBoxFlat.new()
 	var status_text := "" if identity_ding_que_label == null else str(identity_ding_que_label.text)
 	var has_bao_gang := status_text.find("杠") != -1
 	var has_bao_jiao := status_text.find("报叫") != -1
+	var bg := _ding_que_color(suit).darkened(0.06)
+	var border := Color(0.82, 0.95, 0.90, 0.20)
+	var shadow := Color(0.0, 0.0, 0.0, 0.24)
+	var shadow_size := 6
 	if has_bao_gang:
-		style.bg_color = Color(0.69, 0.53, 0.17, 0.94)
-		style.border_color = Color(0.94, 0.86, 0.56, 0.92)
-		style.shadow_color = Color(0.32, 0.15, 0.00, 0.32)
-		style.shadow_size = 6
-		style.shadow_offset = Vector2(0, 3)
+		bg = Color(0.69, 0.53, 0.17, 0.94)
+		border = Color(0.94, 0.86, 0.56, 0.92)
+		shadow = Color(0.32, 0.15, 0.00, 0.32)
+		shadow_size = 7
 	elif has_bao_jiao:
-		style.bg_color = Color(0.63, 0.25, 0.21, 0.90)
-		style.border_color = Color(0.95, 0.79, 0.64, 0.82)
-		style.shadow_color = Color(0.22, 0.06, 0.03, 0.26)
-		style.shadow_size = 5
-		style.shadow_offset = Vector2(0, 3)
-	else:
-		style.bg_color = _ding_que_color(suit).darkened(0.06)
-		style.border_color = Color(0.82, 0.95, 0.90, 0.20)
-		style.shadow_color = Color(0.0, 0.0, 0.0, 0.24)
-		style.shadow_size = 5
-		style.shadow_offset = Vector2(0, 3)
-	style.set_border_width_all(2)
-	style.corner_radius_top_left = 16
-	style.corner_radius_top_right = 16
-	style.corner_radius_bottom_left = 16
-	style.corner_radius_bottom_right = 16
-	style.content_margin_left = 16
-	style.content_margin_right = 16
+		bg = Color(0.63, 0.25, 0.21, 0.90)
+		border = Color(0.95, 0.79, 0.64, 0.82)
+		shadow = Color(0.22, 0.06, 0.03, 0.26)
+	var style := _build_identity_plate_style(bg, border, 16, shadow_size)
+	style.shadow_color = shadow
 	style.content_margin_top = 7
 	style.content_margin_bottom = 7
 	identity_ding_que_label.add_theme_stylebox_override("normal", style)
@@ -1466,6 +1441,27 @@ func _apply_identity_ding_que_style(suit: String) -> void:
 	identity_ding_que_label.add_theme_color_override("font_color", Color(1.0, 0.96, 0.82, 1.0) if has_bao_gang else Color(0.96, 0.94, 0.86, 1.0))
 	identity_ding_que_label.add_theme_color_override("font_outline_color", Color(0.22, 0.10, 0.03, 0.96) if has_bao_gang else Color(0.04, 0.12, 0.10, 0.88))
 	identity_ding_que_label.add_theme_constant_override("outline_size", 2)
+
+
+func _build_identity_plate_style(bg: Color, border: Color, radius: int, shadow_size: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg.lightened(0.05)
+	style.border_color = border.lightened(0.18)
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	style.content_margin_left = 16
+	style.content_margin_right = 16
+	style.content_margin_top = 9
+	style.content_margin_bottom = 9
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.20)
+	style.shadow_size = shadow_size
+	style.shadow_offset = Vector2(0, 3)
+	style.anti_aliasing = true
+	style.anti_aliasing_size = 1.3
+	return style
 
 
 func _create_top_inline_identity_card(player: Dictionary) -> Control:
