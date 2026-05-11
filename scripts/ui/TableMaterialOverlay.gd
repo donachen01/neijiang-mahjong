@@ -56,16 +56,16 @@ func _draw_felt_texture() -> void:
 		draw_circle(highlight, lerpf(radius * 0.05, radius * 0.32, t), Color(0.78, 0.98, 0.70, 0.010 * opacity * (1.0 - t)))
 		draw_circle(shadow, lerpf(radius * 0.08, radius * 0.34, t), Color(0.0, 0.06, 0.035, 0.020 * opacity * (1.0 - t)))
 
-	var line_gap := maxf(9.0, minf(size.x, size.y) / 92.0)
+	var line_gap := maxf(12.0, minf(size.x, size.y) / 76.0)
 	var horizontal_count := int(size.y / line_gap)
 	for index in range(horizontal_count + 1):
 		var y := float(index) * line_gap
-		var alpha := (0.003 + 0.002 * sin(float(index) * 1.37)) * opacity
+		var alpha := (0.0012 + 0.0008 * sin(float(index) * 1.37)) * opacity
 		draw_line(Vector2(0.0, y), Vector2(size.x, y + sin(float(index) * 0.61) * 1.2), Color(0.60, 0.92, 0.66, alpha), 1.0, true)
 	var vertical_count := int(size.x / (line_gap * 1.35))
 	for index in range(vertical_count + 1):
 		var x := float(index) * line_gap * 1.35
-		var alpha := (0.002 + 0.001 * cos(float(index) * 1.19)) * opacity
+		var alpha := (0.0008 + 0.0005 * cos(float(index) * 1.19)) * opacity
 		draw_line(Vector2(x, 0.0), Vector2(x + cos(float(index) * 0.57) * 1.0, size.y), Color(0.0, 0.10, 0.05, alpha), 1.0, true)
 
 	var vignette_steps := 10
