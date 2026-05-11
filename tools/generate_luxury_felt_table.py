@@ -24,8 +24,8 @@ def main() -> None:
 	w, h = SIZE
 	img = Image.new("RGBA", SIZE, (0, 0, 0, 255))
 	pixels = img.load()
-	center = (w * 0.50, h * 0.43)
-	warm_spot = (w * 0.43, h * 0.58)
+	center = (w * 0.50, h * 0.46)
+	warm_spot = (w * 0.44, h * 0.60)
 	for y in range(h):
 		for x in range(w):
 			nx = (x - center[0]) / (w * 0.62)
@@ -36,42 +36,49 @@ def main() -> None:
 			wy = (y - warm_spot[1]) / (h * 0.42)
 			warm = max(0.0, 1.0 - math.sqrt(wx * wx + wy * wy))
 			vignette = min(1.0, r * 0.86)
-			weave = math.sin(x * 0.055) * 2.4 + math.cos(y * 0.075) * 2.0
-			fiber = random.randint(-4, 4)
+			weave = math.sin(x * 0.045) * 1.8 + math.cos(y * 0.058) * 1.35
+			fiber = random.randint(-3, 3)
 			base = (
-				int(lerp(12, 34, spot) + warm * 10 - vignette * 9 + weave + fiber),
-				int(lerp(94, 142, spot) + warm * 18 - vignette * 24 + weave * 0.5 + fiber),
-				int(lerp(65, 92, spot) + warm * 10 - vignette * 15 + fiber),
+				int(lerp(16, 42, spot) + warm * 14 - vignette * 11 + weave + fiber),
+				int(lerp(102, 154, spot) + warm * 22 - vignette * 28 + weave * 0.45 + fiber),
+				int(lerp(70, 100, spot) + warm * 13 - vignette * 17 + fiber),
 			)
 			pixels[x, y] = (max(0, min(255, base[0])), max(0, min(255, base[1])), max(0, min(255, base[2])), 255)
 
 	img = img.filter(ImageFilter.GaussianBlur(0.35))
 	d = ImageDraw.Draw(img, "RGBA")
 
-	for i in range(42):
-		y = random.randrange(h)
-		x = random.randrange(w)
-		length = random.randrange(36, 128)
-		alpha = random.randrange(1, 3)
-		color = (110, 190, 122, alpha) if random.random() > 0.45 else (0, 40, 24, alpha)
-		d.line((x, y, min(w, x + length), y + random.randrange(-2, 3)), fill=color, width=1)
-
+	fiber_layer = Image.new("RGBA", SIZE, (0, 0, 0, 0))
+	fd = ImageDraw.Draw(fiber_layer, "RGBA")
 	for i in range(18):
+		y = random.randrange(h)
+		x = random.randrange(w)
+		length = random.randrange(18, 72)
+		alpha = 1
+		color = (128, 202, 136, alpha) if random.random() > 0.55 else (10, 58, 36, alpha)
+		fd.line((x, y, min(w, x + length), y + random.randrange(-1, 2)), fill=color, width=1)
+
+	for i in range(6):
 		x = random.randrange(w)
 		y = random.randrange(h)
-		length = random.randrange(24, 96)
+		length = random.randrange(14, 54)
 		alpha = 1
-		d.line((x, y, x + random.randrange(-2, 3), min(h, y + length)), fill=(12, 56, 35, alpha), width=1)
+		fd.line((x, y, x + random.randrange(-1, 2), min(h, y + length)), fill=(12, 58, 36, alpha), width=1)
+	fiber_layer = fiber_layer.filter(ImageFilter.GaussianBlur(0.6))
+	img.alpha_composite(fiber_layer)
 
 	light = Image.new("RGBA", SIZE, (0, 0, 0, 0))
 	ld = ImageDraw.Draw(light, "RGBA")
-	for radius, alpha in [(780, 14), (580, 16), (400, 14), (240, 10)]:
+	for radius, alpha in [(840, 18), (620, 20), (420, 16), (260, 11)]:
 		bbox = (center[0] - radius, center[1] - radius * 0.52, center[0] + radius, center[1] + radius * 0.52)
-		ld.ellipse(bbox, fill=(128, 210, 128, alpha))
+		ld.ellipse(bbox, fill=(142, 224, 142, alpha))
+	for radius, alpha in [(620, 9), (420, 8)]:
+		bbox = (warm_spot[0] - radius, warm_spot[1] - radius * 0.44, warm_spot[0] + radius, warm_spot[1] + radius * 0.44)
+		ld.ellipse(bbox, fill=(236, 196, 112, alpha))
 	light = light.filter(ImageFilter.GaussianBlur(42))
 	img.alpha_composite(light)
 
-	for radius, alpha in [(1550, 52), (1260, 34), (980, 22)]:
+	for radius, alpha in [(1560, 58), (1260, 38), (980, 20)]:
 		layer = Image.new("RGBA", SIZE, (0, 0, 0, 0))
 		ld = ImageDraw.Draw(layer, "RGBA")
 		ld.ellipse((center[0] - radius, center[1] - radius * 0.68, center[0] + radius, center[1] + radius * 0.68), outline=(0, 38, 25, alpha), width=90)
@@ -80,9 +87,9 @@ def main() -> None:
 
 	edge = Image.new("RGBA", SIZE, (0, 0, 0, 0))
 	ed = ImageDraw.Draw(edge, "RGBA")
-	ed.rounded_rectangle((18, 18, w - 18, h - 18), radius=54, outline=(202, 225, 140, 28), width=3)
-	ed.rounded_rectangle((30, 30, w - 30, h - 30), radius=42, outline=(0, 42, 26, 58), width=8)
-	edge = edge.filter(ImageFilter.GaussianBlur(0.8))
+	ed.rounded_rectangle((18, 18, w - 18, h - 18), radius=54, outline=(220, 202, 132, 20), width=2)
+	ed.rounded_rectangle((32, 32, w - 32, h - 32), radius=42, outline=(0, 42, 26, 42), width=6)
+	edge = edge.filter(ImageFilter.GaussianBlur(1.2))
 	img.alpha_composite(edge)
 	img = img.filter(ImageFilter.GaussianBlur(0.25))
 
