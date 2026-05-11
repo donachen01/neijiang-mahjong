@@ -166,7 +166,7 @@
 | 1.0.11 | `f272f7c` | 2026-05-11 | 重生成连续绒布桌面基底，加入柔和中心光、边缘暗角并降低程序叠加纹理线存在感 | `V17 LAYOUT CONTRACT OK` | 64% | 继续步骤 6/7：实机截图与移动端可读性检查 |
 | 1.0.12 | 本次截图验证版本 | 2026-05-11 | 建立正常渲染截图验收产物；继续降低牌体硬阴影和牌背黑边 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_12_candidate.png` | 70% | 继续步骤 2/3/4/7：手牌牌底、HUD 亮度和移动端检查 |
 | 1.0.13 | `e852919` | 2026-05-11 | 继续暖化厚玉牌底和手牌接触阴影；弱化玩家 HUD 面板感；统一右上/浮动按钮为更接近玉石胶囊的控件；AI 推荐锥体上移到推荐牌中心上方；补充 `1365x768` 移动端截图 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_13_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_13_mobile_1365x768.png` | 73% | 继续步骤 2/4/5：正面牌纹精细化、HUD/按钮资产化、启动图一致性提升 |
-| 1.0.14 | 待提交 | 2026-05-11 | 重做牌纹柔化生成参数：条/筒/万按花色分别加厚、增强浮雕接触阴影和暖光；新增 `tile_symbols_v1_0_14_contact_sheet.png`；AI 推荐从压牌纹的旋转锥体改为牌面上沿安全区的玉金悬浮标记，并同步更新布局合同 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_14_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_14_mobile_1365x768.png` | 75% | 继续步骤 3/4/5/6：统一大小牌材质比例、HUD/按钮资产化、进一步贴近启动图 |
+| 1.0.14 | `f16e889` | 2026-05-11 | 重做牌纹柔化生成参数：条/筒/万按花色分别加厚、增强浮雕接触阴影和暖光；新增 `tile_symbols_v1_0_14_contact_sheet.png`；AI 推荐从压牌纹的旋转锥体改为牌面上沿安全区的玉金悬浮标记，并同步更新布局合同 | `V17 LAYOUT CONTRACT OK`；截图 `docs/ui_baseline/captures/main_scene_v1_0_14_candidate.png`、`docs/ui_baseline/captures/main_scene_v1_0_14_mobile_1365x768.png` | 75% | 继续步骤 3/4/5/6：统一大小牌材质比例、HUD/按钮资产化、进一步贴近启动图 |
 
 ## 6. 未完成任务池
 
