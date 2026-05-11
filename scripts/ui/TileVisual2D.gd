@@ -34,6 +34,8 @@ const TILE_SIDE_SHADE := Color(0.40, 0.51, 0.34, 0.52)
 const TILE_BACK_SIDE_COLOR := Color(0.18, 0.40, 0.12, 1.0)
 const TILE_BACK_SIDE_SHADE := Color(0.035, 0.20, 0.055, 0.62)
 const TILE_CORNER_RADIUS := 16
+const TILE_FACE_SURFACE_PATH := "res://res/art/ui_3d_cartoon/tile_face_table.png"
+const TILE_BACK_SURFACE_PATH := "res://res/art/ui_3d_cartoon/tile_back_table.png"
 const HIGHLIGHT_COLOR := Color(1.0, 0.82, 0.28, 1.0)
 const SELECT_COLOR := Color(0.97, 0.93, 0.84, 0.92)
 const RECENT_DISCARD_PULSE_SPEED := 0.0064
@@ -92,21 +94,25 @@ func _draw() -> void:
 	shadow_rect.position += _shadow_offset()
 	shadow_rect.position -= Vector2(2.4, 0.8) * tile_scale
 	shadow_rect.size += Vector2(6.6, 6.8) * tile_scale
-	draw_rect(shadow_rect, SHADOW_COLOR, true)
-
-	_draw_tile_side(front_rect, show_back)
-	draw_style_box(back_stylebox if show_back else face_stylebox, front_rect)
-	_draw_gloss_overlay(front_rect)
-	draw_rect(Rect2(front_rect.position + Vector2(2.0, 0.32) * tile_scale, Vector2(front_rect.size.x - 4.0 * tile_scale, 1.2 * tile_scale)), FACE_TOP_SHADOW, true)
-	draw_rect(Rect2(front_rect.position + Vector2(2.6, front_rect.size.y - 8.0 * tile_scale), Vector2(front_rect.size.x - 5.2 * tile_scale, 3.4 * tile_scale)), FACE_BOTTOM_SOFT_SHADE, true)
-	draw_line(front_rect.position + Vector2(front_rect.size.x - 1.4 * tile_scale, 2.4 * tile_scale), front_rect.position + Vector2(front_rect.size.x - 1.4 * tile_scale, front_rect.size.y - 3.0 * tile_scale), EDGE_SHADE_COLOR, maxf(1.0, 1.25 * tile_scale))
+	var surface_texture := _load_tile_surface(show_back)
+	if surface_texture != null:
+		var surface_rect := front_rect.grow_individual(5.0 * tile_scale, 3.0 * tile_scale, 13.0 * tile_scale, 17.0 * tile_scale)
+		draw_texture_rect(surface_texture, surface_rect, false)
+	else:
+		draw_rect(shadow_rect, SHADOW_COLOR, true)
+		_draw_tile_side(front_rect, show_back)
+		draw_style_box(back_stylebox if show_back else face_stylebox, front_rect)
+		_draw_gloss_overlay(front_rect)
+		draw_rect(Rect2(front_rect.position + Vector2(2.0, 0.32) * tile_scale, Vector2(front_rect.size.x - 4.0 * tile_scale, 1.2 * tile_scale)), FACE_TOP_SHADOW, true)
+		draw_rect(Rect2(front_rect.position + Vector2(2.6, front_rect.size.y - 8.0 * tile_scale), Vector2(front_rect.size.x - 5.2 * tile_scale, 3.4 * tile_scale)), FACE_BOTTOM_SOFT_SHADE, true)
+		draw_line(front_rect.position + Vector2(front_rect.size.x - 1.4 * tile_scale, 2.4 * tile_scale), front_rect.position + Vector2(front_rect.size.x - 1.4 * tile_scale, front_rect.size.y - 3.0 * tile_scale), EDGE_SHADE_COLOR, maxf(1.0, 1.25 * tile_scale))
 
 	var texture: Texture2D = _resolve_texture()
 	if texture != null and not show_back:
 		var texture_rect := _texture_rect(front_rect)
 		draw_texture_rect(texture, texture_rect, false)
 
-	if show_back:
+	if show_back and surface_texture == null:
 		_draw_back_pattern(front_rect)
 
 	if is_selected:
@@ -251,10 +257,7 @@ func _texture_rect(front_rect: Rect2) -> Rect2:
 
 func _resolve_texture() -> Texture2D:
 	if show_back:
-		return _load_preferred_texture([
-			"res://res/art/tiles/back_face.png",
-			"res://res/art/tiles/back_face.jpg",
-		])
+		return null
 	var suit: String = str(tile_data.get("suit", ""))
 	var rank: int = int(tile_data.get("rank", 0))
 	if suit == "" or rank <= 0:
@@ -265,10 +268,16 @@ func _resolve_texture() -> Texture2D:
 	])
 
 
+func _load_tile_surface(back: bool) -> Texture2D:
+	return _load_texture(TILE_BACK_SURFACE_PATH if back else TILE_FACE_SURFACE_PATH)
+
+
 func _load_texture(path: String) -> Texture2D:
 	if texture_cache.has(path):
 		return texture_cache[path]
-	var texture := load(path) as Texture2D
+	var texture: Texture2D = null
+	if ResourceLoader.exists(path):
+		texture = load(path) as Texture2D
 	if texture == null:
 		texture = _load_texture_from_image(path)
 	if texture != null:

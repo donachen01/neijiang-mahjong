@@ -1559,9 +1559,9 @@ func _create_top_inline_identity_card(player: Dictionary) -> Control:
 
 func _build_top_identity_name_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.30, 0.23, 0.84)
-	style.border_color = Color(0.84, 0.95, 0.90, 0.16)
-	style.set_border_width_all(1)
+	style.bg_color = Color(0.07, 0.25, 0.19, 0.54)
+	style.border_color = Color(0.84, 0.95, 0.90, 0.04)
+	style.set_border_width_all(0)
 	style.corner_radius_top_left = 16
 	style.corner_radius_top_right = 16
 	style.corner_radius_bottom_left = 16
@@ -1570,7 +1570,7 @@ func _build_top_identity_name_style() -> StyleBoxFlat:
 	style.content_margin_right = 14
 	style.content_margin_top = 8
 	style.content_margin_bottom = 8
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.14)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.18)
 	style.shadow_size = 3
 	style.shadow_offset = Vector2(0, 2)
 	return style
@@ -1621,9 +1621,10 @@ func _build_top_identity_info_style(player: Dictionary) -> StyleBoxFlat:
 		style.bg_color = Color(0.63, 0.25, 0.21, 0.90)
 		style.border_color = Color(0.95, 0.79, 0.64, 0.82)
 	else:
-		style.bg_color = _ding_que_color(str(player.get("ding_que", ""))).darkened(0.02)
-		style.border_color = Color(0.82, 0.95, 0.90, 0.18)
-	style.set_border_width_all(2)
+		var ding_color := _ding_que_color(str(player.get("ding_que", ""))).darkened(0.10)
+		style.bg_color = Color(ding_color.r, ding_color.g, ding_color.b, 0.58)
+		style.border_color = Color(0.82, 0.95, 0.90, 0.04)
+	style.set_border_width_all(0)
 	style.corner_radius_top_left = 12
 	style.corner_radius_top_right = 12
 	style.corner_radius_bottom_left = 12
@@ -1704,16 +1705,16 @@ func _apply_shell_style(bg: Color, border: Color, border_width: int, shadow_size
 		style.shadow_size = 0
 		style.shadow_offset = Vector2.ZERO
 	else:
-		style.bg_color = bg
-		style.border_color = border
-		style.set_border_width_all(border_width)
-		style.corner_radius_top_left = 10
-		style.corner_radius_top_right = 10
-		style.corner_radius_bottom_left = 10
-		style.corner_radius_bottom_right = 10
-		style.shadow_color = Color(0.0, 0.0, 0.0, 0.12)
+		style.bg_color = Color(bg.r, bg.g, bg.b, minf(bg.a, 0.54))
+		style.border_color = Color(border.r, border.g, border.b, minf(border.a, 0.05))
+		style.set_border_width_all(0)
+		style.corner_radius_top_left = 14
+		style.corner_radius_top_right = 14
+		style.corner_radius_bottom_left = 14
+		style.corner_radius_bottom_right = 14
+		style.shadow_color = Color(0.0, 0.0, 0.0, 0.16)
 		style.shadow_size = shadow_size
-		style.shadow_offset = Vector2(0, 1)
+		style.shadow_offset = Vector2(0, 2)
 	root_panel.add_theme_stylebox_override("panel", style)
 
 

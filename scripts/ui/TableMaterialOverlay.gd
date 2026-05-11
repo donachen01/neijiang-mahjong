@@ -8,6 +8,8 @@ enum MaterialMode {
 	SOFT_PANEL,
 }
 
+const FELT_TEXTURE_PATH := "res://res/art/ui_3d_cartoon/felt_table_luxury.png"
+
 @export var material_mode: MaterialMode = MaterialMode.FELT:
 	set(value):
 		material_mode = value
@@ -17,6 +19,8 @@ enum MaterialMode {
 	set(value):
 		opacity = clampf(value, 0.0, 1.0)
 		queue_redraw()
+
+var _texture_cache: Dictionary = {}
 
 
 func _ready() -> void:
@@ -36,28 +40,32 @@ func _draw() -> void:
 
 
 func _draw_felt_texture() -> void:
+	var felt_texture := _load_texture(FELT_TEXTURE_PATH)
+	if felt_texture != null:
+		draw_texture_rect(felt_texture, Rect2(Vector2.ZERO, size), false, Color(1.0, 1.0, 1.0, opacity))
+
 	var center := Vector2(size.x * 0.50, size.y * 0.42)
 	var highlight := Vector2(size.x * 0.18, size.y * 0.16)
 	var shadow := Vector2(size.x * 0.83, size.y * 0.82)
 	var radius := maxf(size.x, size.y) * 0.66
 	for band in range(8):
 		var t := float(band) / 7.0
-		draw_circle(center, lerpf(radius * 0.16, radius * 0.62, t), Color(0.22, 0.55, 0.34, 0.036 * opacity * (1.0 - t)))
+		draw_circle(center, lerpf(radius * 0.16, radius * 0.62, t), Color(0.22, 0.55, 0.34, 0.020 * opacity * (1.0 - t)))
 	for band in range(6):
 		var t := float(band) / 5.0
-		draw_circle(highlight, lerpf(radius * 0.05, radius * 0.32, t), Color(0.78, 0.98, 0.70, 0.016 * opacity * (1.0 - t)))
-		draw_circle(shadow, lerpf(radius * 0.08, radius * 0.34, t), Color(0.0, 0.06, 0.035, 0.030 * opacity * (1.0 - t)))
+		draw_circle(highlight, lerpf(radius * 0.05, radius * 0.32, t), Color(0.78, 0.98, 0.70, 0.010 * opacity * (1.0 - t)))
+		draw_circle(shadow, lerpf(radius * 0.08, radius * 0.34, t), Color(0.0, 0.06, 0.035, 0.020 * opacity * (1.0 - t)))
 
 	var line_gap := maxf(9.0, minf(size.x, size.y) / 92.0)
 	var horizontal_count := int(size.y / line_gap)
 	for index in range(horizontal_count + 1):
 		var y := float(index) * line_gap
-		var alpha := (0.006 + 0.003 * sin(float(index) * 1.37)) * opacity
+		var alpha := (0.003 + 0.002 * sin(float(index) * 1.37)) * opacity
 		draw_line(Vector2(0.0, y), Vector2(size.x, y + sin(float(index) * 0.61) * 1.2), Color(0.60, 0.92, 0.66, alpha), 1.0, true)
 	var vertical_count := int(size.x / (line_gap * 1.35))
 	for index in range(vertical_count + 1):
 		var x := float(index) * line_gap * 1.35
-		var alpha := (0.004 + 0.002 * cos(float(index) * 1.19)) * opacity
+		var alpha := (0.002 + 0.001 * cos(float(index) * 1.19)) * opacity
 		draw_line(Vector2(x, 0.0), Vector2(x + cos(float(index) * 0.57) * 1.0, size.y), Color(0.0, 0.10, 0.05, alpha), 1.0, true)
 
 	var vignette_steps := 10
@@ -69,6 +77,21 @@ func _draw_felt_texture() -> void:
 
 	draw_rect(Rect2(Vector2(0.0, 0.0), Vector2(size.x, 2.0)), Color(1.0, 1.0, 0.86, 0.010 * opacity), true)
 	draw_rect(Rect2(Vector2(0.0, maxf(0.0, size.y - 2.0)), Vector2(size.x, 2.0)), Color(0.0, 0.10, 0.05, 0.014 * opacity), true)
+
+
+func _load_texture(path: String) -> Texture2D:
+	if _texture_cache.has(path):
+		return _texture_cache[path]
+	var texture: Texture2D = null
+	if ResourceLoader.exists(path):
+		texture = load(path) as Texture2D
+	if texture == null:
+		var image := Image.new()
+		if image.load(path) == OK:
+			texture = ImageTexture.create_from_image(image)
+	if texture != null:
+		_texture_cache[path] = texture
+	return texture
 
 
 func _draw_soft_panel_texture() -> void:

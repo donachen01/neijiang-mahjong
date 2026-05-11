@@ -1276,8 +1276,8 @@ func _apply_discard_helper_style() -> void:
 		return
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.08, 0.30, 0.23, 0.54)
-	panel_style.border_color = Color(0.82, 0.95, 0.74, 0.18)
-	panel_style.set_border_width_all(1)
+	panel_style.border_color = Color(0.82, 0.95, 0.74, 0.0)
+	panel_style.set_border_width_all(0)
 	panel_style.corner_radius_top_left = 14
 	panel_style.corner_radius_top_right = 14
 	panel_style.corner_radius_bottom_left = 14
@@ -1353,11 +1353,11 @@ func _flatten_table_panel(panel: Panel, bg: Color) -> void:
 func _apply_tabletop_matte_theme() -> void:
 	if background_rect != null:
 		background_rect.color = MATTE_FELT_BG
-		_ensure_material_overlay(background_rect, "TableFeltSoftGlow", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.FELT, 0.44)
+		_ensure_material_overlay(background_rect, "TableFeltSoftGlow", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.FELT, 1.0)
 
 	_apply_clear_panel(%TopBar)
-	_apply_felt_panel(room_card, Color(0.12, 0.36, 0.27, 0.82), Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.24), 18, 1, 7)
-	_apply_felt_panel(info_card, Color(0.10, 0.34, 0.24, 0.90), Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.72), 14, 2, 12)
+	_apply_felt_panel(room_card, Color(0.06, 0.20, 0.16, 0.40), Color(0.86, 1.0, 0.82, 0.04), 18, 0, 8)
+	_apply_felt_panel(info_card, Color(0.06, 0.20, 0.16, 0.46), Color(0.86, 1.0, 0.82, 0.06), 14, 0, 10)
 	_ensure_material_overlay(info_card, "InfoCardSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.80)
 
 	_apply_clear_panel(center_card)
@@ -3349,9 +3349,9 @@ func _self_ding_que_color(suit: String) -> Color:
 
 func _apply_self_score_style() -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.23, 0.38, 0.29, 0.94)
-	style.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.90)
-	style.set_border_width_all(3)
+	style.bg_color = Color(0.06, 0.20, 0.16, 0.46)
+	style.border_color = Color(0.86, 1.0, 0.82, 0.05)
+	style.set_border_width_all(0)
 	style.corner_radius_top_left = 20
 	style.corner_radius_top_right = 20
 	style.corner_radius_bottom_left = 20
@@ -3360,9 +3360,9 @@ func _apply_self_score_style() -> void:
 	style.content_margin_right = 20
 	style.content_margin_top = 12
 	style.content_margin_bottom = 12
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.34)
-	style.shadow_size = 15
-	style.shadow_offset = Vector2(0, 6)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.22)
+	style.shadow_size = 11
+	style.shadow_offset = Vector2(0, 4)
 	self_score_label.add_theme_stylebox_override("normal", style)
 	var calligraphy_font := SystemFont.new()
 	calligraphy_font.font_names = PackedStringArray([
