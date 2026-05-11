@@ -40,15 +40,35 @@ func _draw_felt_texture() -> void:
 	var highlight := Vector2(size.x * 0.18, size.y * 0.16)
 	var shadow := Vector2(size.x * 0.83, size.y * 0.82)
 	var radius := maxf(size.x, size.y) * 0.66
-	for band in range(5):
-		var t := float(band) / 4.0
-		draw_circle(center, lerpf(radius * 0.14, radius * 0.52, t), Color(0.36, 0.74, 0.44, 0.042 * opacity * (1.0 - t)))
-	for band in range(4):
-		var t := float(band) / 3.0
-		draw_circle(highlight, lerpf(radius * 0.06, radius * 0.28, t), Color(0.95, 1.0, 0.84, 0.030 * opacity * (1.0 - t)))
-		draw_circle(shadow, lerpf(radius * 0.06, radius * 0.24, t), Color(0.0, 0.12, 0.06, 0.020 * opacity * (1.0 - t)))
-	draw_rect(Rect2(Vector2(0.0, 0.0), Vector2(size.x, 2.0)), Color(1.0, 1.0, 0.86, 0.006 * opacity), true)
-	draw_rect(Rect2(Vector2(0.0, maxf(0.0, size.y - 2.0)), Vector2(size.x, 2.0)), Color(0.0, 0.10, 0.05, 0.008 * opacity), true)
+	for band in range(8):
+		var t := float(band) / 7.0
+		draw_circle(center, lerpf(radius * 0.16, radius * 0.62, t), Color(0.22, 0.55, 0.34, 0.036 * opacity * (1.0 - t)))
+	for band in range(6):
+		var t := float(band) / 5.0
+		draw_circle(highlight, lerpf(radius * 0.05, radius * 0.32, t), Color(0.78, 0.98, 0.70, 0.016 * opacity * (1.0 - t)))
+		draw_circle(shadow, lerpf(radius * 0.08, radius * 0.34, t), Color(0.0, 0.06, 0.035, 0.030 * opacity * (1.0 - t)))
+
+	var line_gap := maxf(9.0, minf(size.x, size.y) / 92.0)
+	var horizontal_count := int(size.y / line_gap)
+	for index in range(horizontal_count + 1):
+		var y := float(index) * line_gap
+		var alpha := (0.006 + 0.003 * sin(float(index) * 1.37)) * opacity
+		draw_line(Vector2(0.0, y), Vector2(size.x, y + sin(float(index) * 0.61) * 1.2), Color(0.60, 0.92, 0.66, alpha), 1.0, true)
+	var vertical_count := int(size.x / (line_gap * 1.35))
+	for index in range(vertical_count + 1):
+		var x := float(index) * line_gap * 1.35
+		var alpha := (0.004 + 0.002 * cos(float(index) * 1.19)) * opacity
+		draw_line(Vector2(x, 0.0), Vector2(x + cos(float(index) * 0.57) * 1.0, size.y), Color(0.0, 0.10, 0.05, alpha), 1.0, true)
+
+	var vignette_steps := 10
+	for index in range(vignette_steps):
+		var t := float(index) / float(maxi(1, vignette_steps - 1))
+		var inset := t * minf(size.x, size.y) * 0.085
+		var rect := Rect2(Vector2(inset, inset), size - Vector2(inset * 2.0, inset * 2.0))
+		draw_rect(rect, Color(0.0, 0.055, 0.035, 0.018 * opacity * (1.0 - t)), false, maxf(1.0, 18.0 * (1.0 - t)))
+
+	draw_rect(Rect2(Vector2(0.0, 0.0), Vector2(size.x, 2.0)), Color(1.0, 1.0, 0.86, 0.010 * opacity), true)
+	draw_rect(Rect2(Vector2(0.0, maxf(0.0, size.y - 2.0)), Vector2(size.x, 2.0)), Color(0.0, 0.10, 0.05, 0.014 * opacity), true)
 
 
 func _draw_soft_panel_texture() -> void:

@@ -53,7 +53,7 @@ const UI_PREFS_SECTION := "main_scene_v2"
 const UI_PREFS_KEY_AI_HELPER := "ai_helper_enabled"
 const UI_PREFS_KEY_OPPONENT_HANDS := "opponent_hands_enabled"
 const TILE_VISUAL_BASE_SIZE := Vector2(92.0, 140.0)
-const MATTE_FELT_BG := Color("1B7049")
+const MATTE_FELT_BG := Color("155D3F")
 const MATTE_FELT_BASE := Color("2F9860")
 const MATTE_FELT_PANEL := Color("3AA162")
 const MATTE_FELT_DEEP := Color(0.08, 0.34, 0.24, 0.96)
@@ -1353,7 +1353,7 @@ func _flatten_table_panel(panel: Panel, bg: Color) -> void:
 func _apply_tabletop_matte_theme() -> void:
 	if background_rect != null:
 		background_rect.color = MATTE_FELT_BG
-		_ensure_material_overlay(background_rect, "TableFeltSoftGlow", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.FELT, 0.52)
+		_ensure_material_overlay(background_rect, "TableFeltSoftGlow", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.FELT, 0.44)
 
 	_apply_clear_panel(%TopBar)
 	_apply_felt_panel(room_card, Color(0.12, 0.36, 0.27, 0.82), Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.24), 18, 1, 7)

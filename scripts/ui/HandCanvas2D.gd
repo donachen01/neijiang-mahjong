@@ -15,9 +15,9 @@ const NEW_DRAW_GAP := 22.0
 const WINNING_TILE_GAP := 24.0
 const SELECTED_LIFT := 10.0
 const NEW_DRAW_LIFT := 8.0
-const FRONT_INSET := Vector2(5.4, 5.6)
-const SHADOW_OFFSET := Vector2(0.0, 6.0)
-const SHADOW_ALPHA := 0.30
+const FRONT_INSET := Vector2(6.2, 6.4)
+const SHADOW_OFFSET := Vector2(0.0, 7.2)
+const SHADOW_ALPHA := 0.34
 const SUIT_TEXTURE_Y_OFFSETS := {
 	"wan": 2.0,
 	"tiao": -2.0,
@@ -37,11 +37,11 @@ const SUIT_RANK_TEXTURE_SCALE_OVERRIDES := {
 	"tong_8": Vector2(0.81, 0.83),
 	"tong_9": Vector2(0.81, 0.83),
 }
-const TILE_BORDER_COLOR := Color(0.70, 0.73, 0.55, 0.88)
-const TILE_FACE_COLOR := Color(0.995, 0.975, 0.905, 1.0)
-const TILE_GLOSS_TOP := Color(1.0, 0.995, 0.94, 0.74)
+const TILE_BORDER_COLOR := Color(0.82, 0.78, 0.60, 0.62)
+const TILE_FACE_COLOR := Color(1.0, 0.968, 0.885, 1.0)
+const TILE_GLOSS_TOP := Color(1.0, 1.0, 0.96, 0.58)
 const TILE_GLOSS_CLEAR := Color(1.0, 1.0, 1.0, 0.0)
-const TILE_CORNER_RADIUS := 12
+const TILE_CORNER_RADIUS := 18
 const HIGHLIGHT_COLOR := Color(0.90, 0.78, 0.50, 1.0)
 const SELECTED_FACE_TINT := Color(0.995, 0.992, 0.978, 1.0)
 const SELECTED_EDGE_LIGHT := Color(0.97, 0.93, 0.84, 0.92)
@@ -49,10 +49,10 @@ const SELECTED_GLOW_OUTER := Color(0.87, 0.72, 0.42, 0.20)
 const SELECTED_GLOW_INNER := Color(1.0, 0.97, 0.89, 0.52)
 const SELECTED_BASE_GLOW := Color(0.90, 0.74, 0.40, 0.16)
 const SELECTED_SPECULAR := Color(1.0, 0.99, 0.94, 0.42)
-const TILE_INNER_BORDER := Color(1.0, 0.99, 0.88, 0.82)
-const TILE_INNER_SHADOW := Color(0.48, 0.45, 0.32, 0.13)
-const TILE_SIDE_COLOR := Color(0.76, 0.84, 0.63, 1.0)
-const TILE_SIDE_SHADE := Color(0.38, 0.53, 0.34, 0.52)
+const TILE_INNER_BORDER := Color(1.0, 0.99, 0.88, 0.64)
+const TILE_INNER_SHADOW := Color(0.48, 0.42, 0.26, 0.10)
+const TILE_SIDE_COLOR := Color(0.82, 0.88, 0.68, 1.0)
+const TILE_SIDE_SHADE := Color(0.40, 0.51, 0.34, 0.50)
 const DANGER_OUTLINE := Color(0.72, 0.28, 0.24, 0.92)
 const DANGER_BANNER := Color(0.50, 0.14, 0.12, 0.92)
 const RECOMMEND_CONE_HEIGHT := 56.0
@@ -523,24 +523,24 @@ static func _build_face_stylebox() -> StyleBoxFlat:
 
 
 func _draw_gloss_overlay(front_rect: Rect2) -> void:
-	var overlay_height := minf(front_rect.size.y * 0.34, 34.0)
+	var overlay_height := minf(front_rect.size.y * 0.38, 48.0)
 	var steps := 12
 	for index in range(steps):
 		var t := float(index) / float(maxi(1, steps - 1))
 		var color := TILE_GLOSS_TOP.lerp(TILE_GLOSS_CLEAR, t)
 		var y := front_rect.position.y + t * overlay_height
 		var band_rect := Rect2(
-			front_rect.position.x + 2.0 + t * 0.5,
+			front_rect.position.x + 3.0 + t * 0.7,
 			y + 1.0,
-			front_rect.size.x - 4.0 - t,
-			overlay_height / float(steps) + 2.0
+			front_rect.size.x - 6.0 - t * 1.4,
+			overlay_height / float(steps) + 2.4
 		)
 		var band := StyleBoxFlat.new()
 		band.bg_color = color
 		band.corner_radius_top_left = TILE_CORNER_RADIUS - 1
 		band.corner_radius_top_right = TILE_CORNER_RADIUS - 1
-		band.corner_radius_bottom_left = max(4, TILE_CORNER_RADIUS - 6)
-		band.corner_radius_bottom_right = max(4, TILE_CORNER_RADIUS - 6)
+		band.corner_radius_bottom_left = max(5, TILE_CORNER_RADIUS - 8)
+		band.corner_radius_bottom_right = max(5, TILE_CORNER_RADIUS - 8)
 		draw_style_box(band, band_rect)
 
 

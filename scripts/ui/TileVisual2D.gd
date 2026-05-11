@@ -11,25 +11,29 @@ const SUIT_TEXTURE_Y_OFFSETS := {
 	"tiao": -1.0,
 	"tong": -1.0,
 }
-const FACE_COLOR := Color(0.995, 0.975, 0.905, 1.0)
-const FACE_BACK_COLOR := Color(0.39, 0.82, 0.10, 1.0)
-const TOP_FACE_COLOR := Color(1.0, 0.99, 0.94, 1.0)
-const TOP_BACK_COLOR := Color(0.50, 0.92, 0.18, 1.0)
-const TOP_FACE_HIGHLIGHT := Color(1.0, 1.0, 0.94, 0.32)
-const TOP_FACE_SEAM := Color(0.78, 0.74, 0.60, 0.42)
-const BORDER_COLOR := Color(0.70, 0.73, 0.55, 0.88)
-const SHADOW_COLOR := Color(0.0, 0.0, 0.0, 0.30)
-const EDGE_LIGHT_COLOR := Color(1.0, 0.99, 0.90, 0.38)
-const EDGE_SHADE_COLOR := Color(0.46, 0.48, 0.38, 0.24)
-const FACE_TOP_SHADOW := Color(0.86, 0.78, 0.58, 0.10)
-const FACE_BOTTOM_SOFT_SHADE := Color(0.54, 0.50, 0.38, 0.08)
-const BACK_PATTERN_COLOR := Color(0.10, 0.33, 0.16, 0.38)
-const BACK_PATTERN_LIGHT := Color(0.82, 0.94, 0.46, 0.26)
-const TILE_SIDE_COLOR := Color(0.78, 0.86, 0.66, 1.0)
-const TILE_SIDE_SHADE := Color(0.38, 0.53, 0.34, 0.54)
-const TILE_BACK_SIDE_COLOR := Color(0.18, 0.58, 0.10, 1.0)
-const TILE_BACK_SIDE_SHADE := Color(0.05, 0.24, 0.06, 0.58)
-const TILE_CORNER_RADIUS := 12
+const FACE_COLOR := Color(1.0, 0.968, 0.885, 1.0)
+const FACE_BACK_COLOR := Color(0.28, 0.54, 0.16, 1.0)
+const TOP_FACE_COLOR := Color(1.0, 0.992, 0.944, 1.0)
+const TOP_BACK_COLOR := Color(0.42, 0.66, 0.22, 1.0)
+const TOP_FACE_HIGHLIGHT := Color(1.0, 1.0, 0.96, 0.42)
+const TOP_FACE_SEAM := Color(0.82, 0.76, 0.58, 0.28)
+const BORDER_COLOR := Color(0.82, 0.78, 0.60, 0.62)
+const BACK_BORDER_COLOR := Color(0.64, 0.82, 0.40, 0.24)
+const SHADOW_COLOR := Color(0.0, 0.0, 0.0, 0.34)
+const EDGE_LIGHT_COLOR := Color(1.0, 1.0, 0.92, 0.48)
+const EDGE_SHADE_COLOR := Color(0.42, 0.42, 0.30, 0.24)
+const FACE_TOP_SHADOW := Color(1.0, 0.98, 0.82, 0.12)
+const FACE_BOTTOM_SOFT_SHADE := Color(0.44, 0.38, 0.24, 0.10)
+const BACK_EDGE_LIGHT := Color(0.78, 0.90, 0.48, 0.16)
+const BACK_EDGE_SHADE := Color(0.04, 0.18, 0.055, 0.28)
+const BACK_GLAZE_TOP := Color(0.74, 0.88, 0.48, 0.12)
+const BACK_GLAZE_CLEAR := Color(0.28, 0.54, 0.16, 0.0)
+const BACK_BOTTOM_SHADE := Color(0.035, 0.16, 0.04, 0.19)
+const TILE_SIDE_COLOR := Color(0.82, 0.88, 0.68, 1.0)
+const TILE_SIDE_SHADE := Color(0.40, 0.51, 0.34, 0.52)
+const TILE_BACK_SIDE_COLOR := Color(0.18, 0.40, 0.12, 1.0)
+const TILE_BACK_SIDE_SHADE := Color(0.035, 0.20, 0.055, 0.62)
+const TILE_CORNER_RADIUS := 16
 const HIGHLIGHT_COLOR := Color(1.0, 0.82, 0.28, 1.0)
 const SELECT_COLOR := Color(0.97, 0.93, 0.84, 0.92)
 const RECENT_DISCARD_PULSE_SPEED := 0.0064
@@ -115,24 +119,24 @@ func _draw() -> void:
 
 
 func _draw_gloss_overlay(front_rect: Rect2) -> void:
-	var overlay_height := minf(front_rect.size.y * 0.34, 34.0 * tile_scale)
-	var steps := 10
+	var overlay_height := minf(front_rect.size.y * (0.42 if show_back else 0.38), 42.0 * tile_scale)
+	var steps := 12
 	for index in range(steps):
 		var t := float(index) / float(maxi(1, steps - 1))
-		var alpha := lerpf(0.26, 0.0, t)
+		var alpha := lerpf(0.34 if show_back else 0.38, 0.0, t)
 		var y := front_rect.position.y + t * overlay_height
 		var band_rect := Rect2(
-			front_rect.position.x + (1.8 + t * 0.35) * tile_scale,
+			front_rect.position.x + (2.2 + t * 0.4) * tile_scale,
 			y + 0.9 * tile_scale,
-			front_rect.size.x - (3.6 + t * 0.7) * tile_scale,
-			overlay_height / float(steps) + 1.8 * tile_scale
+			front_rect.size.x - (4.4 + t * 0.8) * tile_scale,
+			overlay_height / float(steps) + 2.0 * tile_scale
 		)
 		var band := StyleBoxFlat.new()
-		band.bg_color = Color(0.98, 0.98, 0.98, alpha)
-		band.corner_radius_top_left = maxi(3, TILE_CORNER_RADIUS - 1)
-		band.corner_radius_top_right = maxi(3, TILE_CORNER_RADIUS - 1)
-		band.corner_radius_bottom_left = maxi(2, TILE_CORNER_RADIUS - 5)
-		band.corner_radius_bottom_right = maxi(2, TILE_CORNER_RADIUS - 5)
+		band.bg_color = Color(1.0, 1.0, 0.94, alpha) if not show_back else BACK_GLAZE_TOP.lerp(BACK_GLAZE_CLEAR, t)
+		band.corner_radius_top_left = maxi(4, TILE_CORNER_RADIUS - 1)
+		band.corner_radius_top_right = maxi(4, TILE_CORNER_RADIUS - 1)
+		band.corner_radius_bottom_left = maxi(3, TILE_CORNER_RADIUS - 7)
+		band.corner_radius_bottom_right = maxi(3, TILE_CORNER_RADIUS - 7)
 		draw_style_box(band, band_rect)
 
 
@@ -193,14 +197,17 @@ func _draw_recent_discard_accent(outer_rect: Rect2, pulse_phase: float) -> void:
 
 
 func _draw_back_pattern(front_rect: Rect2) -> void:
-	var inset := 8.0 * tile_scale
-	var inner_rect := front_rect.grow(-inset)
-	draw_rect(inner_rect, BACK_PATTERN_COLOR, false, maxf(1.2, 1.2 * tile_scale))
-	draw_rect(inner_rect.grow(-4.0 * tile_scale), BACK_PATTERN_LIGHT, false, maxf(0.9, 0.9 * tile_scale))
-	var center := inner_rect.get_center()
-	var motif_radius := minf(inner_rect.size.x, inner_rect.size.y) * 0.20
-	draw_arc(center, motif_radius, 0.0, TAU, 28, BACK_PATTERN_LIGHT, maxf(1.2, 1.2 * tile_scale), true)
-	draw_arc(center, motif_radius * 0.58, 0.0, TAU, 24, BACK_PATTERN_COLOR.lightened(0.20), maxf(0.9, 0.9 * tile_scale), true)
+	var edge_inset := 5.0 * tile_scale
+	var top_line := Rect2(front_rect.position + Vector2(edge_inset, 3.8 * tile_scale), Vector2(front_rect.size.x - edge_inset * 2.0, 1.4 * tile_scale))
+	var bottom_line := Rect2(front_rect.position + Vector2(edge_inset, front_rect.size.y - 6.5 * tile_scale), Vector2(front_rect.size.x - edge_inset * 2.0, 2.0 * tile_scale))
+	draw_rect(top_line, BACK_EDGE_LIGHT, true)
+	draw_rect(bottom_line, BACK_BOTTOM_SHADE, true)
+	draw_line(
+		front_rect.position + Vector2(front_rect.size.x - 3.2 * tile_scale, 7.0 * tile_scale),
+		front_rect.position + Vector2(front_rect.size.x - 3.2 * tile_scale, front_rect.size.y - 8.0 * tile_scale),
+		BACK_EDGE_SHADE,
+		maxf(1.0, 1.0 * tile_scale)
+	)
 
 
 func _draw_polygon_outline(points: PackedVector2Array, color: Color, width: float) -> void:
@@ -301,7 +308,7 @@ static func _build_face_stylebox() -> StyleBoxFlat:
 static func _build_back_stylebox() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = FACE_BACK_COLOR
-	style.border_color = BORDER_COLOR
+	style.border_color = BACK_BORDER_COLOR
 	style.set_border_width_all(1)
 	style.corner_radius_top_left = TILE_CORNER_RADIUS
 	style.corner_radius_top_right = TILE_CORNER_RADIUS
