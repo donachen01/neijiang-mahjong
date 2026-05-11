@@ -1439,6 +1439,7 @@ func _apply_identity_ding_que_style(suit: String) -> void:
 		shadow = Color(0.22, 0.06, 0.03, 0.26)
 	var style := _build_identity_plate_style(bg, border, 16, shadow_size)
 	style.shadow_color = shadow
+	style.set_border_width_all(2 if has_bao_gang or has_bao_jiao else 1)
 	style.content_margin_top = 7
 	style.content_margin_bottom = 7
 	identity_ding_que_label.add_theme_stylebox_override("normal", style)
@@ -1627,8 +1628,8 @@ func _build_top_identity_info_style(player: Dictionary) -> StyleBoxFlat:
 	else:
 		var ding_color := _ding_que_color(str(player.get("ding_que", ""))).darkened(0.10)
 		style.bg_color = Color(ding_color.r, ding_color.g, ding_color.b, 0.58)
-		style.border_color = Color(0.82, 0.95, 0.90, 0.04)
-	style.set_border_width_all(0)
+		style.border_color = Color(0.82, 0.95, 0.90, 0.12)
+	style.set_border_width_all(1 if not status_text.is_empty() else 0)
 	style.corner_radius_top_left = 12
 	style.corner_radius_top_right = 12
 	style.corner_radius_bottom_left = 12
@@ -1752,7 +1753,7 @@ func _identity_status_text(player: Dictionary, ding_que_suit: String, show_ding_
 		var bao_gang_count := int(Array(player.get("bao_gang_tiles", [])).size())
 		parts.append("报叫")
 		if bao_gang_count > 0:
-			parts.append("%d杠" % bao_gang_count)
+			parts.append("杠x%d" % bao_gang_count)
 	var ding_que_text := _ding_que_text(ding_que_suit)
 	if show_ding_que_badges and not ding_que_text.is_empty():
 		parts.append(ding_que_text)
