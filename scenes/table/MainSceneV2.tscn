@@ -866,7 +866,7 @@ mouse_filter = 2
 [node name="SettlementPanel" type="Panel" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(1160, 760)
+custom_minimum_size = Vector2(1800, 1000)
 
 [node name="SettlementMargin" type="MarginContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel"]
 layout_mode = 1
@@ -965,7 +965,7 @@ theme_override_constants/separation = 8
 [node name="SettlementHeroCard" type="Panel" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard/SettlementDetailMargin/SettlementDetailVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(0, 96)
+custom_minimum_size = Vector2(0, 148)
 
 [node name="SettlementHeroMargin" type="MarginContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard/SettlementDetailMargin/SettlementDetailVBox/SettlementHeroCard"]
 layout_mode = 1
@@ -1032,7 +1032,7 @@ text = "+12"
 [node name="SettlementHandCard" type="Panel" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard/SettlementDetailMargin/SettlementDetailVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(0, 128)
+custom_minimum_size = Vector2(0, 190)
 
 [node name="SettlementHandMargin" type="MarginContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard/SettlementDetailMargin/SettlementDetailVBox/SettlementHandCard"]
 layout_mode = 1
@@ -1054,7 +1054,7 @@ theme_override_constants/separation = 10
 [node name="SettlementBreakdownCard" type="Panel" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard/SettlementDetailMargin/SettlementDetailVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(0, 244)
+custom_minimum_size = Vector2(0, 360)
 size_flags_vertical = 3
 
 [node name="SettlementBreakdownMargin" type="MarginContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard/SettlementDetailMargin/SettlementDetailVBox/SettlementBreakdownCard"]
@@ -1095,5 +1095,5 @@ theme_override_constants/separation = 8
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
-custom_minimum_size = Vector2(168, 52)
+custom_minimum_size = Vector2(280, 82)
 text = "下一局"
