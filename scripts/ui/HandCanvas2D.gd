@@ -16,8 +16,8 @@ const WINNING_TILE_GAP := 24.0
 const SELECTED_LIFT := 10.0
 const NEW_DRAW_LIFT := 8.0
 const FRONT_INSET := Vector2(6.2, 6.4)
-const SHADOW_OFFSET := Vector2(0.0, 7.2)
-const SHADOW_ALPHA := 0.30
+const SHADOW_OFFSET := Vector2(0.0, 4.8)
+const SHADOW_ALPHA := 0.14
 const SUIT_TEXTURE_Y_OFFSETS := {
 	"wan": 2.0,
 	"tiao": -2.0,
@@ -37,25 +37,17 @@ const SUIT_RANK_TEXTURE_SCALE_OVERRIDES := {
 	"tong_8": Vector2(0.70, 0.73),
 	"tong_9": Vector2(0.70, 0.73),
 }
-const TILE_BORDER_COLOR := Color(0.86, 0.82, 0.60, 0.16)
-const TILE_FACE_COLOR := Color(0.98, 0.938, 0.792, 1.0)
-const TILE_GLOSS_TOP := Color(1.0, 0.99, 0.88, 0.40)
-const TILE_GLOSS_CLEAR := Color(1.0, 1.0, 1.0, 0.0)
-const TILE_CORNER_RADIUS := 18
-const HIGHLIGHT_COLOR := Color(0.90, 0.78, 0.50, 1.0)
-const SELECTED_FACE_TINT := Color(0.995, 0.992, 0.978, 1.0)
-const SELECTED_EDGE_LIGHT := Color(0.97, 0.93, 0.84, 0.92)
-const SELECTED_GLOW_OUTER := Color(0.87, 0.72, 0.42, 0.20)
-const SELECTED_GLOW_INNER := Color(1.0, 0.97, 0.89, 0.52)
-const SELECTED_BASE_GLOW := Color(0.90, 0.74, 0.40, 0.16)
-const SELECTED_SPECULAR := Color(1.0, 0.99, 0.94, 0.42)
-const TILE_INNER_BORDER := Color(1.0, 0.99, 0.88, 0.18)
-const TILE_INNER_SHADOW := Color(0.40, 0.36, 0.22, 0.16)
-const TILE_SIDE_COLOR := Color(0.70, 0.76, 0.54, 1.0)
-const TILE_SIDE_SHADE := Color(0.28, 0.36, 0.22, 0.56)
-const TILE_FACE_SURFACE_PATH := "res://res/art/ui_3d_cartoon/tile_face_large.png"
+const TILE_BORDER_COLOR := Color8(102, 160, 122, 238)
+const TILE_FACE_COLOR := Color8(222, 246, 228, 255)
+const TILE_CORNER_RADIUS := 10
+const HIGHLIGHT_COLOR := Color8(195, 29, 56, 255)
+const SELECTED_FACE_TINT := Color8(193, 236, 211, 255)
+const SELECTED_EDGE_LIGHT := Color8(195, 29, 56, 225)
+const TILE_INNER_BORDER := Color(0.96, 1.0, 0.98, 0.38)
+const TILE_INNER_SHADOW := Color(0.08, 0.18, 0.13, 0.14)
+const TILE_FACE_SURFACE_PATH := "res://res/art/ui_3d_cartoon/tile_face_table.png"
 const TILE_SYMBOL_DIR := "res://res/art/ui_3d_cartoon/tile_symbols"
-const USE_SELF_TILE_SURFACE := true
+const USE_SELF_TILE_SURFACE := false
 const DANGER_OUTLINE := Color(0.72, 0.28, 0.24, 0.92)
 const DANGER_BANNER := Color(0.50, 0.14, 0.12, 0.92)
 const RECOMMEND_MARKER_RADIUS := 10.5
@@ -155,22 +147,21 @@ func _draw_single_tile(layout: Dictionary) -> void:
 	shadow_rect.position += SHADOW_OFFSET
 	shadow_rect.position -= Vector2(2.0, 1.0)
 	shadow_rect.size += Vector2(4.0, 5.0)
-	draw_set_transform(pivot, deg_to_rad(rotation_degrees), Vector2.ONE)
+	var tile_draw_scale := Vector2.ONE * (1.05 if is_selected else 1.0)
+	draw_set_transform(pivot, deg_to_rad(rotation_degrees), tile_draw_scale)
 	var local_front_rect := Rect2(front_rect.position - pivot, front_rect.size)
 	var local_outer_rect := Rect2(outer_rect.position - pivot, outer_rect.size)
 	var local_shadow_rect := Rect2(shadow_rect.position - pivot, shadow_rect.size)
 
 	var surface_texture := _load_tile_surface() if USE_SELF_TILE_SURFACE else null
 	if surface_texture != null:
-		var surface_rect := local_front_rect.grow_individual(-6.0, -3.0, -6.0, 8.0)
+		var surface_rect := local_front_rect.grow_individual(-4.0, -3.4, -4.0, -2.2)
 		draw_texture_rect(surface_texture, surface_rect, false)
 		_draw_asset_tile_warmth(local_front_rect)
 		_draw_asset_tile_depth(local_front_rect)
 	else:
 		draw_rect(local_shadow_rect, Color(0.0, 0.0, 0.0, SHADOW_ALPHA), true)
-		_draw_tile_side(local_front_rect)
 		draw_style_box(_selected_stylebox if is_selected or is_new_draw else _face_stylebox, local_front_rect)
-		_draw_gloss_overlay(local_front_rect)
 		_draw_embedded_tile_depth(local_front_rect)
 
 	var texture := _resolve_texture(tile)
@@ -213,173 +204,80 @@ func _draw_danger_hint(front_rect: Rect2) -> void:
 
 
 func _draw_asset_tile_depth(front_rect: Rect2) -> void:
-	var body := front_rect.grow_individual(-7.0, -4.0, -7.0, 5.0)
-	var right_side := StyleBoxFlat.new()
-	right_side.bg_color = Color(0.38, 0.43, 0.27, 0.42)
-	right_side.corner_radius_top_right = TILE_CORNER_RADIUS - 2
-	right_side.corner_radius_bottom_right = TILE_CORNER_RADIUS - 2
-	draw_style_box(right_side, Rect2(
-		body.position + Vector2(body.size.x - 10.0, 18.0),
-		Vector2(7.0, body.size.y - 31.0)
-	))
-
-	var bottom_side := StyleBoxFlat.new()
-	bottom_side.bg_color = Color(0.43, 0.43, 0.26, 0.45)
-	bottom_side.corner_radius_bottom_left = TILE_CORNER_RADIUS - 2
-	bottom_side.corner_radius_bottom_right = TILE_CORNER_RADIUS - 2
-	draw_style_box(bottom_side, Rect2(
-		body.position + Vector2(18.0, body.size.y - 12.0),
-		Vector2(body.size.x - 31.0, 8.0)
-	))
-
-	var top_gloss := StyleBoxFlat.new()
-	top_gloss.bg_color = Color(1.0, 0.96, 0.72, 0.22)
-	top_gloss.corner_radius_top_left = TILE_CORNER_RADIUS - 3
-	top_gloss.corner_radius_top_right = TILE_CORNER_RADIUS - 3
-	draw_style_box(top_gloss, Rect2(
-		body.position + Vector2(16.0, 9.0),
-		Vector2(body.size.x - 33.0, 5.0)
+	var body := front_rect.grow_individual(-3.0, -2.0, -3.0, -1.0)
+	var top_wash := StyleBoxFlat.new()
+	top_wash.bg_color = Color(1.0, 1.0, 1.0, 0.18)
+	top_wash.corner_radius_top_left = TILE_CORNER_RADIUS - 2
+	top_wash.corner_radius_top_right = TILE_CORNER_RADIUS - 2
+	draw_style_box(top_wash, Rect2(
+		body.position + Vector2(7.0, 5.0),
+		Vector2(body.size.x - 14.0, 9.0)
 	))
 
 	var contact_shadow := StyleBoxFlat.new()
-	contact_shadow.bg_color = Color(0.0, 0.0, 0.0, 0.13)
+	contact_shadow.bg_color = Color(0.0, 0.0, 0.0, 0.16)
 	contact_shadow.corner_radius_bottom_left = TILE_CORNER_RADIUS
 	contact_shadow.corner_radius_bottom_right = TILE_CORNER_RADIUS
 	draw_style_box(contact_shadow, Rect2(
-		body.position + Vector2(11.0, body.size.y + 2.0),
-		Vector2(body.size.x - 20.0, 4.0)
+		body.position + Vector2(9.0, body.size.y + 1.0),
+		Vector2(body.size.x - 18.0, 4.0)
 	))
 
 
 func _draw_asset_tile_warmth(front_rect: Rect2) -> void:
-	var body := front_rect.grow_individual(-8.0, -5.0, -8.0, 6.0)
+	var body := front_rect.grow_individual(-5.0, -4.0, -5.0, -2.0)
 	var warm_wash := StyleBoxFlat.new()
-	warm_wash.bg_color = Color(0.86, 0.74, 0.46, 0.055)
+	warm_wash.bg_color = Color(0.95, 0.92, 0.84, 0.035)
 	warm_wash.corner_radius_top_left = TILE_CORNER_RADIUS - 2
 	warm_wash.corner_radius_top_right = TILE_CORNER_RADIUS - 2
 	warm_wash.corner_radius_bottom_left = TILE_CORNER_RADIUS - 2
 	warm_wash.corner_radius_bottom_right = TILE_CORNER_RADIUS - 2
-	draw_style_box(warm_wash, body.grow_individual(6.0, 10.0, 6.0, 10.0))
+	draw_style_box(warm_wash, body.grow_individual(3.0, 5.0, 3.0, 4.0))
 
 	var lower_shade := StyleBoxFlat.new()
-	lower_shade.bg_color = Color(0.50, 0.42, 0.22, 0.045)
+	lower_shade.bg_color = Color(0.22, 0.18, 0.12, 0.025)
 	lower_shade.corner_radius_bottom_left = TILE_CORNER_RADIUS - 2
 	lower_shade.corner_radius_bottom_right = TILE_CORNER_RADIUS - 2
 	draw_style_box(lower_shade, Rect2(
-		body.position + Vector2(8.0, body.size.y * 0.68),
+		body.position + Vector2(8.0, body.size.y * 0.72),
 		Vector2(body.size.x - 16.0, body.size.y * 0.24)
 	))
 
 
 func _draw_asset_tile_rim(front_rect: Rect2) -> void:
-	var body := front_rect.grow_individual(-7.0, -4.0, -7.0, 5.0)
+	var body := front_rect.grow_individual(-3.0, -2.0, -3.0, -1.0)
 	var rim := StyleBoxFlat.new()
 	rim.bg_color = Color(0.0, 0.0, 0.0, 0.0)
-	rim.border_color = Color(0.36, 0.40, 0.24, 0.24)
-	rim.set_border_width_all(1)
+	rim.border_color = TILE_BORDER_COLOR
+	rim.set_border_width_all(2)
 	rim.corner_radius_top_left = TILE_CORNER_RADIUS - 1
 	rim.corner_radius_top_right = TILE_CORNER_RADIUS - 1
 	rim.corner_radius_bottom_left = TILE_CORNER_RADIUS - 1
 	rim.corner_radius_bottom_right = TILE_CORNER_RADIUS - 1
 	draw_style_box(rim, body.grow_individual(-1.0, -1.0, -1.0, -1.0))
 
-	var bottom_lip := StyleBoxFlat.new()
-	bottom_lip.bg_color = Color(0.38, 0.39, 0.23, 0.34)
-	bottom_lip.corner_radius_bottom_left = TILE_CORNER_RADIUS
-	bottom_lip.corner_radius_bottom_right = TILE_CORNER_RADIUS
-	draw_style_box(bottom_lip, Rect2(
-		body.position + Vector2(13.0, body.size.y - 7.0),
-		Vector2(body.size.x - 25.0, 4.0)
-	))
-
-	var right_lip := StyleBoxFlat.new()
-	right_lip.bg_color = Color(0.34, 0.38, 0.23, 0.30)
-	right_lip.corner_radius_top_right = TILE_CORNER_RADIUS
-	right_lip.corner_radius_bottom_right = TILE_CORNER_RADIUS
-	draw_style_box(right_lip, Rect2(
-		body.position + Vector2(body.size.x - 7.0, 16.0),
-		Vector2(4.0, body.size.y - 28.0)
-	))
-
-	var inner_light := StyleBoxFlat.new()
-	inner_light.bg_color = Color(1.0, 0.95, 0.72, 0.18)
-	inner_light.corner_radius_top_left = TILE_CORNER_RADIUS - 4
-	inner_light.corner_radius_top_right = TILE_CORNER_RADIUS - 4
-	draw_style_box(inner_light, Rect2(
-		body.position + Vector2(17.0, 10.0),
-		Vector2(body.size.x - 36.0, 3.0)
-	))
-
 
 func _draw_embedded_tile_depth(front_rect: Rect2) -> void:
 	var radius := TILE_CORNER_RADIUS
-	var body_rect := front_rect.grow_individual(-4.0, -1.0, -4.0, 4.0)
-
-	var left_light := StyleBoxFlat.new()
-	left_light.bg_color = Color(1.0, 0.98, 0.78, 0.26)
-	left_light.corner_radius_top_left = radius - 3
-	left_light.corner_radius_bottom_left = radius - 3
-	draw_style_box(left_light, Rect2(
-		body_rect.position + Vector2(2.0, 13.0),
-		Vector2(3.0, body_rect.size.y - 26.0)
-	))
-
-	var right_strip := StyleBoxFlat.new()
-	right_strip.bg_color = Color(0.42, 0.50, 0.31, 0.48)
-	right_strip.corner_radius_top_right = radius - 2
-	right_strip.corner_radius_bottom_right = radius - 2
-	draw_style_box(right_strip, Rect2(
-		body_rect.position + Vector2(body_rect.size.x - 8.0, 13.0),
-		Vector2(5.0, body_rect.size.y - 25.0)
-	))
-
-	var bottom_strip := StyleBoxFlat.new()
-	bottom_strip.bg_color = Color(0.44, 0.48, 0.30, 0.46)
-	bottom_strip.corner_radius_bottom_left = radius - 2
-	bottom_strip.corner_radius_bottom_right = radius - 2
-	draw_style_box(bottom_strip, Rect2(
-		body_rect.position + Vector2(13.0, body_rect.size.y - 9.0),
-		Vector2(body_rect.size.x - 25.0, 6.0)
-	))
+	var body_rect := front_rect.grow_individual(-2.0, -1.0, -2.0, -1.0)
 
 	var top_glow := StyleBoxFlat.new()
-	top_glow.bg_color = Color(1.0, 1.0, 0.88, 0.22)
+	top_glow.bg_color = Color(1.0, 1.0, 1.0, 0.05)
 	top_glow.corner_radius_top_left = radius - 2
 	top_glow.corner_radius_top_right = radius - 2
 	draw_style_box(top_glow, Rect2(
-		body_rect.position + Vector2(12.0, 7.0),
-		Vector2(body_rect.size.x - 24.0, 3.0)
+		body_rect.position + Vector2(10.0, 7.0),
+		Vector2(body_rect.size.x - 20.0, 2.0)
 	))
 
 	var contact_shadow := StyleBoxFlat.new()
-	contact_shadow.bg_color = Color(0.0, 0.0, 0.0, 0.11)
+	contact_shadow.bg_color = Color(0.0, 0.0, 0.0, 0.07)
 	contact_shadow.corner_radius_bottom_left = radius - 1
 	contact_shadow.corner_radius_bottom_right = radius - 1
 	draw_style_box(contact_shadow, Rect2(
-		body_rect.position + Vector2(8.0, body_rect.size.y + 1.0),
-		Vector2(body_rect.size.x - 16.0, 3.0)
+		body_rect.position + Vector2(10.0, body_rect.size.y + 1.0),
+		Vector2(body_rect.size.x - 20.0, 3.0)
 	))
-
-
-func _draw_tile_side(front_rect: Rect2) -> void:
-	var side_dx := 6.8
-	var side_dy := 8.8
-	var bottom_points := PackedVector2Array([
-		front_rect.position + Vector2(4.0, front_rect.size.y - 4.0),
-		front_rect.position + Vector2(front_rect.size.x - 4.0, front_rect.size.y - 4.0),
-		front_rect.position + Vector2(front_rect.size.x - 4.0 + side_dx, front_rect.size.y - 4.0 + side_dy),
-		front_rect.position + Vector2(4.0 + side_dx, front_rect.size.y - 4.0 + side_dy),
-	])
-	var right_points := PackedVector2Array([
-		front_rect.position + Vector2(front_rect.size.x - 4.0, 7.0),
-		front_rect.position + Vector2(front_rect.size.x - 4.0, front_rect.size.y - 4.0),
-		front_rect.position + Vector2(front_rect.size.x - 4.0 + side_dx, front_rect.size.y - 4.0 + side_dy),
-		front_rect.position + Vector2(front_rect.size.x - 4.0 + side_dx, 7.0 + side_dy),
-	])
-	draw_colored_polygon(bottom_points, TILE_SIDE_COLOR)
-	draw_colored_polygon(right_points, TILE_SIDE_COLOR.darkened(0.12))
-	draw_line(bottom_points[0], bottom_points[1], Color(1.0, 0.99, 0.86, 0.26), 1.4)
-	draw_line(right_points[0], right_points[1], TILE_SIDE_SHADE, 1.6)
 
 
 func _draw_polyline_closed(points: PackedVector2Array, color: Color, width: float) -> void:
@@ -453,7 +351,7 @@ func _rebuild_layout() -> void:
 			"rotation": 0.0,
 			"front_rect": front_rect,
 			"outer_rect": outer_rect,
-			"hit_rect": outer_rect.grow_individual(10.0, 12.0, 10.0, 10.0),
+			"hit_rect": outer_rect.grow_individual(18.0, 18.0, 18.0, 18.0),
 		})
 		if int(trainer_markers.get("recommended_tile_id", -1)) == tile_id:
 			var marker_center := _recommended_marker_center(front_rect, 0.0)
@@ -542,29 +440,29 @@ func _should_apply_winning_tile_gap() -> bool:
 
 
 func _draw_winning_highlight(front_rect: Rect2, outer_rect: Rect2) -> void:
-	var glow_rect := outer_rect.grow(6.0)
+	var glow_rect := outer_rect.grow(3.0)
 	var glow := StyleBoxFlat.new()
 	glow.bg_color = Color(0.0, 0.0, 0.0, 0.0)
-	glow.border_color = Color(1.0, 0.86, 0.34, 0.72)
-	glow.set_border_width_all(3)
+	glow.border_color = Color(0.78, 0.24, 0.32, 0.34)
+	glow.set_border_width_all(2)
 	glow.corner_radius_top_left = 10
 	glow.corner_radius_top_right = 10
 	glow.corner_radius_bottom_left = 10
 	glow.corner_radius_bottom_right = 10
-	glow.shadow_color = Color(1.0, 0.74, 0.18, 0.20)
-	glow.shadow_size = 10
+	glow.shadow_color = Color(0.76, 0.20, 0.30, 0.08)
+	glow.shadow_size = 4
 	glow.shadow_offset = Vector2.ZERO
 	draw_style_box(glow, glow_rect)
 
 	var inner := StyleBoxFlat.new()
 	inner.bg_color = Color(0.0, 0.0, 0.0, 0.0)
-	inner.border_color = Color(1.0, 0.96, 0.76, 0.58)
-	inner.set_border_width_all(2)
+	inner.border_color = Color(1.0, 0.97, 0.92, 0.18)
+	inner.set_border_width_all(1)
 	inner.corner_radius_top_left = 7
 	inner.corner_radius_top_right = 7
 	inner.corner_radius_bottom_left = 7
 	inner.corner_radius_bottom_right = 7
-	draw_style_box(inner, front_rect.grow(1.5))
+	draw_style_box(inner, front_rect.grow(0.5))
 
 
 func _draw_winning_source_arrow(front_rect: Rect2) -> void:
@@ -689,31 +587,9 @@ static func _build_face_stylebox() -> StyleBoxFlat:
 	style.corner_radius_bottom_left = TILE_CORNER_RADIUS
 	style.corner_radius_bottom_right = TILE_CORNER_RADIUS
 	style.shadow_color = Color(0.0, 0.0, 0.0, SHADOW_ALPHA)
-	style.shadow_size = 4
+	style.shadow_size = 3
 	style.shadow_offset = SHADOW_OFFSET
 	return style
-
-
-func _draw_gloss_overlay(front_rect: Rect2) -> void:
-	var overlay_height := minf(front_rect.size.y * 0.38, 48.0)
-	var steps := 12
-	for index in range(steps):
-		var t := float(index) / float(maxi(1, steps - 1))
-		var color := TILE_GLOSS_TOP.lerp(TILE_GLOSS_CLEAR, t)
-		var y := front_rect.position.y + t * overlay_height
-		var band_rect := Rect2(
-			front_rect.position.x + 3.0 + t * 0.7,
-			y + 1.0,
-			front_rect.size.x - 6.0 - t * 1.4,
-			overlay_height / float(steps) + 2.4
-		)
-		var band := StyleBoxFlat.new()
-		band.bg_color = color
-		band.corner_radius_top_left = TILE_CORNER_RADIUS - 1
-		band.corner_radius_top_right = TILE_CORNER_RADIUS - 1
-		band.corner_radius_bottom_left = max(5, TILE_CORNER_RADIUS - 8)
-		band.corner_radius_bottom_right = max(5, TILE_CORNER_RADIUS - 8)
-		draw_style_box(band, band_rect)
 
 
 static func _build_inner_border_stylebox() -> StyleBoxFlat:
@@ -749,34 +625,22 @@ static func _build_selected_stylebox() -> StyleBoxFlat:
 	style.corner_radius_top_right = TILE_CORNER_RADIUS
 	style.corner_radius_bottom_left = TILE_CORNER_RADIUS
 	style.corner_radius_bottom_right = TILE_CORNER_RADIUS
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.20)
-	style.shadow_size = 6
-	style.shadow_offset = Vector2(0.0, 3.0)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.12)
+	style.shadow_size = 3
+	style.shadow_offset = Vector2(0.0, 2.0)
 	return style
 
 
 func _draw_selected_accent(front_rect: Rect2, outer_rect: Rect2) -> void:
-	var specular_rect := Rect2(
-		front_rect.position + Vector2(10.0, 8.0),
-		Vector2(front_rect.size.x - 20.0, 14.0)
-	)
-	var specular := StyleBoxFlat.new()
-	specular.bg_color = SELECTED_SPECULAR
-	specular.corner_radius_top_left = 10
-	specular.corner_radius_top_right = 10
-	specular.corner_radius_bottom_left = 8
-	specular.corner_radius_bottom_right = 8
-	draw_style_box(specular, specular_rect)
-	var glow_width := front_rect.size.x * 0.62
-	var glow_y := front_rect.end.y - 5.0
-	var steps := 6
-	for index in range(steps):
-		var t := float(index) / float(maxi(1, steps - 1))
-		var alpha := (1.0 - t) * SELECTED_BASE_GLOW.a
-		var width := glow_width + t * 16.0
-		var x := front_rect.position.x + (front_rect.size.x - width) * 0.5
-		draw_rect(
-			Rect2(x, glow_y + t * 0.8, width, 4.0),
-			Color(SELECTED_BASE_GLOW.r, SELECTED_BASE_GLOW.g, SELECTED_BASE_GLOW.b, alpha),
-			true
-		)
+	var glow := StyleBoxFlat.new()
+	glow.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	glow.border_color = SELECTED_EDGE_LIGHT
+	glow.set_border_width_all(2)
+	glow.corner_radius_top_left = TILE_CORNER_RADIUS + 2
+	glow.corner_radius_top_right = TILE_CORNER_RADIUS + 2
+	glow.corner_radius_bottom_left = TILE_CORNER_RADIUS + 2
+	glow.corner_radius_bottom_right = TILE_CORNER_RADIUS + 2
+	glow.shadow_color = Color(0.76, 0.20, 0.30, 0.08)
+	glow.shadow_size = 4
+	glow.shadow_offset = Vector2.ZERO
+	draw_style_box(glow, outer_rect.grow(3.0))

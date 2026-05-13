@@ -178,6 +178,7 @@ public sealed class NeijiangReactionDecisionEngine
         var handAfter = RemoveCopies(state.Hand18, reactionTileType, 2);
         var meldCountAfter = state.Melds18[state.SeatIndex].Count / 3 + 1;
         var followUp = EvaluateBestFollowUp(handAfter, state.Remaining18, meldCountAfter);
+        var reDiscardsClaimedTile = followUp.BestDiscardTile == reactionTileType && followUp.BestDiscardTile >= 0;
         var currentPairCount = CountPairs(state.Hand18);
         var pairCountAfter = CountPairs(handAfter);
         var sevenPairsLikely = IsSevenPairsLikely(state.Hand18, state.Melds18[state.SeatIndex].Count / 3);
@@ -240,6 +241,8 @@ public sealed class NeijiangReactionDecisionEngine
             score -= 180;
         if (roundStage <= 0 && followUp.Shanten == 0 && currentFollowUp.Shanten > 0 && followUp.LiveUkeire <= 3 && currentFollowUp.LiveUkeire >= 14)
             score -= 1080;
+        if (reDiscardsClaimedTile)
+            score -= 640;
 
         var reasons = new List<string>
         {
@@ -247,6 +250,7 @@ public sealed class NeijiangReactionDecisionEngine
             $"碰后活张 {followUp.LiveUkeire}",
             $"碰后首打危险 {discardRisk.Risk}",
         };
+        if (reDiscardsClaimedTile) reasons.Add("碰后最优首打仍是同张，直接改碰属于无效副露");
         if (followUp.Shanten <= 0) reasons.Add("碰后可直接成叫");
         if (followUp.Shanten < currentFollowUp.Shanten) reasons.Add("碰牌明显提速");
         if (followUp.Shanten == currentFollowUp.Shanten && followUp.Shanten <= 1 && followUp.LiveUkeire >= currentFollowUp.LiveUkeire - 2)
@@ -645,7 +649,7 @@ public sealed class NeijiangReactionDecisionEngine
         return count;
     }
 
-    private static bool ShouldForceOldHandPeng(
+    private bool ShouldForceOldHandPeng(
         NeijiangStateView state,
         int reactionTileType,
         FollowUpSummary currentFollowUp,
@@ -663,6 +667,10 @@ public sealed class NeijiangReactionDecisionEngine
         var meldCount = state.Melds18[state.SeatIndex].Count / 3;
         var sevenPairsLikely = IsSevenPairsLikely(state.Hand18, meldCount);
         if (sevenPairsLikely && currentFollowUp.Shanten <= 1 && roundStage <= 0)
+            return false;
+        var handAfter = RemoveCopies(state.Hand18, reactionTileType, 2);
+        var followUp = EvaluateBestFollowUp(handAfter, state.Remaining18, meldCount + 1);
+        if (followUp.BestDiscardTile == reactionTileType && followUp.BestDiscardTile >= 0)
             return false;
         var pairCount = CountPairs(state.Hand18);
         if (pengResult.ShantenAfter <= 0)

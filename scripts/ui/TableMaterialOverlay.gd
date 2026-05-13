@@ -71,16 +71,6 @@ func _draw_felt_texture() -> void:
 		var alpha := (0.0008 + 0.0005 * cos(float(index) * 1.19)) * opacity
 		draw_line(Vector2(x, 0.0), Vector2(x + cos(float(index) * 0.57) * 1.0, size.y), Color(0.0, 0.10, 0.05, alpha), 1.0, true)
 
-	var vignette_steps := 10
-	for index in range(vignette_steps):
-		var t := float(index) / float(maxi(1, vignette_steps - 1))
-		var inset := t * minf(size.x, size.y) * 0.085
-		var rect := Rect2(Vector2(inset, inset), size - Vector2(inset * 2.0, inset * 2.0))
-		draw_rect(rect, Color(0.0, 0.055, 0.035, 0.018 * opacity * (1.0 - t)), false, maxf(1.0, 18.0 * (1.0 - t)))
-
-	draw_rect(Rect2(Vector2(0.0, 0.0), Vector2(size.x, 2.0)), Color(1.0, 1.0, 0.86, 0.010 * opacity), true)
-	draw_rect(Rect2(Vector2(0.0, maxf(0.0, size.y - 2.0)), Vector2(size.x, 2.0)), Color(0.0, 0.10, 0.05, 0.014 * opacity), true)
-
 
 func _load_texture(path: String) -> Texture2D:
 	if _texture_cache.has(path):

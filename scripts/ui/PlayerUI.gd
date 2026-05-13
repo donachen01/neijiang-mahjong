@@ -17,7 +17,7 @@ const SELF_ROW_TILE_VISUAL_HEIGHT := 204.0
 const TILE_VISUAL_BASE_WIDTH := 98.0
 const TILE_VISUAL_BASE_HEIGHT := 153.0
 const SELF_MELD_TILE_SCALE := SELF_ROW_TILE_VISUAL_HEIGHT / TILE_VISUAL_BASE_HEIGHT
-const SELF_MELD_TILE_STEP := 136.0
+const SELF_MELD_TILE_STEP := 124.0
 const TOP_ROW_TILE_SCALE := 0.86
 const TOP_ROW_TILE_SEPARATION := 4
 const SIDE_HAND_TILE_SCALE := 0.74
@@ -150,7 +150,7 @@ func _apply_orientation() -> void:
 			meld_lane.alignment = BoxContainer.ALIGNMENT_BEGIN
 			meld_lane.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 			meld_lane.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-			meld_lane.add_theme_constant_override("separation", 4)
+			meld_lane.add_theme_constant_override("separation", 0)
 			meld_lane.custom_minimum_size = Vector2(0, SELF_ROW_TILE_VISUAL_HEIGHT)
 			root_margin.add_theme_constant_override("margin_left", 0)
 			root_margin.add_theme_constant_override("margin_top", 0)
@@ -733,7 +733,7 @@ func _render_exposed_meld_group(meld_group: BoxContainer, meld: Dictionary) -> v
 	var claim_index := _claim_tile_index_for_meld(tiles.size(), viewer_seat, from_seat)
 	var arrow_text := _claim_arrow_text(viewer_seat, from_seat)
 	var show_back := _should_show_back_for_meld(meld)
-	var reveal_one_tile := _is_concealed_gang_meld(meld) and seat_dock != SeatDock.SELF
+	var reveal_one_tile := _is_concealed_gang_meld(meld)
 
 	for index in range(tiles.size()):
 		var tile_data: Dictionary = tiles[index]
@@ -756,7 +756,7 @@ func _create_exposed_meld_tiles_host(meld: Dictionary) -> Control:
 	var viewer_seat := _viewer_seat()
 	var from_seat: int = int(meld.get("from_seat", viewer_seat))
 	var show_back := _should_show_back_for_meld(meld)
-	var reveal_one_tile := _is_concealed_gang_meld(meld) and seat_dock != SeatDock.SELF
+	var reveal_one_tile := _is_concealed_gang_meld(meld)
 	var is_vertical := seat_dock in [SeatDock.LEFT, SeatDock.RIGHT]
 	var separation := 1.0 if is_vertical else 2.0
 	var tile_controls: Array[Control] = []
@@ -844,7 +844,7 @@ func _clear_children(node: Node) -> void:
 
 func _create_plain_meld_tile(tile_data: Dictionary, scale: float, rotation: float, show_back: bool = false, highlight_winning: bool = false) -> Control:
 	var tile := TILE_SCENE.instantiate()
-	tile.call("configure", tile_data, scale, show_back, false, highlight_winning)
+	tile.call("configure", tile_data, scale, show_back, false, false, false, highlight_winning)
 	tile.rotation_degrees = rotation if rotation != 0.0 else _meld_rotation_degrees()
 	return tile
 
@@ -852,7 +852,7 @@ func _create_plain_meld_tile(tile_data: Dictionary, scale: float, rotation: floa
 func _create_side_hand_tile(show_back: bool, tile_data: Dictionary = {}, is_winning_tile: bool = false, scale_override: float = -1.0) -> Control:
 	var tile := TILE_SCENE.instantiate()
 	var scale := scale_override if scale_override > 0.0 else _side_hand_tile_scale()
-	tile.call("configure", tile_data, scale, show_back and tile_data.is_empty(), false, is_winning_tile)
+	tile.call("configure", tile_data, scale, show_back and tile_data.is_empty(), false, false, false, is_winning_tile)
 	var tile_size: Vector2 = tile.custom_minimum_size
 	var wrapper := Control.new()
 	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -988,7 +988,7 @@ func _is_concealed_gang_meld(meld: Dictionary) -> bool:
 
 
 func _should_show_back_for_meld(meld: Dictionary) -> bool:
-	return _is_concealed_gang_meld(meld) and seat_dock != SeatDock.SELF
+	return _is_concealed_gang_meld(meld)
 
 
 func _build_meld_badge_style(meld: Dictionary) -> StyleBoxFlat:
@@ -1293,13 +1293,13 @@ func _apply_identity_snapshot(player: Dictionary, ding_que_suit: String, show_di
 	var nickname := str(player.get("nickname", "-"))
 	identity_box.visible = false
 	if seat_dock == SeatDock.LEFT:
-		identity_name_label.text = "%s\n< %d分 >" % [nickname, score]
+		identity_name_label.text = "%s\n%d分" % [nickname, score]
 	elif seat_dock == SeatDock.TOP:
-		identity_name_label.text = "%s\n< %d分 >" % [nickname, score]
+		identity_name_label.text = "%s\n%d分" % [nickname, score]
 	elif seat_dock == SeatDock.RIGHT:
-		identity_name_label.text = "%s\n< %d分 >" % [nickname, score]
+		identity_name_label.text = "%s\n%d分" % [nickname, score]
 	else:
-		identity_name_label.text = "%s  %d分" % [nickname, score]
+		identity_name_label.text = "%s\n%d分" % [nickname, score]
 	if identity_dealer_badge != null:
 		identity_dealer_badge.visible = bool(player.get("_is_dealer", false)) and seat_dock != SeatDock.SELF
 		_position_identity_dealer_badge()
@@ -1334,22 +1334,22 @@ func _apply_identity_name_style() -> void:
 	identity_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	identity_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	identity_name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	identity_name_label.custom_minimum_size = Vector2(132 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else 124, 66 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else 50)
+	identity_name_label.custom_minimum_size = Vector2(156 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else 148, 102 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else 84)
 	identity_name_label.add_theme_color_override("font_color", Color(0.98, 0.99, 0.96, 1.0))
 	identity_name_label.add_theme_color_override("font_outline_color", Color(0.03, 0.12, 0.08, 0.92))
-	identity_name_label.add_theme_constant_override("outline_size", 2 if seat_dock != SeatDock.SELF else 1)
+	identity_name_label.add_theme_constant_override("outline_size", 3 if seat_dock != SeatDock.SELF else 2)
 	identity_name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.18))
 	identity_name_label.add_theme_constant_override("shadow_offset_x", 0)
 	identity_name_label.add_theme_constant_override("shadow_offset_y", 2)
-	identity_name_label.add_theme_constant_override("line_spacing", 4)
+	identity_name_label.add_theme_constant_override("line_spacing", 8)
 
 
 func _identity_name_font_size() -> int:
 	if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT]:
-		return 22
+		return 30
 	if seat_dock == SeatDock.TOP:
-		return 21
-	return 20
+		return 28
+	return 28
 
 
 func _apply_identity_win_stamp_style() -> void:
@@ -1369,11 +1369,11 @@ func _apply_identity_win_stamp_style() -> void:
 	stamp_style.shadow_size = 10
 	stamp_style.shadow_offset = Vector2(0, 4)
 	identity_win_stamp.add_theme_stylebox_override("normal", stamp_style)
-	identity_win_stamp.add_theme_font_size_override("font_size", 38 if seat_dock == SeatDock.TOP else 34)
+	identity_win_stamp.add_theme_font_size_override("font_size", 48 if seat_dock == SeatDock.TOP else 42)
 	identity_win_stamp.add_theme_color_override("font_color", Color(0.97, 0.16, 0.10, 0.98))
 	identity_win_stamp.add_theme_color_override("font_outline_color", Color(1.0, 0.84, 0.80, 0.54))
 	identity_win_stamp.add_theme_color_override("font_shadow_color", Color(0.46, 0.03, 0.02, 0.30))
-	identity_win_stamp.add_theme_constant_override("outline_size", 2)
+	identity_win_stamp.add_theme_constant_override("outline_size", 3)
 	identity_win_stamp.add_theme_constant_override("shadow_offset_x", 0)
 	identity_win_stamp.add_theme_constant_override("shadow_offset_y", 3)
 	identity_win_stamp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1381,8 +1381,9 @@ func _apply_identity_win_stamp_style() -> void:
 	identity_win_stamp.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	identity_win_stamp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	identity_win_stamp.rotation_degrees = -16.0
-	identity_win_stamp.position = Vector2(74, 0) if seat_dock == SeatDock.TOP else Vector2(56, 8)
-	identity_win_stamp.pivot_offset = Vector2(54, 24)
+	identity_win_stamp.custom_minimum_size = Vector2(126, 62)
+	identity_win_stamp.position = Vector2(94, -4) if seat_dock == SeatDock.TOP else Vector2(72, 6)
+	identity_win_stamp.pivot_offset = Vector2(63, 31)
 
 
 func _apply_identity_dealer_badge_style() -> void:
@@ -1404,20 +1405,20 @@ func _apply_identity_dealer_badge_style() -> void:
 	style.shadow_size = 5
 	style.shadow_offset = Vector2(0, 2)
 	identity_dealer_badge.add_theme_stylebox_override("normal", style)
-	identity_dealer_badge.add_theme_font_size_override("font_size", 18)
+	identity_dealer_badge.add_theme_font_size_override("font_size", 28)
 	identity_dealer_badge.add_theme_color_override("font_color", Color(0.24, 0.14, 0.06, 1.0))
 	identity_dealer_badge.add_theme_color_override("font_outline_color", Color(1.0, 0.96, 0.84, 0.32))
-	identity_dealer_badge.add_theme_constant_override("outline_size", 1)
+	identity_dealer_badge.add_theme_constant_override("outline_size", 2)
 	identity_dealer_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	identity_dealer_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	identity_dealer_badge.custom_minimum_size = Vector2(38, 30)
+	identity_dealer_badge.custom_minimum_size = Vector2(62, 46)
 
 
 func _position_identity_dealer_badge() -> void:
 	if identity_dealer_badge == null:
 		return
 	var label_width := maxf(identity_name_label.size.x, identity_name_label.custom_minimum_size.x)
-	identity_dealer_badge.position = Vector2(label_width - 28.0, -10.0)
+	identity_dealer_badge.position = Vector2(label_width - identity_dealer_badge.custom_minimum_size.x + 4.0, -16.0)
 
 
 func _apply_identity_ding_que_style(suit: String) -> void:
@@ -1507,11 +1508,12 @@ func _create_top_inline_identity_card(player: Dictionary) -> Control:
 		dealer_badge.text = "庄"
 		dealer_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		dealer_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		dealer_badge.custom_minimum_size = Vector2(30, 24)
+		dealer_badge.custom_minimum_size = Vector2(60, 42)
 		style_config.apply_label(dealer_badge, false, false)
 		dealer_badge.add_theme_stylebox_override("normal", _build_top_identity_dealer_style())
-		dealer_badge.add_theme_font_size_override("font_size", 15)
-		dealer_badge.position = Vector2(132, -8)
+		dealer_badge.add_theme_font_size_override("font_size", 26)
+		dealer_badge.add_theme_constant_override("outline_size", 2)
+		dealer_badge.position = Vector2(116, -16)
 		name_label.add_child(dealer_badge)
 
 	if bool(player.get("has_won", false)):
@@ -1521,10 +1523,11 @@ func _create_top_inline_identity_card(player: Dictionary) -> Control:
 		won_stamp.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		style_config.apply_label(won_stamp, false, true)
 		won_stamp.add_theme_stylebox_override("normal", _build_top_identity_win_style())
-		won_stamp.add_theme_font_size_override("font_size", 21)
-		won_stamp.add_theme_constant_override("outline_size", 2)
+		won_stamp.add_theme_font_size_override("font_size", 32)
+		won_stamp.add_theme_constant_override("outline_size", 3)
+		won_stamp.custom_minimum_size = Vector2(102, 50)
 		won_stamp.rotation_degrees = -16.0
-		won_stamp.position = Vector2(102, -2)
+		won_stamp.position = Vector2(88, -10)
 		name_label.add_child(won_stamp)
 
 	var state_text := _build_state_text(player, last_current_turn_seat, last_current_dealer_seat)

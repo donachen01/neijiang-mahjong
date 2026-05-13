@@ -36,6 +36,7 @@ func _run() -> void:
 	await _check_opponent_tile_size_contract(failures)
 	_check_cross_plate_separation(root_node, failures)
 	_check_tabletop_zone_visual_contract(root_node, failures)
+	_check_center_wall_disc_contract(root_node, failures)
 
 	if failures.is_empty():
 		print("V17 LAYOUT CONTRACT OK")
@@ -1227,6 +1228,25 @@ func _check_tabletop_zone_visual_contract(root_node: Node, failures: Array[Strin
 			var slot_plate := slot.find_child("SlotPlate", true, false) as Panel
 			if slot_plate != null and slot_plate.visible:
 				_assert_tabletop_zone_panel(slot_plate, "%s/SlotPlate" % slot_name, failures)
+
+
+func _check_center_wall_disc_contract(root_node: Node, failures: Array[String]) -> void:
+	var dice_panel: Control = root_node.get("dice_panel") as Control
+	var count_label: Label = root_node.get("dice_count_label") as Label
+	if dice_panel == null or count_label == null:
+		failures.append("缺少中心牌墙圆盘或剩余牌数字")
+		return
+	root_node.call("_show_wall_count_in_dice_panel", 42)
+	var disc_size := dice_panel.custom_minimum_size
+	if disc_size.x < 224.0 or disc_size.y < 224.0:
+		failures.append("牌桌中心圆圈区域仍偏小，当前 %.1fx%.1f，应放大到至少 224x224" % [disc_size.x, disc_size.y])
+	var font_size := count_label.get_theme_font_size("font_size")
+	if font_size < 58:
+		failures.append("中心剩余牌数量数字仍偏小，当前字号 %d，应同步放大加粗" % font_size)
+	if count_label.get_theme_constant("outline_size") < 4:
+		failures.append("中心剩余牌数量数字描边太弱，手机上不够醒目")
+	if not count_label.visible or count_label.text != "42":
+		failures.append("中心剩余牌数字应在圆盘内可见并显示最新牌墙数量")
 
 
 func _assert_tabletop_zone_panel(panel: Panel, label: String, failures: Array[String]) -> void:

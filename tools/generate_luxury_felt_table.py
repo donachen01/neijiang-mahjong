@@ -85,12 +85,6 @@ def main() -> None:
 		layer = layer.filter(ImageFilter.GaussianBlur(35))
 		img.alpha_composite(layer)
 
-	edge = Image.new("RGBA", SIZE, (0, 0, 0, 0))
-	ed = ImageDraw.Draw(edge, "RGBA")
-	ed.rounded_rectangle((18, 18, w - 18, h - 18), radius=54, outline=(220, 202, 132, 13), width=2)
-	ed.rounded_rectangle((32, 32, w - 32, h - 32), radius=42, outline=(0, 42, 26, 30), width=5)
-	edge = edge.filter(ImageFilter.GaussianBlur(1.8))
-	img.alpha_composite(edge)
 	img = img.filter(ImageFilter.GaussianBlur(0.25))
 
 	OUT.parent.mkdir(parents=True, exist_ok=True)

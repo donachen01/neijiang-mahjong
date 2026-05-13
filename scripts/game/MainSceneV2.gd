@@ -36,9 +36,9 @@ const CENTER_DISCARD_TOP_LIMIT := MAX_DISCARD_PER_SEAT
 const CENTER_DISCARD_BOTTOM_LIMIT := MAX_DISCARD_PER_SEAT
 const CENTER_DISCARD_SIDE_LIMIT := MAX_DISCARD_PER_SEAT
 const CENTER_DISCARD_SEPARATION := 9.0
-const CENTER_DISCARD_TOP_SCALE := 0.74
-const CENTER_DISCARD_BOTTOM_SCALE := 0.74
-const CENTER_DISCARD_SIDE_SCALE := 0.74
+const CENTER_DISCARD_TOP_SCALE := 0.78
+const CENTER_DISCARD_BOTTOM_SCALE := 0.78
+const CENTER_DISCARD_SIDE_SCALE := 0.78
 const CENTER_DISCARD_FIT_PADDING := 4.0
 const CENTER_DISCARD_TILE_VISUAL_EXTRA := Vector2(6.0, 13.0)
 const CENTER_DISCARD_RIGHT_INSET := 18.0
@@ -48,6 +48,15 @@ const CENTER_DISCARD_LEFT_EXTRA_WIDTH := 28.0
 const CENTER_DISCARD_SIDE_EDGE_MARGIN := 0.0
 const CENTER_DISCARD_SIDE_EXTRA_WIDTH := 32.0
 const CENTER_DISCARD_SIDE_INSET_RATIO := 0.28
+const CENTER_WALL_DISC_SIZE := Vector2(236.0, 236.0)
+const CENTER_WALL_COUNT_FONT_SIZE := 64
+const CENTER_WALL_COUNT_LABEL_SIZE := Vector2(132.0, 88.0)
+const CENTER_WALL_WIND_FONT_SIZE := 34
+const TOP_EXIT_BUTTON_SIZE := Vector2(68.0, 68.0)
+const TOP_EXIT_BUTTON_MARGIN := Vector2(20.0, 18.0)
+const AI_DRAWER_ENTRY_SIZE := Vector2(78.0, 78.0)
+const AI_DRAWER_ITEM_SIZE := Vector2(178.0, 58.0)
+const AI_DRAWER_MARGIN := Vector2(18.0, 20.0)
 const UI_PREFS_PATH := "user://ui_prefs.cfg"
 const UI_PREFS_SECTION := "main_scene_v2"
 const UI_PREFS_KEY_AI_HELPER := "ai_helper_enabled"
@@ -256,16 +265,18 @@ var dice_wind_left_label: Label
 var self_dealer_badge: Label
 var ai_tuning_overlay: Control
 var ai_tuning_panel: Panel
+var ai_tuning_title_label: Label
 var ai_tuning_status_label: Label
 var ai_tuning_value_labels: Dictionary = {}
 var ai_tuning_preset_buttons: Dictionary = {}
-var ai_tuning_learning_label: Label
+var ai_tuning_learning_label: RichTextLabel
 var ai_tuning_auto_learning_button: Button
 var ai_tuning_endgame_defense_button: Button
 var ai_tuning_close_button: Button
 var ai_tuning_dragging: bool = false
 var ai_tuning_drag_offset: Vector2 = Vector2.ZERO
 var ai_tuning_panel_moved: bool = false
+var ai_tuning_click_actions: Array = []
 var ai_helper_enabled: bool = false
 var opponent_hands_enabled: bool = false
 var discard_helper_panel: Panel
@@ -346,7 +357,7 @@ func _ready() -> void:
 	right_ui = _mount_player_ui(player_right_host, SeatDock.RIGHT)
 
 	self_hand_host.tile_pressed.connect(_on_hand_tile_pressed)
-	top_bar_button.pressed.connect(_toggle_left_floating_buttons)
+	top_bar_button.pressed.connect(_on_top_bar_button_pressed)
 	top_ai_tuning_button.pressed.connect(_on_top_ai_tuning_button_pressed)
 	top_ai_helper_button.pressed.connect(_on_top_ai_helper_button_pressed)
 	top_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
@@ -375,13 +386,28 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+			if _handle_left_floating_toggle_click(mouse_event.position):
+				get_viewport().set_input_as_handled()
+				return
+			if _handle_left_floating_action_click(mouse_event.position):
+				get_viewport().set_input_as_handled()
+				return
+			if _handle_ai_tuning_overlay_click(mouse_event.position):
+				get_viewport().set_input_as_handled()
+				return
+			if _handle_ai_tuning_drag_press(mouse_event.position):
+				get_viewport().set_input_as_handled()
+				return
+		elif mouse_event.button_index == MOUSE_BUTTON_LEFT and not mouse_event.pressed:
+			ai_tuning_dragging = false
 	if not ai_tuning_dragging or ai_tuning_panel == null:
 		return
 	if event is InputEventMouseMotion:
 		ai_tuning_panel.global_position = get_global_mouse_position() - ai_tuning_drag_offset
 		_clamp_ai_tuning_panel_position()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		ai_tuning_dragging = false
 
 
 func _bind_board_square_layout() -> void:
@@ -667,6 +693,8 @@ func _setup_v17_plus_menu() -> void:
 	floating_left_buttons_collapsed = true
 	floating_right_buttons_collapsed = true
 	_setup_left_floating_buttons()
+	if floating_left_button_bar != null:
+		floating_left_button_bar.visible = true
 	if floating_right_button_bar != null:
 		floating_right_button_bar.visible = false
 
@@ -685,15 +713,16 @@ func _configure_v17_top_bar() -> void:
 	info_card.custom_minimum_size = Vector2(76, 0)
 	info_card.size_flags_horizontal = Control.SIZE_SHRINK_END
 	info_card.visible = false
-	top_bar_button.custom_minimum_size = Vector2(124, 44)
-	top_settlement_info_button.custom_minimum_size = Vector2(124, 44)
-	top_next_round_button.custom_minimum_size = Vector2(124, 48)
+	top_bar_button.custom_minimum_size = Vector2(214, 82)
+	top_settlement_info_button.custom_minimum_size = Vector2(214, 82)
+	top_next_round_button.custom_minimum_size = Vector2(214, 88)
 	top_next_round_button.text = "下一局"
 	top_bar_button.visible = true
 	top_ai_tuning_button.visible = false
 	top_ai_helper_button.visible = false
 	top_opponent_hand_button.visible = false
-	top_exit_button.visible = false
+	top_bar_button.visible = false
+	_configure_top_right_exit_button()
 	_ensure_v17_top_button_stack()
 	_layout_v17_top_button_stack()
 
@@ -709,7 +738,7 @@ func _ensure_v17_top_button_stack() -> void:
 		v17_top_button_stack.z_index = 130
 		v17_top_button_stack.add_theme_constant_override("separation", 8)
 		root_ui.add_child(v17_top_button_stack)
-	for button in [top_settlement_info_button, top_bar_button, top_next_round_button]:
+	for button in [top_settlement_info_button, top_next_round_button]:
 		if button == null:
 			continue
 		if button.get_parent() != v17_top_button_stack:
@@ -735,7 +764,7 @@ func _layout_v17_top_button_stack() -> void:
 	v17_top_button_stack.size = v17_top_button_stack.custom_minimum_size
 	v17_top_button_stack.position = Vector2(
 		root_ui.size.x - v17_top_button_stack.custom_minimum_size.x - 18.0,
-		32.0
+		108.0
 	)
 	var next_y := 0.0
 	for child in v17_top_button_stack.get_children():
@@ -744,7 +773,7 @@ func _layout_v17_top_button_stack() -> void:
 		var button := child as Button
 		if not button.visible:
 			continue
-		button.custom_minimum_size = Vector2(124.0, 46.0 if button != top_next_round_button else 50.0)
+		button.custom_minimum_size = Vector2(214.0, 82.0 if button != top_next_round_button else 88.0)
 		button.size = button.custom_minimum_size
 		button.position = Vector2((v17_top_button_stack.custom_minimum_size.x - button.size.x) * 0.5, next_y)
 		next_y += button.size.y + 8.0
@@ -879,7 +908,7 @@ func _v17_self_hand_rect() -> Rect2:
 
 
 func _v17_self_hu_rect() -> Rect2:
-	return _scale_v17_rect(1890.0, 986.0, 120.0, 148.0)
+	return _scale_v17_rect(1868.0, 970.0, 152.0, 184.0)
 
 
 func _v17_player_info_rect(seat: int) -> Rect2:
@@ -1147,7 +1176,7 @@ func _setup_opening_roll_ui() -> void:
 
 	dice_panel = WALL_COUNT_DISC_SCRIPT.new()
 	dice_panel.name = "DicePanel"
-	dice_panel.custom_minimum_size = Vector2(116, 116)
+	dice_panel.custom_minimum_size = Vector2(136, 136)
 	dice_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center_root.add_child(dice_panel)
 
@@ -1191,12 +1220,12 @@ func _create_dice_wind_label(text: String) -> Label:
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.size = Vector2(42, 32)
+	label.size = Vector2(64, 48)
 	STYLE_CONFIG.apply_label(label, false, true)
-	label.add_theme_font_size_override("font_size", 24)
+	label.add_theme_font_size_override("font_size", CENTER_WALL_WIND_FONT_SIZE)
 	label.add_theme_color_override("font_color", Color(0.96, 0.95, 0.86, 0.96))
 	label.add_theme_color_override("font_outline_color", Color(0.08, 0.06, 0.04, 0.88))
-	label.add_theme_constant_override("outline_size", 1)
+	label.add_theme_constant_override("outline_size", 2)
 	return label
 
 
@@ -1557,13 +1586,14 @@ func _apply_opening_roll_ui_style(style: Resource) -> void:
 		dice_panel.set("glow_color", Color(0.34, 0.55, 0.38, 0.18))
 		dice_panel.set("hotspot_glow_color", Color(0.48, 0.66, 0.48, 0.16))
 	STYLE_CONFIG.apply_label(dice_count_label, false, true)
-	dice_count_label.add_theme_font_size_override("font_size", 36)
+	dice_count_label.custom_minimum_size = CENTER_WALL_COUNT_LABEL_SIZE
+	dice_count_label.add_theme_font_size_override("font_size", CENTER_WALL_COUNT_FONT_SIZE)
 	dice_count_label.add_theme_color_override("font_color", IVORY_SOFT)
-	dice_count_label.add_theme_color_override("font_outline_color", Color(0.08, 0.06, 0.04, 0.86))
-	dice_count_label.add_theme_constant_override("outline_size", 1)
-	dice_count_label.add_theme_color_override("font_shadow_color", Color(0.48, 0.66, 0.48, 0.18))
+	dice_count_label.add_theme_color_override("font_outline_color", Color(0.04, 0.10, 0.08, 0.96))
+	dice_count_label.add_theme_constant_override("outline_size", 5)
+	dice_count_label.add_theme_color_override("font_shadow_color", Color(0.00, 0.04, 0.03, 0.48))
 	dice_count_label.add_theme_constant_override("shadow_offset_x", 0)
-	dice_count_label.add_theme_constant_override("shadow_offset_y", 1)
+	dice_count_label.add_theme_constant_override("shadow_offset_y", 3)
 
 
 func _apply_floating_action_button_styles() -> void:
@@ -1572,7 +1602,7 @@ func _apply_floating_action_button_styles() -> void:
 	if floating_right_toggle_button != null:
 		_apply_floating_action_button_style(floating_right_toggle_button, Color(0.06, 0.18, 0.14, 0.42), "收起/展开")
 	if floating_left_toggle_button != null:
-		_apply_floating_action_button_style(floating_left_toggle_button, Color(0.06, 0.18, 0.14, 0.42), "收起/展开")
+		_apply_ai_drawer_entry_button_style(floating_left_toggle_button)
 	_apply_floating_action_button_style(floating_ai_tuning_button, Color(0.08, 0.34, 0.25, 0.90), "AI调参")
 	_apply_floating_action_button_style(floating_ai_helper_button, Color(0.10, 0.40, 0.29, 0.90) if ai_helper_enabled else Color(0.09, 0.28, 0.22, 0.82), "AI辅助")
 	_apply_floating_action_button_style(floating_opponent_hand_button, Color(0.10, 0.36, 0.27, 0.90) if opponent_hands_enabled else Color(0.09, 0.28, 0.22, 0.82), "明牌模式")
@@ -1585,21 +1615,23 @@ func _apply_floating_action_button_styles() -> void:
 func _apply_floating_action_button_style(button: Button, bg: Color, tooltip: String) -> void:
 	if button == null:
 		return
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.custom_minimum_size = AI_DRAWER_ITEM_SIZE
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = bg.lightened(0.10)
-	normal.border_color = Color(1.0, 0.96, 0.68, 0.46)
-	normal.set_border_width_all(2)
-	normal.corner_radius_top_left = 37
-	normal.corner_radius_top_right = 37
-	normal.corner_radius_bottom_left = 37
-	normal.corner_radius_bottom_right = 37
+	normal.border_color = Color(1.0, 0.96, 0.68, 0.30)
+	normal.set_border_width_all(1)
+	normal.corner_radius_top_left = 18
+	normal.corner_radius_top_right = 18
+	normal.corner_radius_bottom_left = 18
+	normal.corner_radius_bottom_right = 18
 	normal.shadow_color = Color(0.0, 0.08, 0.05, 0.28)
-	normal.shadow_size = 12
-	normal.shadow_offset = Vector2(0, 5)
-	normal.content_margin_left = 0
-	normal.content_margin_right = 0
-	normal.content_margin_top = 1
-	normal.content_margin_bottom = 3
+	normal.shadow_size = 10
+	normal.shadow_offset = Vector2(0, 4)
+	normal.content_margin_left = 14
+	normal.content_margin_right = 14
+	normal.content_margin_top = 8
+	normal.content_margin_bottom = 8
 
 	var hover := normal.duplicate()
 	hover.bg_color = bg.lightened(0.18)
@@ -1618,35 +1650,75 @@ func _apply_floating_action_button_style(button: Button, bg: Color, tooltip: Str
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", pressed)
 	button.add_theme_stylebox_override("focus", hover)
-	button.add_theme_font_size_override("font_size", 23)
+	button.add_theme_font_size_override("font_size", 24)
 	button.add_theme_color_override("font_color", Color(0.99, 0.98, 0.88, 1.0))
 	button.add_theme_color_override("font_outline_color", Color(0.04, 0.12, 0.09, 0.94))
 	button.add_theme_constant_override("outline_size", 2)
 	button.tooltip_text = tooltip
-	_ensure_button_gloss_overlay(button, 0.58)
+	_ensure_button_gloss_overlay(button, 0.42)
+
+
+func _apply_ai_drawer_entry_button_style(button: Button) -> void:
+	if button == null:
+		return
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
+	button.custom_minimum_size = AI_DRAWER_ENTRY_SIZE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.04, 0.15, 0.12, 0.72)
+	style.border_color = Color(1.0, 0.96, 0.68, 0.38)
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = 39
+	style.corner_radius_top_right = 39
+	style.corner_radius_bottom_left = 39
+	style.corner_radius_bottom_right = 39
+	style.shadow_color = Color(0.0, 0.08, 0.05, 0.30)
+	style.shadow_size = 12
+	style.shadow_offset = Vector2(0, 4)
+	style.anti_aliasing = true
+	style.anti_aliasing_size = 1.2
+	var hover := style.duplicate()
+	hover.bg_color = Color(0.06, 0.20, 0.16, 0.82)
+	hover.border_color = Color(1.0, 0.96, 0.68, 0.56)
+	button.add_theme_stylebox_override("normal", style)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", style)
+	button.add_theme_stylebox_override("focus", hover)
+	button.add_theme_font_size_override("font_size", 24)
+	button.add_theme_color_override("font_color", IVORY_SOFT)
+	button.add_theme_color_override("font_outline_color", Color(0.03, 0.10, 0.08, 0.92))
+	button.add_theme_constant_override("outline_size", 2)
+	button.tooltip_text = "AI 工具"
+	_ensure_button_gloss_overlay(button, 0.36)
 
 
 func _update_floating_button_texts() -> void:
 	if floating_right_toggle_button != null:
 		floating_right_toggle_button.visible = false
 	if floating_left_toggle_button != null:
-		floating_left_toggle_button.text = "+" if floating_left_buttons_collapsed else "×"
+		floating_left_toggle_button.text = "AI"
+	if floating_preset_button != null:
+		floating_preset_button.text = "难度 %s" % _current_ai_preset_short_label()
+		floating_preset_button.visible = not floating_left_buttons_collapsed
 	if floating_ai_tuning_button != null:
-		floating_ai_tuning_button.text = "调"
+		floating_ai_tuning_button.text = "调参"
 		floating_ai_tuning_button.visible = not floating_left_buttons_collapsed
 	if floating_ai_helper_button != null:
-		floating_ai_helper_button.text = "辅"
+		floating_ai_helper_button.text = "辅助 %s" % ("开" if ai_helper_enabled else "关")
 		floating_ai_helper_button.visible = not floating_left_buttons_collapsed
 	if floating_opponent_hand_button != null:
-		floating_opponent_hand_button.text = "明"
+		floating_opponent_hand_button.text = "明牌 %s" % ("开" if opponent_hands_enabled else "关")
 		floating_opponent_hand_button.visible = not floating_left_buttons_collapsed
-	if floating_preset_button != null:
-		floating_preset_button.text = "预"
-		floating_preset_button.visible = not floating_left_buttons_collapsed
 	if floating_exit_button != null:
-		floating_exit_button.text = "退"
-		floating_exit_button.visible = not floating_left_buttons_collapsed
+		floating_exit_button.visible = false
 	_apply_floating_action_button_styles()
+
+
+func _current_ai_preset_short_label() -> String:
+	if game_manager == null:
+		return "骨灰"
+	var snapshot := game_manager.get_snapshot()
+	var preset_name := str(snapshot.get("ai_tuning_config", {}).get("preset_name", "bone_ash"))
+	return str(AI_PRESET_LABELS.get(preset_name, "骨灰"))
 
 
 func _update_board_core_hud(snapshot: Dictionary) -> void:
@@ -1783,63 +1855,38 @@ func _setup_v17_player_info_panels() -> void:
 		panel.add_child(margin)
 
 		var row := HBoxContainer.new()
-		row.alignment = BoxContainer.ALIGNMENT_BEGIN
-		row.add_theme_constant_override("separation", 10)
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_theme_constant_override("separation", 0)
 		margin.add_child(row)
-
-		var avatar := Label.new()
-		avatar.name = "AvatarBadge"
-		avatar.custom_minimum_size = Vector2(58, 58)
-		avatar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		avatar.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		STYLE_CONFIG.apply_label(avatar, false, true)
-		avatar.add_theme_font_size_override("font_size", 24)
-		avatar.add_theme_color_override("font_color", Color(0.12, 0.36, 0.24, 1.0))
-		avatar.add_theme_color_override("font_outline_color", Color(1.0, 0.98, 0.88, 0.70))
-		avatar.add_theme_constant_override("outline_size", 1)
-		var avatar_style := StyleBoxFlat.new()
-		avatar_style.bg_color = Color(0.91, 1.0, 0.91, 0.94)
-		avatar_style.border_color = Color(0.78, 1.0, 0.91, 0.54)
-		avatar_style.set_border_width_all(2)
-		avatar_style.corner_radius_top_left = 18
-		avatar_style.corner_radius_top_right = 18
-		avatar_style.corner_radius_bottom_left = 18
-		avatar_style.corner_radius_bottom_right = 18
-		avatar_style.shadow_color = Color(0.34, 0.72, 0.54, 0.18)
-		avatar_style.shadow_size = 12
-		avatar_style.shadow_offset = Vector2(0, 3)
-		avatar_style.anti_aliasing = true
-		avatar_style.anti_aliasing_size = 1.3
-		avatar.add_theme_stylebox_override("normal", avatar_style)
-		row.add_child(avatar)
-		v17_player_info_avatar_labels[seat] = avatar
+		v17_player_info_avatar_labels[seat] = null
 
 		var vbox := VBoxContainer.new()
 		vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-		vbox.add_theme_constant_override("separation", 4)
+		vbox.add_theme_constant_override("separation", 10)
 		row.add_child(vbox)
 
 		var name_label := Label.new()
-		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		STYLE_CONFIG.apply_label(name_label, false, true)
-		name_label.add_theme_font_size_override("font_size", 21)
+		name_label.add_theme_font_size_override("font_size", 38)
 		name_label.add_theme_color_override("font_color", Color(1.0, 0.99, 0.90, 1.0))
 		name_label.add_theme_color_override("font_outline_color", Color(0.03, 0.10, 0.07, 0.96))
-		name_label.add_theme_constant_override("outline_size", 2)
+		name_label.add_theme_constant_override("outline_size", 4)
 		vbox.add_child(name_label)
 
 		var status_label := Label.new()
-		status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		STYLE_CONFIG.apply_label(status_label, false, false)
-		status_label.add_theme_font_size_override("font_size", 17)
+		status_label.add_theme_font_size_override("font_size", 34)
 		status_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.46, 1.0))
 		status_label.add_theme_color_override("font_outline_color", Color(0.05, 0.08, 0.05, 0.92))
-		status_label.add_theme_constant_override("outline_size", 2)
+		status_label.add_theme_constant_override("outline_size", 4)
 		vbox.add_child(status_label)
 
 		var dealer_badge := Label.new()
@@ -1855,17 +1902,21 @@ func _setup_v17_player_info_panels() -> void:
 		dealer_badge.offset_left = -42.0
 		dealer_badge.offset_top = 8.0
 		dealer_badge.offset_right = -8.0
-		dealer_badge.offset_bottom = 38.0
+		dealer_badge.offset_bottom = 52.0
 		STYLE_CONFIG.apply_label(dealer_badge, false, false)
-		dealer_badge.add_theme_font_size_override("font_size", 16)
+		dealer_badge.add_theme_font_size_override("font_size", 24)
 		var dealer_style := StyleBoxFlat.new()
 		dealer_style.bg_color = Color(0.98, 0.64, 0.18, 0.96)
 		dealer_style.border_color = Color(1.0, 0.95, 0.78, 0.72)
 		dealer_style.set_border_width_all(2)
-		dealer_style.corner_radius_top_left = 10
-		dealer_style.corner_radius_top_right = 10
-		dealer_style.corner_radius_bottom_left = 10
-		dealer_style.corner_radius_bottom_right = 10
+		dealer_style.corner_radius_top_left = 12
+		dealer_style.corner_radius_top_right = 12
+		dealer_style.corner_radius_bottom_left = 12
+		dealer_style.corner_radius_bottom_right = 12
+		dealer_style.content_margin_left = 10
+		dealer_style.content_margin_right = 10
+		dealer_style.content_margin_top = 5
+		dealer_style.content_margin_bottom = 5
 		dealer_badge.add_theme_stylebox_override("normal", dealer_style)
 		panel.add_child(dealer_badge)
 		v17_player_info_dealer_badges[seat] = dealer_badge
@@ -2028,28 +2079,25 @@ func _setup_left_floating_buttons() -> void:
 	floating_left_button_bar.name = "FloatingLeftButtonBar"
 	floating_left_button_bar.mouse_filter = Control.MOUSE_FILTER_PASS
 	floating_left_button_bar.top_level = true
-	floating_left_button_bar.z_index = 120
-	floating_left_button_bar.add_theme_constant_override("separation", 10)
+	floating_left_button_bar.z_index = 180
+	floating_left_button_bar.add_theme_constant_override("separation", 14)
 	root_ui.add_child(floating_left_button_bar)
 
-	floating_left_toggle_button = _create_floating_circle_button("+")
-	floating_left_toggle_button.pressed.connect(_toggle_left_floating_buttons)
+	floating_left_toggle_button = _create_floating_circle_button("➕")
 	floating_left_button_bar.add_child(floating_left_toggle_button)
-	floating_preset_button = _create_floating_circle_button("预")
+	floating_preset_button = _create_floating_circle_button("难度")
 	floating_ai_tuning_button = _create_floating_circle_button("调")
 	floating_ai_helper_button = _create_floating_circle_button("辅")
 	floating_opponent_hand_button = _create_floating_circle_button("明")
-	floating_exit_button = _create_floating_circle_button("退")
+	floating_exit_button = null
 	floating_preset_button.pressed.connect(_on_top_bar_button_pressed)
 	floating_ai_tuning_button.pressed.connect(_on_top_ai_tuning_button_pressed)
 	floating_ai_helper_button.pressed.connect(_on_top_ai_helper_button_pressed)
 	floating_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
-	floating_exit_button.pressed.connect(_on_top_exit_pressed)
-	floating_left_button_bar.add_child(floating_preset_button)
-	floating_left_button_bar.add_child(floating_ai_tuning_button)
 	floating_left_button_bar.add_child(floating_ai_helper_button)
 	floating_left_button_bar.add_child(floating_opponent_hand_button)
-	floating_left_button_bar.add_child(floating_exit_button)
+	floating_left_button_bar.add_child(floating_preset_button)
+	floating_left_button_bar.add_child(floating_ai_tuning_button)
 
 	if not root_ui.resized.is_connected(_position_left_floating_buttons):
 		root_ui.resized.connect(_position_left_floating_buttons)
@@ -2062,6 +2110,7 @@ func _create_floating_circle_button(text: String) -> Button:
 	button.custom_minimum_size = Vector2(74, 74)
 	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	button.focus_mode = Control.FOCUS_NONE
+	button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	return button
 
 
@@ -2079,8 +2128,8 @@ func _position_left_floating_buttons() -> void:
 	if root_ui == null or floating_left_button_bar == null:
 		return
 	floating_left_button_bar.position = Vector2(
-		16.0,
-		18.0
+		AI_DRAWER_MARGIN.x,
+		AI_DRAWER_MARGIN.y
 	)
 
 
@@ -2094,6 +2143,98 @@ func _toggle_left_floating_buttons() -> void:
 	floating_left_buttons_collapsed = not floating_left_buttons_collapsed
 	_update_floating_button_texts()
 	_position_left_floating_buttons()
+
+
+func _handle_left_floating_toggle_click(global_pos: Vector2) -> bool:
+	if floating_left_toggle_button == null or not is_instance_valid(floating_left_toggle_button):
+		return false
+	if not floating_left_toggle_button.visible:
+		return false
+	var toggle_rect := floating_left_toggle_button.get_global_rect()
+	if toggle_rect.size.x <= 1.0 or toggle_rect.size.y <= 1.0:
+		toggle_rect = Rect2(
+			floating_left_button_bar.global_position,
+			floating_left_toggle_button.custom_minimum_size
+		)
+	if not toggle_rect.has_point(global_pos):
+		return false
+	_toggle_left_floating_buttons()
+	return true
+
+
+func _handle_left_floating_action_click(global_pos: Vector2) -> bool:
+	if floating_left_buttons_collapsed:
+		return false
+	var targets := [
+		{"button": floating_ai_helper_button, "action": Callable(self, "_on_top_ai_helper_button_pressed")},
+		{"button": floating_opponent_hand_button, "action": Callable(self, "_on_top_opponent_hand_button_pressed")},
+		{"button": floating_preset_button, "action": Callable(self, "_on_top_bar_button_pressed")},
+		{"button": floating_ai_tuning_button, "action": Callable(self, "_on_top_ai_tuning_button_pressed")},
+	]
+	for entry in targets:
+		var button: Button = entry.get("button", null)
+		var action: Callable = entry.get("action", Callable())
+		if button == null or not is_instance_valid(button) or not action.is_valid():
+			continue
+		if not button.visible:
+			continue
+		var rect := button.get_global_rect()
+		if rect.size.x <= 1.0 or rect.size.y <= 1.0:
+			continue
+		if rect.has_point(global_pos):
+			action.call()
+			return true
+	return false
+
+
+func _handle_ai_tuning_overlay_click(global_pos: Vector2) -> bool:
+	if ai_tuning_overlay == null or not ai_tuning_overlay.visible:
+		return false
+	if ai_tuning_close_button != null and is_instance_valid(ai_tuning_close_button):
+		var close_rect := ai_tuning_close_button.get_global_rect()
+		if close_rect.size.x > 1.0 and close_rect.size.y > 1.0 and close_rect.has_point(global_pos):
+			_close_ai_tuning_overlay()
+			return true
+	if floating_ai_tuning_button != null and is_instance_valid(floating_ai_tuning_button):
+		var tuning_rect := floating_ai_tuning_button.get_global_rect()
+		if tuning_rect.size.x > 1.0 and tuning_rect.size.y > 1.0 and tuning_rect.has_point(global_pos):
+			_on_top_ai_tuning_button_pressed()
+			return true
+	for entry in ai_tuning_click_actions:
+		var target: Control = entry.get("control", null)
+		var action: Callable = entry.get("action", Callable())
+		if target == null or not is_instance_valid(target) or not action.is_valid():
+			continue
+		if not target.visible or target.disabled:
+			continue
+		var target_rect := target.get_global_rect()
+		if target_rect.size.x <= 1.0 or target_rect.size.y <= 1.0:
+			continue
+		if target_rect.has_point(global_pos):
+			action.call()
+			return true
+	return false
+
+
+func _handle_ai_tuning_drag_press(global_pos: Vector2) -> bool:
+	if ai_tuning_overlay == null or not ai_tuning_overlay.visible or ai_tuning_panel == null or ai_tuning_title_label == null:
+		return false
+	var title_rect := ai_tuning_title_label.get_global_rect()
+	if title_rect.size.x <= 1.0 or title_rect.size.y <= 1.0 or not title_rect.has_point(global_pos):
+		return false
+	ai_tuning_dragging = true
+	ai_tuning_panel_moved = true
+	ai_tuning_drag_offset = global_pos - ai_tuning_panel.global_position
+	return true
+
+
+func _register_ai_tuning_click_action(control: Control, action: Callable) -> void:
+	if control == null or not action.is_valid():
+		return
+	ai_tuning_click_actions.append({
+		"control": control,
+		"action": action,
+	})
 
 
 func _on_snapshot_changed(snapshot: Dictionary) -> void:
@@ -2492,12 +2633,13 @@ func _update_top_bar(snapshot: Dictionary) -> void:
 	var preset_name := str(snapshot.get("ai_tuning_config", {}).get("preset_name", "bone_ash"))
 	top_bar_button.visible = true
 	top_bar_button.text = str(AI_PRESET_LABELS.get(preset_name, "骨灰"))
+	top_bar_button.visible = false
 	top_ai_tuning_button.visible = false
 	top_ai_helper_button.visible = false
 	top_opponent_hand_button.visible = false
 	top_settlement_info_button.visible = false
 	top_next_round_button.visible = true
-	top_exit_button.visible = false
+	_configure_top_right_exit_button()
 	center_info.text = ""
 	_apply_ai_preset_button_style(preset_name)
 	_apply_ai_helper_button_style()
@@ -2620,7 +2762,7 @@ func _show_wall_count_in_dice_panel(wall_count: int) -> void:
 	if dice_count_label == null or die_a_face == null or die_b_face == null:
 		return
 	if dice_panel != null:
-		dice_panel.custom_minimum_size = Vector2(160, 160)
+		dice_panel.custom_minimum_size = CENTER_WALL_DISC_SIZE
 	die_a_face.visible = false
 	die_b_face.visible = false
 	dice_count_label.visible = true
@@ -2635,7 +2777,7 @@ func _show_dice_faces() -> void:
 	if dice_count_label == null or die_a_face == null or die_b_face == null:
 		return
 	if dice_panel != null:
-		dice_panel.custom_minimum_size = Vector2(116, 116)
+		dice_panel.custom_minimum_size = Vector2(136, 136)
 	dice_count_label.visible = false
 	die_a_face.visible = true
 	die_b_face.visible = true
@@ -2649,13 +2791,13 @@ func _position_dice_wind_labels() -> void:
 		return
 	var disc_size := dice_panel.custom_minimum_size
 	if dice_wind_top_label != null:
-		dice_wind_top_label.position = Vector2((disc_size.x - dice_wind_top_label.size.x) * 0.5, -28.0)
+		dice_wind_top_label.position = Vector2((disc_size.x - dice_wind_top_label.size.x) * 0.5, -40.0)
 	if dice_wind_bottom_label != null:
-		dice_wind_bottom_label.position = Vector2((disc_size.x - dice_wind_bottom_label.size.x) * 0.5, disc_size.y - 6.0)
+		dice_wind_bottom_label.position = Vector2((disc_size.x - dice_wind_bottom_label.size.x) * 0.5, disc_size.y - 8.0)
 	if dice_wind_left_label != null:
-		dice_wind_left_label.position = Vector2(-28.0, (disc_size.y - dice_wind_left_label.size.y) * 0.5)
+		dice_wind_left_label.position = Vector2(-42.0, (disc_size.y - dice_wind_left_label.size.y) * 0.5)
 	if dice_wind_right_label != null:
-		dice_wind_right_label.position = Vector2(disc_size.x - 14.0, (disc_size.y - dice_wind_right_label.size.y) * 0.5)
+		dice_wind_right_label.position = Vector2(disc_size.x - 22.0, (disc_size.y - dice_wind_right_label.size.y) * 0.5)
 
 
 func _update_self_area(snapshot: Dictionary, self_hand_tiles: Array) -> void:
@@ -2730,7 +2872,6 @@ func _update_v17_player_info_panels(snapshot: Dictionary) -> void:
 		var panel: Panel = v17_player_info_panels.get(seat)
 		var name_label: Label = v17_player_info_name_labels.get(seat)
 		var status_label: Label = v17_player_info_status_labels.get(seat)
-		var avatar_label: Label = v17_player_info_avatar_labels.get(seat)
 		var dealer_badge: Label = v17_player_info_dealer_badges.get(seat)
 		var ding_que_badge: Label = v17_player_info_ding_que_badges.get(seat)
 		if panel == null or name_label == null or status_label == null:
@@ -2744,8 +2885,6 @@ func _update_v17_player_info_panels(snapshot: Dictionary) -> void:
 		var nickname := str(player.get("nickname", _seat_name(seat)))
 		var score := int(player.get("score", 0))
 		name_label.text = nickname
-		if avatar_label != null:
-			avatar_label.text = "猫" if seat == 2 else "熊" if seat == 1 else "虎"
 		if dealer_badge != null:
 			dealer_badge.visible = seat == current_dealer_seat
 		if ding_que_badge != null:
@@ -2754,14 +2893,7 @@ func _update_v17_player_info_panels(snapshot: Dictionary) -> void:
 
 		var status_parts: Array[String] = []
 		status_parts.append("%d分" % score)
-		if bool(player.get("bao_jiao", false)):
-			status_parts.append("报叫")
-		var bao_gang_tiles: Array = player.get("bao_gang_tiles", [])
-		if not bao_gang_tiles.is_empty():
-			status_parts.append("报杠")
-		if bool(player.get("has_won", false)):
-			status_parts.append("已胡")
-		status_label.text = " · ".join(status_parts)
+		status_label.text = " ".join(status_parts)
 		status_label.visible = not status_label.text.is_empty()
 
 
@@ -2782,7 +2914,7 @@ func _update_self_hu_tile_display(winning_tile: Dictionary, winning_source_seat:
 	var wrapper := Control.new()
 	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var tile := TILE_SCENE.instantiate()
-	tile.call("configure", winning_tile, SELF_ROW_TILE_VISUAL_SCALE, false, false, true)
+	tile.call("configure", winning_tile, SELF_ROW_TILE_VISUAL_SCALE * 1.10, false, false, false, false, true)
 	var tile_size: Vector2 = tile.custom_minimum_size
 	wrapper.custom_minimum_size = tile_size
 	wrapper.size = wrapper.custom_minimum_size
@@ -2911,6 +3043,15 @@ func _update_discard_helper_panel(snapshot: Dictionary, trainer_hint: Dictionary
 	var self_player: Dictionary = _player_by_seat(snapshot.get("players", []), 0)
 	discard_helper_title.text = ""
 	discard_helper_title.visible = false
+
+	if bool(trainer_hint.get("can_self_hu", false)):
+		discard_helper_summary.text = "已成和，直接自摸"
+		discard_helper_compare.text = ""
+		discard_helper_compare.visible = false
+		discard_helper_options.text = ""
+		discard_helper_options.visible = false
+		discard_helper_panel.visible = true
+		return
 
 	if not can_discard or recommended.is_empty():
 		if bool(trainer_hint.get("can_self_hu", false)):
@@ -3498,45 +3639,49 @@ func _apply_self_score_style() -> void:
 	calligraphy_font.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
 	calligraphy_font.hinting = TextServer.HINTING_LIGHT
 	self_score_label.add_theme_font_override("font", calligraphy_font)
-	self_score_label.add_theme_font_size_override("font_size", 23)
+	self_score_label.add_theme_font_size_override("font_size", 34)
 	self_score_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.48, 1.0))
 	self_score_label.add_theme_color_override("font_outline_color", Color(0.05, 0.08, 0.05, 0.98))
-	self_score_label.add_theme_constant_override("outline_size", 3)
+	self_score_label.add_theme_constant_override("outline_size", 4)
 	self_score_label.add_theme_color_override("font_shadow_color", Color(1.0, 0.82, 0.32, 0.36))
 	self_score_label.add_theme_constant_override("shadow_offset_x", 0)
 	self_score_label.add_theme_constant_override("shadow_offset_y", 2)
 	self_score_label.custom_minimum_size = Vector2(302, 136)
 	self_score_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	self_score_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	self_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	self_score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	self_score_label.add_theme_constant_override("line_spacing", 8)
+	self_score_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 
 func _apply_self_won_stamp_style() -> void:
 	var stamp_style := StyleBoxFlat.new()
 	stamp_style.bg_color = Color(0.44, 0.05, 0.03, 0.18)
 	stamp_style.border_color = Color(0.86, 0.14, 0.08, 0.98)
-	stamp_style.set_border_width_all(3)
-	stamp_style.corner_radius_top_left = 9
-	stamp_style.corner_radius_top_right = 9
-	stamp_style.corner_radius_bottom_left = 9
-	stamp_style.corner_radius_bottom_right = 9
-	stamp_style.content_margin_left = 10
-	stamp_style.content_margin_right = 10
-	stamp_style.content_margin_top = 4
-	stamp_style.content_margin_bottom = 4
+	stamp_style.set_border_width_all(4)
+	stamp_style.corner_radius_top_left = 14
+	stamp_style.corner_radius_top_right = 14
+	stamp_style.corner_radius_bottom_left = 14
+	stamp_style.corner_radius_bottom_right = 14
+	stamp_style.content_margin_left = 16
+	stamp_style.content_margin_right = 16
+	stamp_style.content_margin_top = 8
+	stamp_style.content_margin_bottom = 8
 	stamp_style.shadow_color = Color(0.18, 0.02, 0.00, 0.34)
-	stamp_style.shadow_size = 4
-	stamp_style.shadow_offset = Vector2(0, 2)
+	stamp_style.shadow_size = 7
+	stamp_style.shadow_offset = Vector2(0, 3)
 	self_won_stamp.add_theme_stylebox_override("normal", stamp_style)
-	self_won_stamp.add_theme_font_size_override("font_size", 21)
+	self_won_stamp.add_theme_font_size_override("font_size", 30)
 	self_won_stamp.add_theme_color_override("font_color", Color(0.97, 0.16, 0.10, 0.98))
 	self_won_stamp.add_theme_color_override("font_outline_color", Color(1.0, 0.84, 0.80, 0.56))
 	self_won_stamp.add_theme_color_override("font_shadow_color", Color(0.44, 0.03, 0.02, 0.30))
-	self_won_stamp.add_theme_constant_override("outline_size", 1)
+	self_won_stamp.add_theme_constant_override("outline_size", 2)
 	self_won_stamp.add_theme_constant_override("shadow_offset_x", 0)
-	self_won_stamp.add_theme_constant_override("shadow_offset_y", 1)
+	self_won_stamp.add_theme_constant_override("shadow_offset_y", 2)
 	self_won_stamp.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	self_won_stamp.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	self_won_stamp.custom_minimum_size = Vector2(68, 32)
+	self_won_stamp.custom_minimum_size = Vector2(108, 52)
 	self_won_stamp.rotation_degrees = 0.0
 	self_won_stamp.pivot_offset = Vector2.ZERO
 	self_won_stamp.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3567,13 +3712,13 @@ func _setup_self_dealer_badge() -> void:
 	style.shadow_size = 5
 	style.shadow_offset = Vector2(0, 2)
 	self_dealer_badge.add_theme_stylebox_override("normal", style)
-	self_dealer_badge.add_theme_font_size_override("font_size", 20)
+	self_dealer_badge.add_theme_font_size_override("font_size", 28)
 	self_dealer_badge.add_theme_color_override("font_color", Color(1.0, 0.95, 0.76, 1.0))
 	self_dealer_badge.add_theme_color_override("font_outline_color", Color(0.30, 0.08, 0.02, 0.92))
-	self_dealer_badge.add_theme_constant_override("outline_size", 1)
+	self_dealer_badge.add_theme_constant_override("outline_size", 2)
 	self_dealer_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	self_dealer_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	self_dealer_badge.custom_minimum_size = Vector2(44, 34)
+	self_dealer_badge.custom_minimum_size = Vector2(62, 46)
 	_position_self_dealer_badge()
 
 
@@ -4211,6 +4356,8 @@ func _discard_row_step_for_seat(seat: int, tile_size: Vector2) -> Vector2:
 
 func _render_settlement(snapshot: Dictionary) -> void:
 	var settlement_data: Dictionary = snapshot.get("settlement_data", {})
+	var settlement_view_data := settlement_data.duplicate(true)
+	settlement_view_data["use_ding_que_phase"] = bool(snapshot.get("rules", {}).get("use_ding_que_phase", true))
 	var players: Array = snapshot.get("players", [])
 	if players.is_empty():
 		settlement_round_label.text = "本局结算"
@@ -4227,8 +4374,8 @@ func _render_settlement(snapshot: Dictionary) -> void:
 		_clear_children(settlement_hand_row)
 		_clear_children(settlement_breakdown_list)
 		return
-	var score_changes: Dictionary = settlement_data.get("score_changes", {})
-	var default_focus_seat := _resolve_settlement_focus_seat(players, settlement_data, score_changes)
+	var score_changes: Dictionary = settlement_view_data.get("score_changes", {})
+	var default_focus_seat := _resolve_settlement_focus_seat(players, settlement_view_data, score_changes)
 	var best_seats := _resolve_settlement_best_seats(players, score_changes)
 	var focus_seat := settlement_selected_seat
 	if focus_seat == -1 or _player_by_seat(players, focus_seat).is_empty():
@@ -4236,30 +4383,30 @@ func _render_settlement(snapshot: Dictionary) -> void:
 		settlement_selected_seat = focus_seat
 	var round_delta := int(score_changes.get(focus_seat, 0))
 	var round_prefix := "+" if round_delta > 0 else ""
-	var dealer_seat := int(settlement_data.get("dealer_seat", snapshot.get("current_dealer_seat", 0)))
+	var dealer_seat := int(settlement_view_data.get("dealer_seat", snapshot.get("current_dealer_seat", 0)))
 
 	settlement_round_label.text = "第 %d 局 · 庄家%s · %s" % [
-		int(settlement_data.get("round_index", snapshot.get("round_index", 1))),
+		int(settlement_view_data.get("round_index", snapshot.get("round_index", 1))),
 		_seat_name(dealer_seat),
-		_settlement_end_reason_text(str(settlement_data.get("end_reason", ""))),
+		_settlement_end_reason_text(str(settlement_view_data.get("end_reason", ""))),
 	]
 	settlement_player_list_title.text = "本局结算"
 	settlement_breakdown_title.text = "分数明细"
 	settlement_hero_badge.text = "本局最佳"
 	settlement_hero_badge.visible = best_seats.has(focus_seat)
-	var hero_result_text := _build_hero_result_text(focus_seat, settlement_data, round_delta)
+	var hero_result_text := _build_hero_result_text(focus_seat, settlement_view_data, round_delta)
 	settlement_hero_name.text = "%s %s" % [_settlement_display_name(focus_seat), hero_result_text]
 	settlement_hero_result.text = hero_result_text
 	settlement_hero_result.visible = false
 	settlement_hero_summary.text = ""
 	settlement_hero_summary.visible = false
-	settlement_hero_hu.text = _build_hero_hu_text(focus_seat, settlement_data)
-	settlement_hero_fan.text = _build_hero_fan_text(focus_seat, settlement_data)
+	settlement_hero_hu.text = _build_hero_hu_text(focus_seat, settlement_view_data)
+	settlement_hero_fan.text = _build_hero_fan_text(focus_seat, settlement_view_data)
 	settlement_hero_score.text = "%s%d" % [round_prefix, round_delta]
 
 	_render_settlement_player_list(players, score_changes, focus_seat, dealer_seat, best_seats)
-	_render_settlement_hand(players, settlement_data, focus_seat)
-	_render_settlement_breakdown(players, settlement_data, focus_seat, round_delta)
+	_render_settlement_hand(players, settlement_view_data, focus_seat)
+	_render_settlement_breakdown(players, settlement_view_data, focus_seat, round_delta)
 	_apply_settlement_visuals(round_delta)
 
 
@@ -4448,7 +4595,8 @@ func _render_settlement_hand(players: Array, settlement_data: Dictionary, focus_
 		win_badge.add_theme_font_size_override("font_size", int(round(18 * scale)))
 		header.add_child(win_badge)
 
-	var ding_que := str(player.get("ding_que", ""))
+	var use_ding_que := _settlement_uses_ding_que(settlement_data)
+	var ding_que := str(player.get("ding_que", "")) if use_ding_que else ""
 	if ding_que != "":
 		var ding_que_label := Label.new()
 		ding_que_label.text = _ding_que_display(ding_que)
@@ -4505,7 +4653,7 @@ func _render_settlement_all_tiles_row(parent: VBoxContainer, hand_tiles: Array, 
 
 func _create_settlement_tile(tile_data: Dictionary, scale: float, highlight_winning: bool = false) -> Control:
 	var tile: Control = TILE_SCENE.instantiate()
-	tile.call("configure", tile_data, scale, false, false, highlight_winning)
+	tile.call("configure", tile_data, scale, false, false, false, false, highlight_winning)
 	return tile
 
 
@@ -4978,7 +5126,7 @@ func _find_focus_win_event(settlement_data: Dictionary, focus_seat: int) -> Dict
 
 func _build_settlement_hand_tiles(player: Dictionary, settlement_data: Dictionary, seat: int) -> Array:
 	var hand_tiles: Array = player.get("hand_tiles", []).duplicate(true)
-	var ding_que_suit := str(player.get("ding_que", ""))
+	var ding_que_suit := str(player.get("ding_que", "")) if _settlement_uses_ding_que(settlement_data) else ""
 	var display_tiles := _build_display_hand_tiles(hand_tiles, -1, ding_que_suit)
 	var win_event := _find_focus_win_event(settlement_data, seat)
 	if win_event.is_empty():
@@ -4994,6 +5142,10 @@ func _build_settlement_hand_tiles(player: Dictionary, settlement_data: Dictionar
 			display_tiles.remove_at(index)
 			break
 	return display_tiles
+
+
+func _settlement_uses_ding_que(settlement_data: Dictionary) -> bool:
+	return bool(settlement_data.get("use_ding_que_phase", false))
 
 
 func _settlement_win_badge_text(settlement_data: Dictionary, seat: int) -> String:
@@ -5668,8 +5820,8 @@ func _refund_payers_display(payer_seats: Array) -> String:
 
 func _apply_action_button_styles() -> void:
 	_apply_action_panel_visual_style()
-	action_buttons.add_theme_constant_override("h_separation", 14)
-	action_buttons.add_theme_constant_override("v_separation", 8)
+	action_buttons.add_theme_constant_override("h_separation", 18)
+	action_buttons.add_theme_constant_override("v_separation", 14)
 	action_status_label.add_theme_color_override("font_color", IVORY_SOFT)
 	action_status_label.add_theme_color_override("font_outline_color", Color(0.08, 0.06, 0.04, 0.92))
 	action_status_label.add_theme_constant_override("outline_size", 1)
@@ -5677,22 +5829,22 @@ func _apply_action_button_styles() -> void:
 	action_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	action_status_label.visible = false
 	action_status_label.custom_minimum_size = Vector2.ZERO
-	_apply_action_button_style(hu_button, Color(0.84, 0.26, 0.18, 0.99), Color(1.0, 0.88, 0.55, 0.96), 27, true)
-	_apply_action_button_style(gang_button, Color(0.16, 0.50, 0.36, 0.98), Color(0.93, 0.98, 0.78, 0.58), 25, false)
+	_apply_action_button_style(hu_button, Color(0.84, 0.26, 0.18, 0.99), Color(1.0, 0.88, 0.55, 0.96), 42, true)
+	_apply_action_button_style(gang_button, Color(0.16, 0.50, 0.36, 0.98), Color(0.93, 0.98, 0.78, 0.58), 40, false)
 	if an_gang_button != null:
-		_apply_action_button_style(an_gang_button, Color(0.10, 0.36, 0.28, 0.98), Color(0.86, 0.94, 0.72, 0.52), 24, false)
-	_apply_action_button_style(peng_button, Color(0.18, 0.56, 0.40, 0.98), Color(0.93, 0.98, 0.78, 0.58), 25, false)
-	_apply_action_button_style(pass_button, Color(0.25, 0.40, 0.34, 0.94), Color(0.90, 0.96, 0.82, 0.42), 24, false)
+		_apply_action_button_style(an_gang_button, Color(0.10, 0.36, 0.28, 0.98), Color(0.86, 0.94, 0.72, 0.52), 38, false)
+	_apply_action_button_style(peng_button, Color(0.18, 0.56, 0.40, 0.98), Color(0.93, 0.98, 0.78, 0.58), 40, false)
+	_apply_action_button_style(pass_button, Color(0.25, 0.40, 0.34, 0.94), Color(0.90, 0.96, 0.82, 0.42), 38, false)
 	if bao_jiao_button != null:
-		_apply_action_button_style(bao_jiao_button, Color(0.24, 0.40, 0.63, 0.98), Color(0.82, 0.90, 1.0, 0.72), 24, true)
-	hu_button.custom_minimum_size = Vector2(128, 82)
-	gang_button.custom_minimum_size = Vector2(118, 76)
+		_apply_action_button_style(bao_jiao_button, Color(0.24, 0.40, 0.63, 0.98), Color(0.82, 0.90, 1.0, 0.72), 38, true)
+	hu_button.custom_minimum_size = Vector2(236, 142)
+	gang_button.custom_minimum_size = Vector2(214, 128)
 	if an_gang_button != null:
-		an_gang_button.custom_minimum_size = Vector2(118, 76)
-	peng_button.custom_minimum_size = Vector2(118, 76)
-	pass_button.custom_minimum_size = Vector2(118, 76)
+		an_gang_button.custom_minimum_size = Vector2(214, 128)
+	peng_button.custom_minimum_size = Vector2(214, 128)
+	pass_button.custom_minimum_size = Vector2(214, 128)
 	if bao_jiao_button != null:
-		bao_jiao_button.custom_minimum_size = Vector2(118, 76)
+		bao_jiao_button.custom_minimum_size = Vector2(214, 128)
 
 
 func _apply_top_bar_button_group_styles() -> void:
@@ -5738,13 +5890,30 @@ func _apply_top_bar_button_group_styles() -> void:
 		18,
 		false
 	)
-	top_bar_button.custom_minimum_size = Vector2(124, 0)
-	top_ai_tuning_button.custom_minimum_size = Vector2(124, 0)
-	top_ai_helper_button.custom_minimum_size = Vector2(132, 0)
-	top_opponent_hand_button.custom_minimum_size = Vector2(148, 0)
-	top_settlement_info_button.custom_minimum_size = Vector2(126, 0)
-	top_next_round_button.custom_minimum_size = Vector2(126, 0)
-	top_exit_button.custom_minimum_size = Vector2(96, 0)
+	top_bar_button.custom_minimum_size = Vector2(214, 82)
+	top_ai_tuning_button.custom_minimum_size = Vector2(214, 82)
+	top_ai_helper_button.custom_minimum_size = Vector2(214, 82)
+	top_opponent_hand_button.custom_minimum_size = Vector2(214, 82)
+	top_settlement_info_button.custom_minimum_size = Vector2(214, 82)
+	top_next_round_button.custom_minimum_size = Vector2(214, 88)
+	_configure_top_right_exit_button()
+
+
+func _configure_top_right_exit_button() -> void:
+	if top_exit_button == null or root_ui == null:
+		return
+	top_exit_button.text = "X"
+	top_exit_button.visible = true
+	top_exit_button.disabled = false
+	top_exit_button.top_level = true
+	top_exit_button.z_index = 260
+	top_exit_button.custom_minimum_size = TOP_EXIT_BUTTON_SIZE
+	top_exit_button.size = TOP_EXIT_BUTTON_SIZE
+	top_exit_button.position = Vector2(
+		maxf(0.0, root_ui.size.x - TOP_EXIT_BUTTON_MARGIN.x - TOP_EXIT_BUTTON_SIZE.x),
+		TOP_EXIT_BUTTON_MARGIN.y
+	)
+	top_exit_button.tooltip_text = "退出游戏"
 
 
 func _apply_ai_preset_button_style(preset_name: String) -> void:
@@ -5755,7 +5924,7 @@ func _apply_ai_preset_button_style(preset_name: String) -> void:
 				Color(0.14, 0.28, 0.34, 0.90),
 				Color(0.76, 0.88, 0.96, 0.28),
 				Color(0.92, 0.96, 1.0, 1.0),
-				18,
+				34,
 				false
 			)
 		"hell":
@@ -5764,7 +5933,7 @@ func _apply_ai_preset_button_style(preset_name: String) -> void:
 				Color(0.78, 0.25, 0.20, 0.96),
 				Color(0.96, 0.82, 0.44, 0.92),
 				Color(1.0, 0.92, 0.82, 1.0),
-				18,
+				34,
 				true
 			)
 		_:
@@ -5773,7 +5942,7 @@ func _apply_ai_preset_button_style(preset_name: String) -> void:
 				Color(0.09, 0.32, 0.24, 0.86),
 				Color(0.82, 0.94, 0.88, 0.18),
 				IVORY_SOFT,
-				18,
+				34,
 				false
 			)
 
@@ -5879,6 +6048,7 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 
 
 func _setup_ai_tuning_overlay() -> void:
+	ai_tuning_click_actions.clear()
 	ai_tuning_overlay = Control.new()
 	ai_tuning_overlay.name = "AITuningOverlay"
 	ai_tuning_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -5895,67 +6065,77 @@ func _setup_ai_tuning_overlay() -> void:
 	ai_tuning_overlay.add_child(shade)
 
 	ai_tuning_panel = Panel.new()
-	ai_tuning_panel.custom_minimum_size = Vector2(1040, 860)
+	ai_tuning_panel.custom_minimum_size = Vector2(1940, 1210)
 	ai_tuning_panel.size = ai_tuning_panel.custom_minimum_size
+	ai_tuning_panel.clip_contents = true
 	ai_tuning_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	ai_tuning_panel.gui_input.connect(_on_ai_tuning_panel_gui_input)
 	ai_tuning_overlay.add_child(ai_tuning_panel)
-	_apply_wood_frame_panel(ai_tuning_panel, Color(0.53, 0.34, 0.18, 0.98), Color(0.98, 0.78, 0.36, 0.92), 32, 3, 18)
-	_ensure_material_overlay(ai_tuning_panel, "AITuningWoodGrain", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.WOOD, 0.56)
+	ai_tuning_panel.add_theme_stylebox_override("panel", _build_settlement_panel_style())
+	_ensure_material_overlay(ai_tuning_panel, "AITuningWoodGrain", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.48)
 
 	ai_tuning_close_button = Button.new()
 	ai_tuning_close_button.text = "×"
 	ai_tuning_close_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	ai_tuning_close_button.offset_left = -58
-	ai_tuning_close_button.offset_top = 18
-	ai_tuning_close_button.offset_right = -18
-	ai_tuning_close_button.offset_bottom = 58
+	ai_tuning_close_button.offset_left = -142
+	ai_tuning_close_button.offset_top = 28
+	ai_tuning_close_button.offset_right = -28
+	ai_tuning_close_button.offset_bottom = 106
 	ai_tuning_close_button.mouse_filter = Control.MOUSE_FILTER_STOP
-	_apply_top_bar_button_style(ai_tuning_close_button, Color(0.42, 0.16, 0.13, 0.96), Color(0.96, 0.70, 0.42, 0.82), IVORY_SOFT, 22, true)
+	ai_tuning_close_button.add_theme_stylebox_override("normal", _build_settlement_utility_button_style())
+	ai_tuning_close_button.add_theme_stylebox_override("hover", _build_settlement_utility_button_hover_style())
+	ai_tuning_close_button.add_theme_stylebox_override("pressed", _build_settlement_utility_button_pressed_style())
+	ai_tuning_close_button.add_theme_stylebox_override("focus", _build_settlement_utility_button_hover_style())
+	ai_tuning_close_button.add_theme_font_size_override("font_size", 40)
+	ai_tuning_close_button.add_theme_color_override("font_color", IVORY_SOFT)
+	ai_tuning_close_button.add_theme_color_override("font_outline_color", Color(0.07, 0.11, 0.09, 0.88))
+	ai_tuning_close_button.add_theme_constant_override("outline_size", 2)
 	ai_tuning_close_button.pressed.connect(_close_ai_tuning_overlay)
 	ai_tuning_panel.add_child(ai_tuning_close_button)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_top", 22)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_bottom", 30)
+	margin.add_theme_constant_override("margin_left", 42)
+	margin.add_theme_constant_override("margin_top", 28)
+	margin.add_theme_constant_override("margin_right", 42)
+	margin.add_theme_constant_override("margin_bottom", 34)
 	ai_tuning_panel.add_child(margin)
 	ai_tuning_close_button.move_to_front()
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 9)
+	vbox.add_theme_constant_override("separation", 14)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	margin.add_child(vbox)
 
-	var title := Label.new()
-	title.text = "AI 调参（内江麻将｜按住标题可拖动）"
-	STYLE_CONFIG.apply_label(title, true, true)
-	title.add_theme_font_size_override("font_size", 30)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.custom_minimum_size = Vector2(0, 40)
-	title.mouse_filter = Control.MOUSE_FILTER_STOP
-	title.gui_input.connect(_on_ai_tuning_drag_handle_gui_input)
-	vbox.add_child(title)
+	ai_tuning_title_label = Label.new()
+	ai_tuning_title_label.text = "AI 调参（内江麻将｜按住标题可拖动）"
+	_apply_settlement_label_style(ai_tuning_title_label, false, true)
+	ai_tuning_title_label.add_theme_font_size_override("font_size", 48)
+	ai_tuning_title_label.add_theme_color_override("font_color", IVORY_SOFT)
+	ai_tuning_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ai_tuning_title_label.custom_minimum_size = Vector2(0, 72)
+	ai_tuning_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(ai_tuning_title_label)
 
 	ai_tuning_status_label = Label.new()
-	STYLE_CONFIG.apply_label(ai_tuning_status_label, false, false)
+	_apply_settlement_label_style(ai_tuning_status_label, false, false)
 	ai_tuning_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ai_tuning_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ai_tuning_status_label.add_theme_font_size_override("font_size", 17)
+	ai_tuning_status_label.add_theme_font_size_override("font_size", 28)
 	ai_tuning_status_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.82, 0.98))
 	ai_tuning_status_label.text = "围绕两门快攻、成叫/查叫、自摸效率与尾盘防守来微调 AI。"
 	vbox.add_child(ai_tuning_status_label)
 
 	var preset_label := Label.new()
 	preset_label.text = "难度预设"
-	STYLE_CONFIG.apply_label(preset_label, true, false)
-	preset_label.add_theme_font_size_override("font_size", 19)
+	_apply_settlement_label_style(preset_label, false, true)
+	preset_label.add_theme_font_size_override("font_size", 28)
 	preset_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(preset_label)
 
 	var preset_row := HBoxContainer.new()
-	preset_row.add_theme_constant_override("separation", 10)
+	preset_row.add_theme_constant_override("separation", 18)
 	preset_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_child(preset_row)
 	for item in [
@@ -5965,9 +6145,16 @@ func _setup_ai_tuning_overlay() -> void:
 	]:
 		var preset_button := Button.new()
 		preset_button.text = str(item["label"])
-		_apply_top_bar_button_style(preset_button, Color(0.16, 0.24, 0.20, 0.96), Color(0.73, 0.60, 0.38, 0.68), IVORY_SOFT, 18, false)
-		preset_button.custom_minimum_size = Vector2(120, 44)
-		preset_button.pressed.connect(_on_ai_tuning_preset_pressed.bind(str(item["key"])))
+		preset_button.add_theme_stylebox_override("normal", _build_settlement_utility_button_style())
+		preset_button.add_theme_stylebox_override("hover", _build_settlement_utility_button_hover_style())
+		preset_button.add_theme_stylebox_override("pressed", _build_settlement_utility_button_pressed_style())
+		preset_button.add_theme_stylebox_override("focus", _build_settlement_utility_button_hover_style())
+		preset_button.add_theme_font_size_override("font_size", 26)
+		preset_button.add_theme_color_override("font_color", IVORY_SOFT)
+		preset_button.custom_minimum_size = Vector2(170, 64)
+		var preset_action := _on_ai_tuning_preset_pressed.bind(str(item["key"]))
+		preset_button.pressed.connect(preset_action)
+		_register_ai_tuning_click_action(preset_button, preset_action)
 		preset_row.add_child(preset_button)
 		ai_tuning_preset_buttons[str(item["key"])] = preset_button
 
@@ -5998,90 +6185,137 @@ func _setup_ai_tuning_overlay() -> void:
 	for group in tuning_groups:
 		var group_label := Label.new()
 		group_label.text = str(group.get("title", ""))
-		STYLE_CONFIG.apply_label(group_label, true, false)
-		group_label.add_theme_font_size_override("font_size", 19)
+		_apply_settlement_label_style(group_label, false, true)
+		group_label.add_theme_font_size_override("font_size", 28)
 		group_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vbox.add_child(group_label)
 
 		var grid := GridContainer.new()
 		grid.columns = 8
-		grid.add_theme_constant_override("h_separation", 10)
-		grid.add_theme_constant_override("v_separation", 7)
+		grid.add_theme_constant_override("h_separation", 16)
+		grid.add_theme_constant_override("v_separation", 12)
 		vbox.add_child(grid)
 
 		for item in group.get("items", []):
 			var name_label := Label.new()
 			name_label.text = str(item["label"])
-			STYLE_CONFIG.apply_label(name_label, false, false)
-			name_label.custom_minimum_size = Vector2(112, 38)
+			_apply_settlement_label_style(name_label, false, false)
+			name_label.custom_minimum_size = Vector2(178, 56)
 			name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			name_label.add_theme_font_size_override("font_size", 24)
 			grid.add_child(name_label)
 
 			var minus_button := Button.new()
 			minus_button.text = "－"
-			_apply_top_bar_button_style(minus_button, Color(0.20, 0.18, 0.16, 0.96), Color(0.66, 0.53, 0.31, 0.58), IVORY_SOFT, 18, false)
-			minus_button.custom_minimum_size = Vector2(52, 38)
-			minus_button.pressed.connect(_on_ai_tuning_adjust_pressed.bind(str(item["key"]), -int(item["step"])))
+			minus_button.add_theme_stylebox_override("normal", _build_settlement_utility_button_style())
+			minus_button.add_theme_stylebox_override("hover", _build_settlement_utility_button_hover_style())
+			minus_button.add_theme_stylebox_override("pressed", _build_settlement_utility_button_pressed_style())
+			minus_button.add_theme_stylebox_override("focus", _build_settlement_utility_button_hover_style())
+			minus_button.add_theme_font_size_override("font_size", 28)
+			minus_button.add_theme_color_override("font_color", IVORY_SOFT)
+			minus_button.custom_minimum_size = Vector2(72, 56)
+			var minus_action := _on_ai_tuning_adjust_pressed.bind(str(item["key"]), -int(item["step"]))
+			minus_button.pressed.connect(minus_action)
+			_register_ai_tuning_click_action(minus_button, minus_action)
 			grid.add_child(minus_button)
 
 			var value_label := Label.new()
 			value_label.text = "-"
 			value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			STYLE_CONFIG.apply_label(value_label, false, true)
+			_apply_settlement_label_style(value_label, false, true)
 			value_label.add_theme_stylebox_override("normal", _build_settlement_group_tag_style())
-			value_label.custom_minimum_size = Vector2(84, 38)
+			value_label.add_theme_font_size_override("font_size", 24)
+			value_label.custom_minimum_size = Vector2(108, 56)
 			grid.add_child(value_label)
 			ai_tuning_value_labels[str(item["key"])] = value_label
 
 			var plus_button := Button.new()
 			plus_button.text = "＋"
-			_apply_top_bar_button_style(plus_button, Color(0.16, 0.22, 0.18, 0.96), Color(0.72, 0.58, 0.35, 0.62), IVORY_SOFT, 18, false)
-			plus_button.custom_minimum_size = Vector2(52, 38)
-			plus_button.pressed.connect(_on_ai_tuning_adjust_pressed.bind(str(item["key"]), int(item["step"])))
+			plus_button.add_theme_stylebox_override("normal", _build_settlement_utility_button_style())
+			plus_button.add_theme_stylebox_override("hover", _build_settlement_utility_button_hover_style())
+			plus_button.add_theme_stylebox_override("pressed", _build_settlement_utility_button_pressed_style())
+			plus_button.add_theme_stylebox_override("focus", _build_settlement_utility_button_hover_style())
+			plus_button.add_theme_font_size_override("font_size", 28)
+			plus_button.add_theme_color_override("font_color", IVORY_SOFT)
+			plus_button.custom_minimum_size = Vector2(72, 56)
+			var plus_action := _on_ai_tuning_adjust_pressed.bind(str(item["key"]), int(item["step"]))
+			plus_button.pressed.connect(plus_action)
+			_register_ai_tuning_click_action(plus_button, plus_action)
 			grid.add_child(plus_button)
 
-	ai_tuning_learning_label = Label.new()
-	STYLE_CONFIG.apply_label(ai_tuning_learning_label, false, false)
+	ai_tuning_learning_label = RichTextLabel.new()
+	ai_tuning_learning_label.bbcode_enabled = false
 	ai_tuning_learning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ai_tuning_learning_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	ai_tuning_learning_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	ai_tuning_learning_label.custom_minimum_size = Vector2(0, 276)
-	ai_tuning_learning_label.add_theme_font_size_override("font_size", 16)
-	ai_tuning_learning_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.82, 0.96))
+	ai_tuning_learning_label.fit_content = false
+	ai_tuning_learning_label.scroll_active = true
+	ai_tuning_learning_label.scroll_following = false
+	ai_tuning_learning_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	ai_tuning_learning_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ai_tuning_learning_label.custom_minimum_size = Vector2(0, 0)
+	ai_tuning_learning_label.clip_contents = true
+	ai_tuning_learning_label.add_theme_font_size_override("normal_font_size", 22)
+	ai_tuning_learning_label.add_theme_color_override("default_color", Color(1.0, 0.95, 0.82, 0.96))
+	ai_tuning_learning_label.add_theme_constant_override("line_separation", 6)
+	ai_tuning_learning_label.scroll_to_line(0)
 	vbox.add_child(ai_tuning_learning_label)
+	call_deferred("_configure_ai_tuning_learning_scrollbar")
 
 	var footer := HBoxContainer.new()
-	footer.add_theme_constant_override("separation", 10)
+	footer.add_theme_constant_override("separation", 18)
 	footer.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_child(footer)
 
 	ai_tuning_auto_learning_button = Button.new()
 	ai_tuning_auto_learning_button.text = "自动学习：开"
-	_apply_top_bar_button_style(ai_tuning_auto_learning_button, Color(0.13, 0.28, 0.22, 0.96), Color(0.74, 0.64, 0.36, 0.66), IVORY_SOFT, 18, false)
-	ai_tuning_auto_learning_button.custom_minimum_size = Vector2(152, 46)
+	ai_tuning_auto_learning_button.add_theme_stylebox_override("normal", _build_settlement_utility_button_style())
+	ai_tuning_auto_learning_button.add_theme_stylebox_override("hover", _build_settlement_utility_button_hover_style())
+	ai_tuning_auto_learning_button.add_theme_stylebox_override("pressed", _build_settlement_utility_button_pressed_style())
+	ai_tuning_auto_learning_button.add_theme_stylebox_override("focus", _build_settlement_utility_button_hover_style())
+	ai_tuning_auto_learning_button.add_theme_font_size_override("font_size", 24)
+	ai_tuning_auto_learning_button.add_theme_color_override("font_color", IVORY_SOFT)
+	ai_tuning_auto_learning_button.custom_minimum_size = Vector2(240, 64)
 	ai_tuning_auto_learning_button.pressed.connect(_on_ai_tuning_auto_learning_pressed)
+	_register_ai_tuning_click_action(ai_tuning_auto_learning_button, Callable(self, "_on_ai_tuning_auto_learning_pressed"))
 	footer.add_child(ai_tuning_auto_learning_button)
 
 	ai_tuning_endgame_defense_button = Button.new()
 	ai_tuning_endgame_defense_button.text = "尾盘绝对防炮：开"
-	_apply_top_bar_button_style(ai_tuning_endgame_defense_button, Color(0.13, 0.28, 0.22, 0.96), Color(0.74, 0.64, 0.36, 0.66), IVORY_SOFT, 18, false)
-	ai_tuning_endgame_defense_button.custom_minimum_size = Vector2(184, 46)
+	ai_tuning_endgame_defense_button.add_theme_stylebox_override("normal", _build_settlement_utility_button_style())
+	ai_tuning_endgame_defense_button.add_theme_stylebox_override("hover", _build_settlement_utility_button_hover_style())
+	ai_tuning_endgame_defense_button.add_theme_stylebox_override("pressed", _build_settlement_utility_button_pressed_style())
+	ai_tuning_endgame_defense_button.add_theme_stylebox_override("focus", _build_settlement_utility_button_hover_style())
+	ai_tuning_endgame_defense_button.add_theme_font_size_override("font_size", 24)
+	ai_tuning_endgame_defense_button.add_theme_color_override("font_color", IVORY_SOFT)
+	ai_tuning_endgame_defense_button.custom_minimum_size = Vector2(300, 64)
 	ai_tuning_endgame_defense_button.pressed.connect(_on_ai_tuning_endgame_defense_pressed)
+	_register_ai_tuning_click_action(ai_tuning_endgame_defense_button, Callable(self, "_on_ai_tuning_endgame_defense_pressed"))
 	footer.add_child(ai_tuning_endgame_defense_button)
 
 	var reset_button := Button.new()
 	reset_button.text = "恢复默认微调"
-	_apply_top_bar_button_style(reset_button, Color(0.28, 0.20, 0.15, 0.96), Color(0.74, 0.58, 0.34, 0.66), IVORY_SOFT, 18, false)
-	reset_button.custom_minimum_size = Vector2(172, 46)
+	reset_button.add_theme_stylebox_override("normal", _build_settlement_utility_button_style())
+	reset_button.add_theme_stylebox_override("hover", _build_settlement_utility_button_hover_style())
+	reset_button.add_theme_stylebox_override("pressed", _build_settlement_utility_button_pressed_style())
+	reset_button.add_theme_stylebox_override("focus", _build_settlement_utility_button_hover_style())
+	reset_button.add_theme_font_size_override("font_size", 24)
+	reset_button.add_theme_color_override("font_color", IVORY_SOFT)
+	reset_button.custom_minimum_size = Vector2(264, 64)
 	reset_button.pressed.connect(_on_ai_tuning_reset_pressed)
+	_register_ai_tuning_click_action(reset_button, Callable(self, "_on_ai_tuning_reset_pressed"))
 	footer.add_child(reset_button)
 
 	var bone_button := Button.new()
 	bone_button.text = "一键套用内江骨灰"
-	_apply_top_bar_button_style(bone_button, Color(0.48, 0.34, 0.16, 0.98), Color(0.96, 0.82, 0.52, 0.86), IVORY_SOFT, 18, true)
-	bone_button.custom_minimum_size = Vector2(172, 46)
+	bone_button.add_theme_stylebox_override("normal", _build_settlement_primary_button_style())
+	bone_button.add_theme_stylebox_override("hover", _build_settlement_primary_button_hover_style())
+	bone_button.add_theme_stylebox_override("pressed", _build_settlement_primary_button_pressed_style())
+	bone_button.add_theme_stylebox_override("focus", _build_settlement_primary_button_hover_style())
+	bone_button.add_theme_font_size_override("font_size", 24)
+	bone_button.add_theme_color_override("font_color", Color(0.19, 0.16, 0.10, 1.0))
+	bone_button.custom_minimum_size = Vector2(286, 64)
 	bone_button.pressed.connect(_on_ai_tuning_bone_recommended_pressed)
+	_register_ai_tuning_click_action(bone_button, Callable(self, "_on_ai_tuning_bone_recommended_pressed"))
 	footer.add_child(bone_button)
 
 
@@ -6183,6 +6417,7 @@ func _refresh_ai_tuning_panel(snapshot: Dictionary) -> void:
 		"\n".join(live_readout_lines),
 	])
 	ai_tuning_status_label.text = "当前预设：%s。面板中的默认值已切换为内江麻将权重，改动会即时同步到电脑 AI 与辅助建议。" % str(AI_PRESET_LABELS.get(preset_name, "骨灰"))
+	ai_tuning_learning_label.scroll_to_line(0)
 
 
 func _build_ai_live_readout_lines(snapshot: Dictionary, latest_turn_snapshot: Dictionary) -> Array[String]:
@@ -6430,15 +6665,36 @@ func _center_ai_tuning_panel() -> void:
 	ai_tuning_panel.size = panel_size
 	ai_tuning_panel.position = (ai_tuning_overlay.size - panel_size) * 0.5
 	_clamp_ai_tuning_panel_position()
+	call_deferred("_configure_ai_tuning_learning_scrollbar")
 
 
 func _resolve_ai_tuning_panel_size() -> Vector2:
 	if ai_tuning_overlay == null or ai_tuning_overlay.size == Vector2.ZERO:
-		return ai_tuning_panel.custom_minimum_size if ai_tuning_panel != null else Vector2(1040, 860)
-	return Vector2(
-		minf(1040.0, maxf(760.0, ai_tuning_overlay.size.x - 36.0)),
-		minf(860.0, maxf(700.0, ai_tuning_overlay.size.y - 36.0))
+		return ai_tuning_panel.custom_minimum_size if ai_tuning_panel != null else Vector2(1940, 1210)
+	var viewport_size := ai_tuning_overlay.size
+	var target_size := Vector2(
+		maxf(1440.0, viewport_size.x * 0.994),
+		maxf(980.0, viewport_size.y * 0.988)
 	)
+	return Vector2(
+		minf(2040.0, minf(viewport_size.x - 2.0, target_size.x)),
+		minf(1240.0, minf(viewport_size.y - 2.0, target_size.y))
+	)
+
+
+func _configure_ai_tuning_learning_scrollbar() -> void:
+	if ai_tuning_learning_label == null or not is_instance_valid(ai_tuning_learning_label):
+		return
+	if not ai_tuning_learning_label.has_method("get_v_scroll_bar"):
+		return
+	var scroll_bar := ai_tuning_learning_label.get_v_scroll_bar()
+	if scroll_bar == null:
+		return
+	scroll_bar.custom_minimum_size = Vector2(28.0, 0.0)
+	scroll_bar.size_flags_horizontal = Control.SIZE_SHRINK_END
+	scroll_bar.mouse_filter = Control.MOUSE_FILTER_STOP
+
+
 
 
 func _clamp_ai_tuning_panel_position() -> void:
@@ -6454,20 +6710,20 @@ func _clamp_ai_tuning_panel_position() -> void:
 
 func _apply_action_panel_visual_style() -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.06, 0.22, 0.17, 0.38)
-	style.border_color = Color(0.88, 1.0, 0.82, 0.14)
+	style.bg_color = Color(0.03, 0.10, 0.08, 0.70)
+	style.border_color = Color8(214, 177, 57, 255)
 	style.set_border_width_all(1)
 	style.corner_radius_top_left = 28
 	style.corner_radius_top_right = 28
 	style.corner_radius_bottom_left = 28
 	style.corner_radius_bottom_right = 28
-	style.content_margin_left = 10
-	style.content_margin_right = 10
-	style.content_margin_top = 8
-	style.content_margin_bottom = 10
-	style.shadow_color = Color(0.00, 0.08, 0.05, 0.18)
-	style.shadow_size = 11
-	style.shadow_offset = Vector2(0, 4)
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 12
+	style.content_margin_bottom = 14
+	style.shadow_color = Color(0.00, 0.00, 0.00, 0.22)
+	style.shadow_size = 16
+	style.shadow_offset = Vector2(0, 6)
 	style.anti_aliasing = true
 	style.anti_aliasing_size = 1.4
 	action_panel.add_theme_stylebox_override("panel", style)
@@ -6476,39 +6732,39 @@ func _apply_action_panel_visual_style() -> void:
 
 func _apply_action_button_style(button: Button, bg: Color, border: Color, font_size: int, emphasized: bool = false) -> void:
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = bg.lightened(0.05)
-	normal.border_color = border.lightened(0.10)
-	normal.set_border_width_all(3 if emphasized else 2)
+	normal.bg_color = Color(0.03, 0.10, 0.08, 0.70)
+	normal.border_color = Color8(214, 177, 57, 255)
+	normal.set_border_width_all(1)
 	normal.corner_radius_top_left = 30
 	normal.corner_radius_top_right = 30
 	normal.corner_radius_bottom_left = 30
 	normal.corner_radius_bottom_right = 30
-	normal.content_margin_left = 10
-	normal.content_margin_right = 10
-	normal.content_margin_top = 8
-	normal.content_margin_bottom = 8
-	normal.shadow_color = Color(0.00, 0.08, 0.05, 0.34 if emphasized else 0.26)
-	normal.shadow_size = 15 if emphasized else 11
+	normal.content_margin_left = 18
+	normal.content_margin_right = 18
+	normal.content_margin_top = 12
+	normal.content_margin_bottom = 12
+	normal.shadow_color = Color(0.00, 0.00, 0.00, 0.24)
+	normal.shadow_size = 14 if emphasized else 12
 	normal.shadow_offset = Vector2(0, 5)
 	normal.anti_aliasing = true
 	normal.anti_aliasing_size = 1.4
 
 	var hover := normal.duplicate()
-	hover.bg_color = bg.lightened(0.14)
-	hover.border_color = Color(1.0, 0.94, 0.68, 0.74)
-	hover.shadow_size = 18 if emphasized else 14
+	hover.bg_color = Color(0.05, 0.14, 0.11, 0.76)
+	hover.border_color = Color(0.98, 0.90, 0.62, 1.0)
+	hover.shadow_size = 18 if emphasized else 15
 
 	var pressed := normal.duplicate()
-	pressed.bg_color = bg.darkened(0.08)
-	pressed.border_color = border.darkened(0.08)
+	pressed.bg_color = Color(0.02, 0.08, 0.06, 0.78)
+	pressed.border_color = Color(0.84, 0.70, 0.24, 1.0)
 	pressed.shadow_size = 5
 	pressed.shadow_offset = Vector2(0, 1)
 	pressed.content_margin_top = 11
 	pressed.content_margin_bottom = 5
 
 	var disabled := normal.duplicate()
-	disabled.bg_color = Color(bg.r, bg.g, bg.b, 0.34).lightened(0.05)
-	disabled.border_color = Color(border.r, border.g, border.b, 0.22)
+	disabled.bg_color = Color(0.03, 0.10, 0.08, 0.34)
+	disabled.border_color = Color(0.84, 0.74, 0.34, 0.30)
 	disabled.shadow_color = Color(0.00, 0.08, 0.05, 0.12)
 	disabled.shadow_size = 4
 	disabled.shadow_offset = Vector2(0, 1)
@@ -6518,16 +6774,15 @@ func _apply_action_button_style(button: Button, bg: Color, border: Color, font_s
 	button.add_theme_stylebox_override("pressed", pressed)
 	button.add_theme_stylebox_override("focus", hover)
 	button.add_theme_stylebox_override("disabled", disabled)
-	button.add_theme_font_size_override("font_size", font_size)
+	button.add_theme_font_size_override("font_size", maxi(font_size, 42))
 	button.add_theme_color_override("font_color", Color(1.0, 0.96, 0.86, 1.0))
 	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.90, 1.0))
 	button.add_theme_color_override("font_pressed_color", Color(0.96, 0.90, 0.76, 1.0))
 	button.add_theme_color_override("font_disabled_color", Color(0.86, 0.82, 0.70, 0.48))
 	button.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.03, 0.92))
 	button.add_theme_color_override("font_disabled_outline_color", Color(0.08, 0.05, 0.03, 0.42))
-	button.add_theme_constant_override("outline_size", 2 if emphasized else 1)
-	if button.custom_minimum_size == Vector2.ZERO:
-		button.custom_minimum_size = Vector2(86, 86)
+	button.add_theme_constant_override("outline_size", 3 if emphasized else 2)
+	button.custom_minimum_size = Vector2(236, 132) if emphasized else Vector2(214, 122)
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_ensure_button_gloss_overlay(button, 0.70 if emphasized else 0.58)
 

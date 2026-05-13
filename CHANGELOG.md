@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.25 - 2026-05-13
+
+- Set this snapshot as the new stable development base after the `1.0.24` baseline.
+- Refined the main table presentation, including a larger center wall-count disc, no desktop frame line, and a simplified right-side control stack with a top-right exit button.
+- Fixed Neijiang Mahjong flow priorities so opening bao-jiao decisions block automatic dealer discard until resolved.
+- Fixed self-hu and settlement UI details so self-hu no longer shows discard guidance and Neijiang settlement no longer displays stale missing-suit text.
+- Updated Android package metadata and export scripts so generated APK filenames include the version number.
+
 ## 1.0.4 - 2026-05-10
 
 - Replaced the self-hu source text label with the same arrow-style claim marker used elsewhere.

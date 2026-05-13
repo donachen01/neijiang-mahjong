@@ -532,6 +532,8 @@ func can_human_discard(seat: int) -> bool:
 func is_ai_turn_ready() -> bool:
 	if current_phase != RoundPhase.DISCARD:
 		return false
+	if opening_bao_jiao_pending:
+		return false
 	if current_turn_seat < 0 or current_turn_seat >= players.size():
 		return false
 	return players[current_turn_seat]["is_ai"] and not players[current_turn_seat]["has_won"]

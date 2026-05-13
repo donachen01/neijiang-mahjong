@@ -19,8 +19,14 @@ export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 export PATH="$DOTNET_ROOT:$DOTNET_ROOT/sdk:$JAVA_HOME/bin:/opt/homebrew/opt/dotnet@9/bin:/opt/homebrew/bin:/Users/chendong/Library/Android/sdk/platform-tools:$PATH"
 export GODOT_ANDROID_EXPORT_MODE=release
-export GODOT_ANDROID_OUTPUT="/Users/chendong/Documents/内江麻将工程_20260502_103823_v2/build/android/NeijiangMahjong-release-base.apk"
 PROJECT_DIR="/Users/chendong/Documents/内江麻将工程_20260502_103823_v2"
+APP_VERSION="$(sed -n 's/^config\/version="\([^"]*\)"/\1/p' "$PROJECT_DIR/project.godot" | head -n 1)"
+if [[ -z "$APP_VERSION" ]]; then
+  echo "Could not read application/config/version from project.godot"
+  exit 1
+fi
+RELEASE_BASENAME="NeijiangMahjong-${APP_VERSION}-release"
+export GODOT_ANDROID_OUTPUT="$PROJECT_DIR/build/android/${RELEASE_BASENAME}-base.apk"
 GODOT_BIN="${GODOT_BIN:-}"
 BUILD_TOOLS="/Users/chendong/Library/Android/sdk/build-tools/35.0.0"
 
@@ -60,10 +66,10 @@ echo "Using Godot: $("$GODOT_BIN" --version)"
   --path "$PROJECT_DIR" \
   --script "res://tools/export_android_direct.gd"
 
-FINAL_APK="$PROJECT_DIR/build/android/NeijiangMahjong-release-base.apk"
-PRUNED_APK="$PROJECT_DIR/build/android/NeijiangMahjong-release-pruned.apk"
-ALIGNED_APK="$PROJECT_DIR/build/android/NeijiangMahjong-release-aligned.apk"
-SIGNED_APK="$PROJECT_DIR/build/android/NeijiangMahjong-release.apk"
+FINAL_APK="$PROJECT_DIR/build/android/${RELEASE_BASENAME}-base.apk"
+PRUNED_APK="$PROJECT_DIR/build/android/${RELEASE_BASENAME}-pruned.apk"
+ALIGNED_APK="$PROJECT_DIR/build/android/${RELEASE_BASENAME}-aligned.apk"
+SIGNED_APK="$PROJECT_DIR/build/android/${RELEASE_BASENAME}.apk"
 
 cp "$FINAL_APK" "$PRUNED_APK"
 zip -q -d "$PRUNED_APK" 'assets/docs/*' 'assets/.godot/imported/main_scene_v1_0*' 'assets/.godot/imported/table_main_3d_cartoon*' 'assets/.godot/imported/table_refined_v17*' 'assets/.godot/imported/target_layout_zone*' 'assets/.godot/imported/tile_symbols_v1*' 'assets/.godot/imported/v17_final_template*' 'assets/.godot/imported/tile_face_options*' 'assets/.godot/imported/tile_face_f_rounded_variants*' 'assets/.godot/imported/tile_back_options*' 'assets/.godot/imported/table_3d_luxury_scheme*' 'assets/.godot/imported/table_scheme_b_v3*' 2>/dev/null || true
@@ -76,4 +82,4 @@ zip -q -d "$PRUNED_APK" 'assets/docs/*' 'assets/.godot/imported/main_scene_v1_0*
   --out "$SIGNED_APK" \
   "$ALIGNED_APK"
 "$BUILD_TOOLS/apksigner" verify "$SIGNED_APK"
-echo "Release APK: $PROJECT_DIR/build/android/NeijiangMahjong-release.apk"
+echo "Release APK: $SIGNED_APK"

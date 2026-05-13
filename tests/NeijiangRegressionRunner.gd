@@ -13,6 +13,7 @@ func _ready() -> void:
 	_run_test("neijiang_csharp_reaction_emits_posterior_future_summary", _test_neijiang_csharp_reaction_emits_posterior_future_summary, failures)
 	_run_test("neijiang_csharp_reaction_prefers_shape_accelerating_peng", _test_neijiang_csharp_reaction_prefers_shape_accelerating_peng, failures)
 	_run_test("neijiang_csharp_reaction_prefers_melded_gang_when_qidui_not_viable", _test_neijiang_csharp_reaction_prefers_melded_gang_when_qidui_not_viable, failures)
+	_run_test("neijiang_csharp_reaction_rejects_peng_that_re_discards_same_tile", _test_neijiang_csharp_reaction_rejects_peng_that_re_discards_same_tile, failures)
 	_run_test("neijiang_csharp_reaction_search_marks_close_choices", _test_neijiang_csharp_reaction_search_marks_close_choices, failures)
 	_run_test("neijiang_csharp_self_action_cli_covers_self_hu_and_gang", _test_neijiang_csharp_self_action_cli_covers_self_hu_and_gang, failures)
 	_run_test("neijiang_reaction_review_log_records_reasoning", _test_neijiang_reaction_review_log_records_reasoning, failures)
@@ -425,6 +426,56 @@ func _test_neijiang_csharp_reaction_prefers_melded_gang_when_qidui_not_viable():
 	return true
 
 
+func _test_neijiang_csharp_reaction_rejects_peng_that_re_discards_same_tile():
+	var game_state = _build_neijiang_test_game_state()
+	if not bool(game_state.set_ai_prefer_csharp_backend(true)):
+		return "expected csharp backend to be available"
+	var player := _make_player_neijiang(1, [
+		_make_tile(9101, "tiao", 9), _make_tile(9102, "tiao", 9), _make_tile(9103, "tiao", 9),
+		_make_tile(9104, "tiao", 1), _make_tile(9105, "tiao", 2), _make_tile(9106, "tiao", 3),
+		_make_tile(9107, "tong", 2), _make_tile(9108, "tong", 3), _make_tile(9109, "tong", 4),
+		_make_tile(9110, "tong", 5), _make_tile(9111, "tong", 6), _make_tile(9112, "tong", 7),
+		_make_tile(9113, "tong", 8),
+	])
+	var seat0 := _make_player_neijiang(0, [])
+	seat0["discards"] = [_make_tile(9114, "tong", 1), _make_tile(9115, "tong", 9)]
+	var seat2 := _make_player_neijiang(2, [])
+	seat2["discards"] = [_make_tile(9116, "tiao", 4), _make_tile(9117, "tong", 8)]
+	var seat3 := _make_player_neijiang(3, [])
+	seat3["discards"] = [_make_tile(9118, "tong", 2), _make_tile(9119, "tiao", 5)]
+	_set_test_players(game_state, [seat0, player, seat2, seat3])
+	game_state.wall_count = 22
+	var analysis: Dictionary = game_state.ai_manager.analyze_reaction(
+		{
+			"seat": 1,
+			"can_hu": false,
+			"can_gang": true,
+			"can_peng": true,
+			"source_seat": 0,
+		},
+		game_state._build_player_state(1),
+		game_state._build_table_state(),
+		{
+			"source_seat": 0,
+			"tile": _make_tile(9120, "tiao", 9),
+			"reaction_type": "discard",
+		},
+		game_state.rules,
+		game_state.ai_tuning_config,
+		game_state.hu_checker,
+		false
+	)
+	if str(analysis.get("backend_mode", "")) != "hybrid_csharp":
+		return "expected csharp reaction backend, got %s" % [analysis.get("backend_mode", "")]
+	if str(analysis.get("action", "")) != "gang":
+		return "expected 9条 discard claim to avoid peng-then-rediscard loop and choose gang, got %s" % [analysis]
+	var peng_score := int(analysis.get("action_scores", {}).get("peng", 0))
+	var gang_score := int(analysis.get("action_scores", {}).get("gang", 0))
+	if gang_score <= peng_score:
+		return "expected gang score to beat same-tile rediscarding peng, got gang=%d peng=%d in %s" % [gang_score, peng_score, analysis]
+	return true
+
+
 func _test_neijiang_csharp_reaction_search_marks_close_choices():
 	var game_state = _build_neijiang_test_game_state()
 	if not bool(game_state.set_ai_prefer_csharp_backend(true)):
@@ -801,10 +852,16 @@ func _test_neijiang_opening_bao_jiao_window_blocks_dealer_first_discard():
 		return "expected human pass button to be available during opening window"
 	if game_state.pending_ai_turn_request_id != 0:
 		return "expected dealer AI discard request to wait until opening bao jiao window is done"
+	if bool(game_state.is_ai_turn_ready()):
+		return "expected dealer AI turn readiness to wait until opening bao jiao window is done"
+	if bool(game_state.prepare_ai_turn_decision()):
+		return "expected dealer AI analysis preparation to wait until opening bao jiao window is done"
 	if not bool(game_state.pass_human_opening_bao_jiao(0)):
 		return "expected human to pass opening bao jiao window"
 	if bool(game_state.opening_bao_jiao_pending):
 		return "expected opening bao jiao window to finish after pass"
+	if not bool(game_state.is_ai_turn_ready()):
+		return "expected dealer AI turn readiness to resume after opening bao jiao window"
 	if int(game_state.pending_ai_turn_request_id) == 0:
 		return "expected dealer AI discard request to start after opening window"
 	return true
