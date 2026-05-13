@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.25`
+Current app version: `1.0.26`
 
-`1.0.25` is the new stable development base built from the `1.0.24` baseline.
+`1.0.26` continues from the `1.0.25` stable development base.
 
 ## Versioning Workflow
 

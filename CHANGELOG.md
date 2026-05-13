@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.26 - 2026-05-13
+
+- Restyled the main action buttons into large circular mahjong controls with primary yellow-orange and secondary green variants.
+- Restored selected-hand AI explanation details so the discard helper shows C# candidate comparisons, posterior reasons, risk reasons, and expected-score deltas.
+- Enlarged the AI discard helper into a wider phone-readable prompt with larger outlined text.
+- Added UI regression coverage for circular action buttons and C# candidate detail display in the helper panel.
+
 ## 1.0.25 - 2026-05-13
 
 - Set this snapshot as the new stable development base after the `1.0.24` baseline.

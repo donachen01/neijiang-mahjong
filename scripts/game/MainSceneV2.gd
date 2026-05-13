@@ -6,6 +6,7 @@ const TILE_SCENE := preload("res://scenes/ui/MahjongTile.tscn")
 const DICE_FACE_SCRIPT := preload("res://scripts/ui/DiceFace.gd")
 const WALL_COUNT_DISC_SCRIPT := preload("res://scripts/ui/WallCountDisc.gd")
 const TABLE_MATERIAL_OVERLAY_SCRIPT := preload("res://scripts/ui/TableMaterialOverlay.gd")
+const CIRCULAR_ACTION_BUTTON_OVERLAY_SCRIPT := preload("res://scripts/ui/CircularActionButtonOverlay.gd")
 const AUDIO_SFX_DIR := "res://res/audio/sfx"
 const AUDIO_TTS_DIR := "res://res/audio/tts"
 const DICE_ROLL_AUDIO_PATH := "res://res/audio/sfx/mahjong_dice_roll.wav"
@@ -77,6 +78,20 @@ const WOOD_MID := Color("98603A")
 const WOOD_EDGE := Color("D49A57")
 const GOLD_SOFT := Color("F0C56D")
 const IVORY_SOFT := Color("FFF6E3")
+const ACTION_PRIMARY_CENTER := Color("FFF176")
+const ACTION_PRIMARY_EDGE := Color("FF8F00")
+const ACTION_PRIMARY_OUTLINE := Color("FFD54F")
+const ACTION_SECONDARY_CENTER := Color("A5D6A7")
+const ACTION_SECONDARY_EDGE := Color("2E7D32")
+const ACTION_SECONDARY_OUTLINE := Color("66BB6A")
+const ACTION_BUTTON_TEXT := Color(1.0, 1.0, 1.0, 1.0)
+const ACTION_BUTTON_TEXT_DISABLED := Color(1.0, 1.0, 1.0, 0.44)
+const ACTION_BUTTON_GRID_GAP := 24
+const ACTION_PANEL_PADDING := 6
+const ACTION_PRIMARY_SIZE := Vector2(236.0, 236.0)
+const ACTION_SECONDARY_SIZE := Vector2(204.0, 204.0)
+const ACTION_PRIMARY_FONT_SIZE := 172
+const ACTION_SECONDARY_FONT_SIZE := 148
 const AI_PRESET_ORDER := ["intermediate", "bone_ash", "hell"]
 const AI_PRESET_LABELS := {
 	"intermediate": "中级",
@@ -1256,24 +1271,24 @@ func _setup_discard_helper_panel() -> void:
 		return
 	discard_helper_panel = Panel.new()
 	discard_helper_panel.name = "DiscardHelperPanel"
-	discard_helper_panel.custom_minimum_size = Vector2(940, 160)
+	discard_helper_panel.custom_minimum_size = Vector2(1320, 190)
 	discard_helper_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	discard_helper_panel.z_index = 160
 	discard_helper_panel.top_level = true
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 20)
-	margin.add_theme_constant_override("margin_top", 16)
-	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_bottom", 16)
+	margin.add_theme_constant_override("margin_left", 34)
+	margin.add_theme_constant_override("margin_top", 20)
+	margin.add_theme_constant_override("margin_right", 34)
+	margin.add_theme_constant_override("margin_bottom", 20)
 	discard_helper_panel.add_child(margin)
 
 	var box := VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 4)
+	box.add_theme_constant_override("separation", 8)
 	margin.add_child(box)
 
 	var header := HBoxContainer.new()
@@ -1330,34 +1345,34 @@ func _apply_discard_helper_style() -> void:
 	if discard_helper_panel == null:
 		return
 	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.08, 0.30, 0.23, 0.54)
+	panel_style.bg_color = Color(0.06, 0.25, 0.20, 0.62)
 	panel_style.border_color = Color(0.82, 0.95, 0.74, 0.0)
 	panel_style.set_border_width_all(0)
-	panel_style.corner_radius_top_left = 14
-	panel_style.corner_radius_top_right = 14
-	panel_style.corner_radius_bottom_left = 14
-	panel_style.corner_radius_bottom_right = 14
-	panel_style.content_margin_left = 8
-	panel_style.content_margin_right = 8
-	panel_style.content_margin_top = 6
-	panel_style.content_margin_bottom = 6
-	panel_style.shadow_color = Color(0.0, 0.0, 0.0, 0.20)
-	panel_style.shadow_size = 8
-	panel_style.shadow_offset = Vector2(0, 4)
+	panel_style.corner_radius_top_left = 18
+	panel_style.corner_radius_top_right = 18
+	panel_style.corner_radius_bottom_left = 18
+	panel_style.corner_radius_bottom_right = 18
+	panel_style.content_margin_left = 10
+	panel_style.content_margin_right = 10
+	panel_style.content_margin_top = 8
+	panel_style.content_margin_bottom = 8
+	panel_style.shadow_color = Color(0.0, 0.0, 0.0, 0.26)
+	panel_style.shadow_size = 12
+	panel_style.shadow_offset = Vector2(0, 5)
 	discard_helper_panel.add_theme_stylebox_override("panel", panel_style)
 	discard_helper_title.visible = false
 	discard_helper_title.add_theme_font_size_override("font_size", 1)
 	discard_helper_title.add_theme_color_override("font_color", Color(0.96, 0.86, 0.62, 0.98))
 	discard_helper_title.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.02, 0.90))
 	discard_helper_title.add_theme_constant_override("outline_size", 0)
-	discard_helper_summary.add_theme_font_size_override("font_size", 36)
+	discard_helper_summary.add_theme_font_size_override("font_size", 48)
 	discard_helper_summary.add_theme_color_override("font_color", IVORY_SOFT)
 	discard_helper_summary.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.92))
-	discard_helper_summary.add_theme_constant_override("outline_size", 4)
-	discard_helper_compare.add_theme_font_size_override("font_size", 24)
-	discard_helper_compare.add_theme_color_override("font_color", Color(0.90, 0.96, 0.82, 0.98))
+	discard_helper_summary.add_theme_constant_override("outline_size", 5)
+	discard_helper_compare.add_theme_font_size_override("font_size", 34)
+	discard_helper_compare.add_theme_color_override("font_color", Color(0.94, 0.99, 0.86, 0.99))
 	discard_helper_compare.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.88))
-	discard_helper_compare.add_theme_constant_override("outline_size", 2)
+	discard_helper_compare.add_theme_constant_override("outline_size", 3)
 	discard_helper_options.add_theme_font_size_override("font_size", 1)
 	discard_helper_options.add_theme_color_override("font_color", Color(0.79, 0.84, 0.81, 0.92))
 	discard_helper_options.add_theme_color_override("font_outline_color", Color(0.04, 0.03, 0.02, 0.82))
@@ -1565,6 +1580,26 @@ func _ensure_button_gloss_overlay(button: Button, overlay_opacity: float = 0.80)
 	if button == null:
 		return
 	_ensure_material_overlay(button, "ButtonGlossLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.BUTTON_GLOSS, overlay_opacity)
+
+
+func _ensure_circular_action_button_overlay(button: Button, overlay_name: String, primary: bool) -> void:
+	if button == null:
+		return
+	var overlay := button.get_node_or_null(overlay_name) as Control
+	if overlay == null:
+		overlay = CIRCULAR_ACTION_BUTTON_OVERLAY_SCRIPT.new()
+		overlay.name = overlay_name
+		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+		overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		button.add_child(overlay)
+	overlay.set("primary", primary)
+	overlay.set("label_text", button.text)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.offset_left = 0.0
+	overlay.offset_top = 0.0
+	overlay.offset_right = 0.0
+	overlay.offset_bottom = 0.0
+	overlay.move_to_front()
 
 
 func _remove_material_overlay(parent: Control, overlay_name: String) -> void:
@@ -3085,7 +3120,7 @@ func _update_discard_helper_panel(snapshot: Dictionary, trainer_hint: Dictionary
 		discard_helper_summary.text = "%s → 打 %s" % [display_tile_name, recommended_tile_name]
 	discard_helper_action_button.visible = false
 	discard_helper_action_button.disabled = true
-	var reason_text := _build_helper_explanation_text(trainer_hint, recommended)
+	var reason_text := _build_helper_selected_option_reason(selected_option, recommended) if not selected_option.is_empty() and int(selected_option.get("tile", {}).get("id", -1)) != recommended_tile_id else _build_helper_explanation_text(trainer_hint, recommended)
 	discard_helper_compare.text = reason_text
 	discard_helper_compare.visible = not reason_text.is_empty()
 	discard_helper_options.text = ""
@@ -3108,9 +3143,6 @@ func _position_discard_helper_panel() -> void:
 	var x := clampf(board_rect.get_center().x - panel_width * 0.5, min_x, max_x)
 	var y := maxf(18.0, hand_rect.position.y - panel_height - 20.0)
 	if action_rect.size.x > 1.0:
-		var max_left_of_action := action_rect.position.x - panel_width - 18.0
-		if x > max_left_of_action and max_left_of_action >= 18.0:
-			x = max_left_of_action
 		if Rect2(Vector2(x, y), Vector2(panel_width, panel_height)).intersects(action_rect, true):
 			y = maxf(18.0, minf(y, action_rect.position.y - panel_height - 18.0))
 	if self_hand_host != null:
@@ -3253,21 +3285,38 @@ func _build_helper_explanation_text(trainer_hint: Dictionary, recommended: Dicti
 
 func _build_helper_selected_option_reason(selected_option: Dictionary, recommended: Dictionary) -> String:
 	var parts: Array[String] = []
+	var selected_name := str(selected_option.get("tile_name", "?"))
+	var recommended_name := str(recommended.get("tile_name", "?"))
+	parts.append("不建议打%s，推荐%s" % [selected_name, recommended_name])
 	var delta_shanten := int(selected_option.get("shanten", 8)) - int(recommended.get("shanten", 8))
 	var delta_live := int(selected_option.get("live_ukeire", 0)) - int(recommended.get("live_ukeire", 0))
 	var delta_risk := int(selected_option.get("risk", 0)) - int(recommended.get("risk", 0))
+	var delta_net := float(recommended.get("expected_net_score", recommended.get("csharp_expected_net_score", 0.0))) - float(selected_option.get("expected_net_score", selected_option.get("csharp_expected_net_score", 0.0)))
+	var selected_win_gain := float(selected_option.get("expected_win_gain", selected_option.get("csharp_expected_win_gain", 0.0)))
+	var selected_deal_loss := float(selected_option.get("expected_deal_in_loss", selected_option.get("csharp_expected_deal_in_loss", 0.0)))
+	var selected_risk_label := str(selected_option.get("risk_label", selected_option.get("csharp_risk_label", "")))
 	if delta_shanten > 0:
 		parts.append("向听更慢%d" % delta_shanten)
 	if delta_live < 0:
 		parts.append("活进张少%d" % abs(delta_live))
 	if delta_risk > 0:
 		parts.append("风险高%d" % delta_risk)
+	if delta_net > 0.01:
+		parts.append("净分低%.2f" % delta_net)
+	if selected_win_gain > 0.0 or selected_deal_loss > 0.0:
+		parts.append("选中项收益%.2f/损失%.2f" % [selected_win_gain, selected_deal_loss])
+	if not selected_risk_label.is_empty():
+		parts.append("风险%s" % selected_risk_label)
+	var csharp_reasons: Array = selected_option.get("reasons", selected_option.get("csharp_reasons", []))
+	if not csharp_reasons.is_empty():
+		parts.append(str(csharp_reasons[0]))
 	var posterior_reasons: Array = selected_option.get("posterior_reasons", selected_option.get("csharp_posterior_reasons", []))
 	if not posterior_reasons.is_empty() and str(posterior_reasons[0]) != "后验未明显压分":
 		parts.append(str(posterior_reasons[0]))
-	if parts.is_empty():
-		return "综合收益略低"
-	return "｜".join(parts.slice(0, 3))
+	var risk_reasons: Array = selected_option.get("risk_reasons", selected_option.get("csharp_risk_reasons", []))
+	if not risk_reasons.is_empty():
+		parts.append(str(risk_reasons[0]))
+	return "｜".join(parts.slice(0, 8))
 
 
 func _has_qing_route(routes: Array) -> bool:
@@ -3398,6 +3447,7 @@ func _refresh_action_panel(snapshot: Dictionary) -> void:
 	hu_button.text = "自摸" if can_self_hu and not bool(reaction_options.get("can_hu", false)) else "胡"
 	peng_button.text = "碰"
 	_apply_action_button_styles()
+	_sync_action_button_overlay_labels()
 	var visible_buttons: Array[Button] = []
 	for button in [hu_button, gang_button, an_gang_button, peng_button, bao_jiao_button, pass_button]:
 		if button.visible:
@@ -3409,8 +3459,20 @@ func _refresh_action_panel(snapshot: Dictionary) -> void:
 	for button in visible_buttons:
 		total_width += button.custom_minimum_size.x
 		max_height = maxf(max_height, button.custom_minimum_size.y)
-	total_width += 14.0 * maxi(0, visible_button_count - 1)
-	action_panel.custom_minimum_size = Vector2(maxf(total_width + 28.0, 260.0), maxf(max_height + 18.0, 104.0))
+	total_width += float(ACTION_BUTTON_GRID_GAP) * maxi(0, visible_button_count - 1)
+	action_panel.custom_minimum_size = Vector2(
+		maxf(total_width + float(ACTION_PANEL_PADDING * 2), 260.0),
+		maxf(max_height + float(ACTION_PANEL_PADDING * 2), 112.0)
+	)
+
+
+func _sync_action_button_overlay_labels() -> void:
+	for button in [hu_button, gang_button, an_gang_button, peng_button, bao_jiao_button, pass_button]:
+		if button == null:
+			continue
+		var overlay: Node = button.get_node_or_null("CircularActionButtonOverlay")
+		if overlay != null:
+			overlay.set("label_text", button.text)
 
 
 func _build_action_panel_status_text(
@@ -5820,31 +5882,31 @@ func _refund_payers_display(payer_seats: Array) -> String:
 
 func _apply_action_button_styles() -> void:
 	_apply_action_panel_visual_style()
-	action_buttons.add_theme_constant_override("h_separation", 18)
-	action_buttons.add_theme_constant_override("v_separation", 14)
+	action_buttons.add_theme_constant_override("h_separation", ACTION_BUTTON_GRID_GAP)
+	action_buttons.add_theme_constant_override("v_separation", ACTION_BUTTON_GRID_GAP)
 	action_status_label.add_theme_color_override("font_color", IVORY_SOFT)
-	action_status_label.add_theme_color_override("font_outline_color", Color(0.08, 0.06, 0.04, 0.92))
+	action_status_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.90))
 	action_status_label.add_theme_constant_override("outline_size", 1)
 	action_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	action_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	action_status_label.visible = false
 	action_status_label.custom_minimum_size = Vector2.ZERO
-	_apply_action_button_style(hu_button, Color(0.84, 0.26, 0.18, 0.99), Color(1.0, 0.88, 0.55, 0.96), 42, true)
-	_apply_action_button_style(gang_button, Color(0.16, 0.50, 0.36, 0.98), Color(0.93, 0.98, 0.78, 0.58), 40, false)
+	_apply_action_button_style(hu_button, true)
+	_apply_action_button_style(gang_button, true)
 	if an_gang_button != null:
-		_apply_action_button_style(an_gang_button, Color(0.10, 0.36, 0.28, 0.98), Color(0.86, 0.94, 0.72, 0.52), 38, false)
-	_apply_action_button_style(peng_button, Color(0.18, 0.56, 0.40, 0.98), Color(0.93, 0.98, 0.78, 0.58), 40, false)
-	_apply_action_button_style(pass_button, Color(0.25, 0.40, 0.34, 0.94), Color(0.90, 0.96, 0.82, 0.42), 38, false)
+		_apply_action_button_style(an_gang_button, true)
+	_apply_action_button_style(peng_button, false)
+	_apply_action_button_style(pass_button, false)
 	if bao_jiao_button != null:
-		_apply_action_button_style(bao_jiao_button, Color(0.24, 0.40, 0.63, 0.98), Color(0.82, 0.90, 1.0, 0.72), 38, true)
-	hu_button.custom_minimum_size = Vector2(236, 142)
-	gang_button.custom_minimum_size = Vector2(214, 128)
+		_apply_action_button_style(bao_jiao_button, false)
+	hu_button.custom_minimum_size = ACTION_PRIMARY_SIZE
+	gang_button.custom_minimum_size = ACTION_PRIMARY_SIZE
 	if an_gang_button != null:
-		an_gang_button.custom_minimum_size = Vector2(214, 128)
-	peng_button.custom_minimum_size = Vector2(214, 128)
-	pass_button.custom_minimum_size = Vector2(214, 128)
+		an_gang_button.custom_minimum_size = ACTION_PRIMARY_SIZE
+	peng_button.custom_minimum_size = ACTION_SECONDARY_SIZE
+	pass_button.custom_minimum_size = ACTION_SECONDARY_SIZE
 	if bao_jiao_button != null:
-		bao_jiao_button.custom_minimum_size = Vector2(214, 128)
+		bao_jiao_button.custom_minimum_size = ACTION_SECONDARY_SIZE
 
 
 func _apply_top_bar_button_group_styles() -> void:
@@ -6710,81 +6772,89 @@ func _clamp_ai_tuning_panel_position() -> void:
 
 func _apply_action_panel_visual_style() -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.03, 0.10, 0.08, 0.70)
-	style.border_color = Color8(214, 177, 57, 255)
-	style.set_border_width_all(1)
-	style.corner_radius_top_left = 28
-	style.corner_radius_top_right = 28
-	style.corner_radius_bottom_left = 28
-	style.corner_radius_bottom_right = 28
-	style.content_margin_left = 14
-	style.content_margin_right = 14
-	style.content_margin_top = 12
-	style.content_margin_bottom = 14
-	style.shadow_color = Color(0.00, 0.00, 0.00, 0.22)
-	style.shadow_size = 16
-	style.shadow_offset = Vector2(0, 6)
+	style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.set_border_width_all(0)
+	style.corner_radius_top_left = 0
+	style.corner_radius_top_right = 0
+	style.corner_radius_bottom_left = 0
+	style.corner_radius_bottom_right = 0
+	style.content_margin_left = ACTION_PANEL_PADDING
+	style.content_margin_right = ACTION_PANEL_PADDING
+	style.content_margin_top = ACTION_PANEL_PADDING
+	style.content_margin_bottom = ACTION_PANEL_PADDING
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.shadow_size = 0
+	style.shadow_offset = Vector2.ZERO
 	style.anti_aliasing = true
-	style.anti_aliasing_size = 1.4
+	style.anti_aliasing_size = 1.2
 	action_panel.add_theme_stylebox_override("panel", style)
-	_ensure_material_overlay(action_panel, "ActionPanelSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.52)
+	_remove_material_overlay(action_panel, "ActionPanelSoftLight")
+	_remove_material_overlay(action_panel, "ActionPanelCyberHud")
+	_remove_material_overlay(action_panel, "ActionPanelCrystalGlass")
 
 
-func _apply_action_button_style(button: Button, bg: Color, border: Color, font_size: int, emphasized: bool = false) -> void:
+func _apply_action_button_style(button: Button, primary: bool) -> void:
+	if button == null:
+		return
+	var center := ACTION_PRIMARY_CENTER if primary else ACTION_SECONDARY_CENTER
+	var edge := ACTION_PRIMARY_EDGE if primary else ACTION_SECONDARY_EDGE
+	var outline := ACTION_PRIMARY_OUTLINE if primary else ACTION_SECONDARY_OUTLINE
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.03, 0.10, 0.08, 0.70)
-	normal.border_color = Color8(214, 177, 57, 255)
-	normal.set_border_width_all(1)
-	normal.corner_radius_top_left = 30
-	normal.corner_radius_top_right = 30
-	normal.corner_radius_bottom_left = 30
-	normal.corner_radius_bottom_right = 30
-	normal.content_margin_left = 18
-	normal.content_margin_right = 18
-	normal.content_margin_top = 12
-	normal.content_margin_bottom = 12
-	normal.shadow_color = Color(0.00, 0.00, 0.00, 0.24)
-	normal.shadow_size = 14 if emphasized else 12
-	normal.shadow_offset = Vector2(0, 5)
+	normal.bg_color = Color(0.0, 0.0, 0.0, 0.01)
+	normal.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	normal.set_border_width_all(0)
+	normal.corner_radius_top_left = 999
+	normal.corner_radius_top_right = 999
+	normal.corner_radius_bottom_left = 999
+	normal.corner_radius_bottom_right = 999
+	normal.content_margin_left = 8
+	normal.content_margin_right = 8
+	normal.content_margin_top = 8
+	normal.content_margin_bottom = 8
+	normal.shadow_color = Color(0.0, 0.0, 0.0, 0.0)
+	normal.shadow_size = 0
+	normal.shadow_offset = Vector2.ZERO
 	normal.anti_aliasing = true
-	normal.anti_aliasing_size = 1.4
+	normal.anti_aliasing_size = 1.6
 
 	var hover := normal.duplicate()
-	hover.bg_color = Color(0.05, 0.14, 0.11, 0.76)
-	hover.border_color = Color(0.98, 0.90, 0.62, 1.0)
-	hover.shadow_size = 18 if emphasized else 15
+	hover.bg_color = Color(1.0, 1.0, 1.0, 0.03)
 
 	var pressed := normal.duplicate()
-	pressed.bg_color = Color(0.02, 0.08, 0.06, 0.78)
-	pressed.border_color = Color(0.84, 0.70, 0.24, 1.0)
-	pressed.shadow_size = 5
-	pressed.shadow_offset = Vector2(0, 1)
-	pressed.content_margin_top = 11
-	pressed.content_margin_bottom = 5
+	pressed.bg_color = Color(0.0, 0.0, 0.0, 0.04)
+	pressed.content_margin_top = 10
+	pressed.content_margin_bottom = 6
 
 	var disabled := normal.duplicate()
-	disabled.bg_color = Color(0.03, 0.10, 0.08, 0.34)
-	disabled.border_color = Color(0.84, 0.74, 0.34, 0.30)
-	disabled.shadow_color = Color(0.00, 0.08, 0.05, 0.12)
-	disabled.shadow_size = 4
-	disabled.shadow_offset = Vector2(0, 1)
+	disabled.bg_color = Color(0.0, 0.0, 0.0, 0.10)
 
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", pressed)
 	button.add_theme_stylebox_override("focus", hover)
 	button.add_theme_stylebox_override("disabled", disabled)
-	button.add_theme_font_size_override("font_size", maxi(font_size, 42))
-	button.add_theme_color_override("font_color", Color(1.0, 0.96, 0.86, 1.0))
-	button.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.90, 1.0))
-	button.add_theme_color_override("font_pressed_color", Color(0.96, 0.90, 0.76, 1.0))
-	button.add_theme_color_override("font_disabled_color", Color(0.86, 0.82, 0.70, 0.48))
-	button.add_theme_color_override("font_outline_color", Color(0.08, 0.05, 0.03, 0.92))
-	button.add_theme_color_override("font_disabled_outline_color", Color(0.08, 0.05, 0.03, 0.42))
-	button.add_theme_constant_override("outline_size", 3 if emphasized else 2)
-	button.custom_minimum_size = Vector2(236, 132) if emphasized else Vector2(214, 122)
+	button.add_theme_font_size_override("font_size", ACTION_PRIMARY_FONT_SIZE if primary else ACTION_SECONDARY_FONT_SIZE)
+	button.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.0))
+	button.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0, 0.0))
+	button.add_theme_color_override("font_pressed_color", Color(1.0, 1.0, 1.0, 0.0))
+	button.add_theme_color_override("font_disabled_color", Color(1.0, 1.0, 1.0, 0.0))
+	button.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.0))
+	button.add_theme_color_override("font_disabled_outline_color", Color(0.0, 0.0, 0.0, 0.0))
+	button.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.0))
+	button.add_theme_constant_override("outline_size", 0)
+	button.custom_minimum_size = ACTION_PRIMARY_SIZE if primary else ACTION_SECONDARY_SIZE
 	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ensure_button_gloss_overlay(button, 0.70 if emphasized else 0.58)
+	_remove_material_overlay(button, "ButtonGlossLight")
+	_remove_material_overlay(button, "CyberHudOverlay")
+	_remove_material_overlay(button, "CrystalGlassOverlay")
+	_ensure_circular_action_button_overlay(button, "CircularActionButtonOverlay", primary)
+	var overlay := button.get_node_or_null("CircularActionButtonOverlay") as Control
+	if overlay != null:
+		overlay.set("center_color", center)
+		overlay.set("edge_color", edge)
+		overlay.set("outline_color", outline)
+		overlay.set("label_text", button.text)
 
 
 func _hand_contains_tile(hand_tiles: Array, tile_id: int) -> bool:
