@@ -82,9 +82,9 @@ func _can_gang_on_discard(player: Dictionary, discarded_tile: Dictionary, rules_
 	if not rules_config.allow_gang:
 		return false
 	if bool(player.get("bao_jiao", false)):
-		# 内江：报叫时若已有可报杠，会记录进 bao_gang_tiles，仅用于本人后续补杠/暗杠白名单；
-		# 对别家弃张产生的反应明杠，不属于“已报杠”，因此报叫后不允许再明杠。
-		return false
+		# 内江：报叫后仍可明杠，但只能杠报叫时记录进 bao_gang_tiles 的牌。
+		if not _is_bao_gang_whitelisted(player, discarded_tile):
+			return false
 	# Sichuan ding-que: only the missing suit itself is blocked from gang.
 	if _is_missing_suit_tile(player, discarded_tile, rules_config):
 		return false
@@ -110,6 +110,11 @@ func _count_same_tiles(hand_tiles: Array, target_tile: Dictionary) -> int:
 		if tile["suit"] == target_tile["suit"] and tile["rank"] == target_tile["rank"]:
 			count += 1
 	return count
+
+
+func _is_bao_gang_whitelisted(player: Dictionary, tile: Dictionary) -> bool:
+	var key := "%s_%d" % [str(tile.get("suit", "")), int(tile.get("rank", 0))]
+	return Array(player.get("bao_gang_tiles", [])).has(key)
 
 
 func _candidate_name(candidate: Dictionary) -> String:

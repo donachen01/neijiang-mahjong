@@ -29,6 +29,7 @@ var turn_analysis_cache: Dictionary = {}
 var turn_cache_order: Array[String] = []
 var native_csharp_runtime: Object = null
 var strict_native_runtime_required: bool = true
+var compact_runtime_snapshots: bool = true
 var last_native_turn_error: String = ""
 var last_native_reaction_error: String = ""
 var last_native_turn_raw_summary: String = ""
@@ -116,10 +117,31 @@ func analyze_self_action(player_state: Dictionary, table_state: Dictionary, rule
 	return analysis
 
 
+func analyze_hell_oracle_discard(payload: Dictionary) -> Dictionary:
+	if not has_native_csharp_runtime():
+		last_native_turn_error = "native_runtime_unavailable_for_hell_oracle"
+		return {}
+	if not native_csharp_runtime.has_method("AnalyzeHellOracleDiscardJson"):
+		last_native_turn_error = "hell_oracle_runtime_method_missing"
+		return {}
+	var raw := str(native_csharp_runtime.call("AnalyzeHellOracleDiscardJson", JSON.stringify(payload)))
+	last_native_turn_raw_summary = "hell_oracle raw=%s" % raw.left(700)
+	var parsed = JSON.parse_string(raw)
+	var result: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+	if result.is_empty() or not bool(result.get("ok", false)):
+		last_native_turn_error = str(result.get("error", "empty_hell_oracle_result"))
+		return {}
+	last_native_turn_error = ""
+	return result.duplicate(true)
+
+
 func _build_csharp_self_action_analysis(csharp_result: Dictionary, default_backend: String) -> Dictionary:
+	var gang_subtype := str(csharp_result.get("gangSubtype", csharp_result.get("gang_subtype", "")))
 	return {
 		"action": str(csharp_result.get("action", "pass")),
 		"tile_type": int(csharp_result.get("tileType", -1)),
+		"gang_subtype": gang_subtype,
+		"gangSubtype": gang_subtype,
 		"score": int(csharp_result.get("score", 0)),
 		"reason": str(csharp_result.get("reason", "")),
 		"reasons": csharp_result.get("reasons", []).duplicate(true),
@@ -184,6 +206,10 @@ func is_strict_native_runtime_required() -> bool:
 	return strict_native_runtime_required
 
 
+func set_compact_runtime_snapshots(enabled: bool) -> void:
+	compact_runtime_snapshots = enabled
+
+
 func request_turn_analysis_async(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false) -> int:
 	var seat := int(player_state.get("seat", -1))
 	var request_id := _begin_request("turn", seat)
@@ -239,6 +265,7 @@ func _analyze_reaction_via_native_runtime(candidate: Dictionary, player_state: D
 func _build_csharp_discard_analysis(player_state: Dictionary, csharp_result: Dictionary, rules_config, bridge_instance, backend_mode: String) -> Dictionary:
 	if csharp_result.is_empty():
 		return {}
+	var action_tile_type := int(csharp_result.get("tileType", -1))
 	var active_suits: Array = bridge_instance.tile_codec.resolve_active_suits(rules_config)
 	var hand_tiles: Array = player_state.get("hand_tiles", [])
 	var hand_tile_by_type: Dictionary = {}
@@ -260,21 +287,22 @@ func _build_csharp_discard_analysis(player_state: Dictionary, csharp_result: Dic
 		enriched.append(_build_hybrid_option(csharp_item, support_option, active_suits, bridge_instance))
 	if enriched.is_empty():
 		return {}
+	var recommended := _select_csharp_recommended_option(enriched, action_tile_type)
 	var danger_tiles: Array = enriched.duplicate(true)
 	danger_tiles.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return int(a.get("risk", 0)) > int(b.get("risk", 0))
 	)
 	return {
 		"forced_discard_suit": "",
-		"recommended": enriched[0],
+		"recommended": recommended,
 		"options": enriched,
 		"danger_tiles": danger_tiles.slice(0, mini(3, danger_tiles.size())),
-		"current_routes": csharp_result.get("currentRoutes", []).duplicate(true),
-		"strategy_profile": _merge_strategy_profile({}, csharp_result.get("strategyProfile", {})),
-		"belief_summary": csharp_result.get("beliefSummary", {}).duplicate(true),
-		"csharp_result": csharp_result.duplicate(true),
-		"backend_mode": backend_mode,
-	}
+			"current_routes": csharp_result.get("currentRoutes", []).duplicate(true),
+			"strategy_profile": _merge_strategy_profile({}, csharp_result.get("strategyProfile", {})),
+			"belief_summary": csharp_result.get("beliefSummary", {}).duplicate(true),
+			"csharp_result": _compact_csharp_result(csharp_result) if compact_runtime_snapshots else csharp_result.duplicate(true),
+			"backend_mode": backend_mode,
+		}
 
 
 func start_turn_analysis_background(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false) -> int:
@@ -363,6 +391,7 @@ func _merge_csharp_discard_recommendation(base_analysis: Dictionary, csharp_resu
 func _merge_csharp_discard_recommendation_with_bridge(base_analysis: Dictionary, csharp_result: Dictionary, rules_config, bridge_instance) -> Dictionary:
 	if csharp_result.is_empty():
 		return base_analysis
+	var action_tile_type := int(csharp_result.get("tileType", -1))
 	var active_suits: Array = bridge_instance.tile_codec.resolve_active_suits(rules_config)
 	var support_map: Dictionary = base_analysis.get("option_support", {})
 	var enriched: Array = []
@@ -373,21 +402,31 @@ func _merge_csharp_discard_recommendation_with_bridge(base_analysis: Dictionary,
 		enriched.append(_build_hybrid_option(csharp_item, support_option, active_suits, bridge_instance))
 	if enriched.is_empty():
 		return base_analysis
+	var recommended := _select_csharp_recommended_option(enriched, action_tile_type)
 	var danger_tiles: Array = enriched.duplicate(true)
 	danger_tiles.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return int(a.get("risk", 0)) > int(b.get("risk", 0))
 	)
 	return {
 		"forced_discard_suit": str(base_analysis.get("forced_discard_suit", "")),
-		"recommended": enriched[0],
+		"recommended": recommended,
 		"options": enriched,
 		"danger_tiles": danger_tiles.slice(0, mini(3, danger_tiles.size())),
 		"current_routes": csharp_result.get("currentRoutes", base_analysis.get("current_routes", [])).duplicate(true),
 		"strategy_profile": _merge_strategy_profile(base_analysis.get("strategy_profile", {}), csharp_result.get("strategyProfile", {})),
 		"belief_summary": csharp_result.get("beliefSummary", {}).duplicate(true),
-		"csharp_result": csharp_result.duplicate(true),
+		"csharp_result": _compact_csharp_result(csharp_result) if compact_runtime_snapshots else csharp_result.duplicate(true),
 		"backend_mode": "hybrid_csharp",
 	}
+
+
+func _select_csharp_recommended_option(enriched_options: Array, action_tile_type: int) -> Dictionary:
+	if action_tile_type >= 0:
+		for option in enriched_options:
+			var item: Dictionary = option
+			if int(item.get("csharp_tile_type", -1)) == action_tile_type:
+				return item
+	return enriched_options[0] if not enriched_options.is_empty() else {}
 
 
 func _build_hybrid_option(csharp_item: Dictionary, support_option: Dictionary, active_suits: Array, bridge_instance = null) -> Dictionary:
@@ -424,6 +463,25 @@ func _build_hybrid_option(csharp_item: Dictionary, support_option: Dictionary, a
 	option["csharp_expected_draw_risk_loss"] = float(csharp_item.get("expectedDrawRiskLoss", option.get("expected_draw_risk_loss", 0.0)))
 	option["csharp_expected_ready_value"] = float(csharp_item.get("expectedReadyValue", option.get("expected_ready_value", 0.0)))
 	option["csharp_posterior_adjustment"] = float(csharp_item.get("posteriorAdjustment", 0.0))
+	option["csharp_defense_adjustment"] = float(csharp_item.get("defenseAdjustment", 0.0))
+	option["csharp_good_shape_count"] = int(csharp_item.get("goodShapeCount", 0))
+	option["csharp_bad_shape_count"] = int(csharp_item.get("badShapeCount", 0))
+	option["csharp_pair_pressure"] = int(csharp_item.get("pairPressure", 0))
+	option["csharp_taatsu_overflow"] = int(csharp_item.get("taatsuOverflow", 0))
+	option["csharp_same_shanten_improvement_count"] = int(csharp_item.get("sameShantenImprovementCount", 0))
+	option["csharp_middle_tile_flexibility"] = int(csharp_item.get("middleTileFlexibility", 0))
+	option["csharp_shape_score"] = float(csharp_item.get("shapeScore", 0.0))
+	option["csharp_wait_shape_label"] = str(csharp_item.get("waitShapeLabel", ""))
+	option["csharp_wait_shape_score"] = float(csharp_item.get("waitShapeScore", 0.0))
+	option["csharp_ryanmen_wait_count"] = int(csharp_item.get("ryanmenWaitCount", 0))
+	option["csharp_kanchan_wait_count"] = int(csharp_item.get("kanchanWaitCount", 0))
+	option["csharp_penchan_wait_count"] = int(csharp_item.get("penchanWaitCount", 0))
+	option["csharp_tanki_wait_count"] = int(csharp_item.get("tankiWaitCount", 0))
+	option["csharp_shanpon_wait_count"] = int(csharp_item.get("shanponWaitCount", 0))
+	option["csharp_limited_lookahead_score"] = float(csharp_item.get("limitedLookaheadScore", 0.0))
+	option["csharp_limited_lookahead_samples"] = int(csharp_item.get("limitedLookaheadSamples", 0))
+	option["csharp_limited_lookahead_best_shanten"] = int(csharp_item.get("limitedLookaheadBestShanten", 8))
+	option["csharp_limited_lookahead_best_live_ukeire"] = int(csharp_item.get("limitedLookaheadBestLiveUkeire", 0))
 	option["csharp_search_bonus"] = float(csharp_item.get("searchBonus", 0.0))
 	option["csharp_search_simulations"] = int(csharp_item.get("searchSimulations", 0))
 	option["csharp_search_used"] = bool(csharp_item.get("searchUsed", false))
@@ -456,6 +514,25 @@ func _build_hybrid_option(csharp_item: Dictionary, support_option: Dictionary, a
 	option["expected_draw_risk_loss"] = float(csharp_item.get("expectedDrawRiskLoss", option.get("expected_draw_risk_loss", 0.0)))
 	option["expected_ready_value"] = float(csharp_item.get("expectedReadyValue", option.get("expected_ready_value", 0.0)))
 	option["posterior_adjustment"] = float(csharp_item.get("posteriorAdjustment", option.get("posterior_adjustment", 0.0)))
+	option["defense_adjustment"] = float(csharp_item.get("defenseAdjustment", option.get("defense_adjustment", 0.0)))
+	option["good_shape_count"] = int(csharp_item.get("goodShapeCount", option.get("good_shape_count", 0)))
+	option["bad_shape_count"] = int(csharp_item.get("badShapeCount", option.get("bad_shape_count", 0)))
+	option["pair_pressure"] = int(csharp_item.get("pairPressure", option.get("pair_pressure", 0)))
+	option["taatsu_overflow"] = int(csharp_item.get("taatsuOverflow", option.get("taatsu_overflow", 0)))
+	option["same_shanten_improvement_count"] = int(csharp_item.get("sameShantenImprovementCount", option.get("same_shanten_improvement_count", 0)))
+	option["middle_tile_flexibility"] = int(csharp_item.get("middleTileFlexibility", option.get("middle_tile_flexibility", 0)))
+	option["shape_score"] = float(csharp_item.get("shapeScore", option.get("shape_score", 0.0)))
+	option["wait_shape_label"] = str(csharp_item.get("waitShapeLabel", option.get("wait_shape_label", "")))
+	option["wait_shape_score"] = float(csharp_item.get("waitShapeScore", option.get("wait_shape_score", 0.0)))
+	option["ryanmen_wait_count"] = int(csharp_item.get("ryanmenWaitCount", option.get("ryanmen_wait_count", 0)))
+	option["kanchan_wait_count"] = int(csharp_item.get("kanchanWaitCount", option.get("kanchan_wait_count", 0)))
+	option["penchan_wait_count"] = int(csharp_item.get("penchanWaitCount", option.get("penchan_wait_count", 0)))
+	option["tanki_wait_count"] = int(csharp_item.get("tankiWaitCount", option.get("tanki_wait_count", 0)))
+	option["shanpon_wait_count"] = int(csharp_item.get("shanponWaitCount", option.get("shanpon_wait_count", 0)))
+	option["limited_lookahead_score"] = float(csharp_item.get("limitedLookaheadScore", option.get("limited_lookahead_score", 0.0)))
+	option["limited_lookahead_samples"] = int(csharp_item.get("limitedLookaheadSamples", option.get("limited_lookahead_samples", 0)))
+	option["limited_lookahead_best_shanten"] = int(csharp_item.get("limitedLookaheadBestShanten", option.get("limited_lookahead_best_shanten", 8)))
+	option["limited_lookahead_best_live_ukeire"] = int(csharp_item.get("limitedLookaheadBestLiveUkeire", option.get("limited_lookahead_best_live_ukeire", 0)))
 	option["search_bonus"] = float(csharp_item.get("searchBonus", option.get("search_bonus", 0.0)))
 	option["search_simulations"] = int(csharp_item.get("searchSimulations", option.get("search_simulations", 0)))
 	option["search_used"] = bool(csharp_item.get("searchUsed", option.get("search_used", false)))
@@ -463,6 +540,23 @@ func _build_hybrid_option(csharp_item: Dictionary, support_option: Dictionary, a
 	option["reasons"] = csharp_item.get("reasons", option.get("reasons", [])).duplicate(true)
 	option["risk_reasons"] = csharp_item.get("riskReasons", option.get("risk_reasons", [])).duplicate(true)
 	return option
+
+
+func _compact_csharp_result(csharp_result: Dictionary) -> Dictionary:
+	return {
+		"ok": bool(csharp_result.get("ok", true)),
+		"action": str(csharp_result.get("action", "")),
+		"tileType": int(csharp_result.get("tileType", -1)),
+		"score": int(csharp_result.get("score", 0)),
+		"shanten": int(csharp_result.get("shanten", 8)),
+		"ukeire": int(csharp_result.get("ukeire", 0)),
+		"liveUkeire": int(csharp_result.get("liveUkeire", 0)),
+		"winProbability": float(csharp_result.get("winProbability", 0.0)),
+		"dealInProbability": float(csharp_result.get("dealInProbability", 0.0)),
+		"searchUsed": bool(csharp_result.get("searchUsed", false)),
+		"searchSimulations": int(csharp_result.get("searchSimulations", 0)),
+		"backendMode": str(csharp_result.get("backendMode", "")),
+	}
 
 
 func _merge_strategy_profile(base_profile: Dictionary, csharp_profile: Dictionary) -> Dictionary:

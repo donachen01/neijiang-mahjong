@@ -13,7 +13,10 @@ public static class NeijiangStateCodec
         IEnumerable<int> visible18,
         IEnumerable<int>? remaining18 = null,
         IEnumerable<IEnumerable<int>>? discards18 = null,
-        IEnumerable<IEnumerable<int>>? melds18 = null)
+        IEnumerable<IEnumerable<int>>? melds18 = null,
+        IEnumerable<IEnumerable<int>>? passedHu18 = null,
+        IEnumerable<IEnumerable<int>>? passedPeng18 = null,
+        IEnumerable<IEnumerable<int>>? passedGang18 = null)
     {
         var hand = hand18.Take(18).Concat(Enumerable.Repeat(0, 18)).Take(18).ToArray();
         var visible = visible18.Take(18).Concat(Enumerable.Repeat(0, 18)).Take(18).ToArray();
@@ -51,6 +54,24 @@ public static class NeijiangStateCodec
             }
         }
 
+        CopyCountMatrix(passedHu18, state.PassedHu18);
+        CopyCountMatrix(passedPeng18, state.PassedPeng18);
+        CopyCountMatrix(passedGang18, state.PassedGang18);
+
         return state;
+    }
+
+    private static void CopyCountMatrix(IEnumerable<IEnumerable<int>>? source, int[][] target)
+    {
+        if (source is null)
+            return;
+        var seat = 0;
+        foreach (var list in source.Take(4))
+        {
+            var values = list.Take(18).Concat(Enumerable.Repeat(0, 18)).Take(18).ToArray();
+            for (var tileType = 0; tileType < 18; tileType++)
+                target[seat][tileType] = Math.Max(0, values[tileType]);
+            seat++;
+        }
     }
 }

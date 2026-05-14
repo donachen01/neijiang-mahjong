@@ -14,10 +14,10 @@ const SYSTEM_DRAW_AUDIO_PATH := "res://res/audio/sfx/system_draw.mp3"
 const SYSTEM_DRAW_AUDIO_SECONDS := 1.0
 const HUMAN_DRAW_ACTION_DELAY := 1.0
 const SYSTEM_DRAW_ACTION_DELAY := 0.96
-const AI_TURN_DELAY := 0.52
-const AI_REACTION_DELAY := 0.52
-const AI_READY_POLL_SEC := 0.06
-const AI_WATCHDOG_POLL_SEC := 0.24
+const AI_TURN_DELAY := 0.12
+const AI_REACTION_DELAY := 0.10
+const AI_READY_POLL_SEC := 0.03
+const AI_WATCHDOG_POLL_SEC := 0.12
 const OPENING_ROLL_TICK := 0.04
 const OPENING_ROLL_TICKS := 10
 const BOARD_TARGET_RATIO := 1065.0 / 772.0
@@ -313,6 +313,7 @@ var floating_right_toggle_button: Button
 var floating_ai_tuning_button: Button
 var floating_ai_helper_button: Button
 var floating_opponent_hand_button: Button
+var floating_hell_mark_button: Button
 var floating_left_button_bar: VBoxContainer
 var floating_left_toggle_button: Button
 var floating_preset_button: Button
@@ -1641,6 +1642,8 @@ func _apply_floating_action_button_styles() -> void:
 	_apply_floating_action_button_style(floating_ai_tuning_button, Color(0.08, 0.34, 0.25, 0.90), "AI调参")
 	_apply_floating_action_button_style(floating_ai_helper_button, Color(0.10, 0.40, 0.29, 0.90) if ai_helper_enabled else Color(0.09, 0.28, 0.22, 0.82), "AI辅助")
 	_apply_floating_action_button_style(floating_opponent_hand_button, Color(0.10, 0.36, 0.27, 0.90) if opponent_hands_enabled else Color(0.09, 0.28, 0.22, 0.82), "明牌模式")
+	if floating_hell_mark_button != null:
+		_apply_floating_action_button_style(floating_hell_mark_button, Color(0.56, 0.25, 0.10, 0.92), "标记这手")
 	if floating_preset_button != null:
 		_apply_floating_action_button_style(floating_preset_button, Color(0.10, 0.34, 0.25, 0.88), "AI预设")
 	if floating_exit_button != null:
@@ -1743,6 +1746,10 @@ func _update_floating_button_texts() -> void:
 	if floating_opponent_hand_button != null:
 		floating_opponent_hand_button.text = "明牌 %s" % ("开" if opponent_hands_enabled else "关")
 		floating_opponent_hand_button.visible = not floating_left_buttons_collapsed
+	if floating_hell_mark_button != null:
+		var snapshot := game_manager.get_snapshot()
+		floating_hell_mark_button.text = "标记"
+		floating_hell_mark_button.visible = not floating_left_buttons_collapsed and bool(snapshot.get("hell_training", {}).get("enabled", false))
 	if floating_exit_button != null:
 		floating_exit_button.visible = false
 	_apply_floating_action_button_styles()
@@ -2124,13 +2131,16 @@ func _setup_left_floating_buttons() -> void:
 	floating_ai_tuning_button = _create_floating_circle_button("调")
 	floating_ai_helper_button = _create_floating_circle_button("辅")
 	floating_opponent_hand_button = _create_floating_circle_button("明")
+	floating_hell_mark_button = _create_floating_circle_button("标")
 	floating_exit_button = null
 	floating_preset_button.pressed.connect(_on_top_bar_button_pressed)
 	floating_ai_tuning_button.pressed.connect(_on_top_ai_tuning_button_pressed)
 	floating_ai_helper_button.pressed.connect(_on_top_ai_helper_button_pressed)
 	floating_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
+	floating_hell_mark_button.pressed.connect(_on_hell_mark_button_pressed)
 	floating_left_button_bar.add_child(floating_ai_helper_button)
 	floating_left_button_bar.add_child(floating_opponent_hand_button)
+	floating_left_button_bar.add_child(floating_hell_mark_button)
 	floating_left_button_bar.add_child(floating_preset_button)
 	floating_left_button_bar.add_child(floating_ai_tuning_button)
 
@@ -2203,6 +2213,7 @@ func _handle_left_floating_action_click(global_pos: Vector2) -> bool:
 	var targets := [
 		{"button": floating_ai_helper_button, "action": Callable(self, "_on_top_ai_helper_button_pressed")},
 		{"button": floating_opponent_hand_button, "action": Callable(self, "_on_top_opponent_hand_button_pressed")},
+		{"button": floating_hell_mark_button, "action": Callable(self, "_on_hell_mark_button_pressed")},
 		{"button": floating_preset_button, "action": Callable(self, "_on_top_bar_button_pressed")},
 		{"button": floating_ai_tuning_button, "action": Callable(self, "_on_top_ai_tuning_button_pressed")},
 	]
@@ -3198,6 +3209,9 @@ func _build_helper_explanation_text(trainer_hint: Dictionary, recommended: Dicti
 	var forced_suit: String = str(trainer_hint.get("forced_discard_suit", ""))
 	if not forced_suit.is_empty():
 		return "优先成叫"
+	var csharp_probability_text := _build_helper_csharp_probability_text(recommended)
+	if not csharp_probability_text.is_empty():
+		return csharp_probability_text
 	var explanation_hint: String = str(recommended.get("explanation_hint", ""))
 	if not explanation_hint.is_empty():
 		return explanation_hint
@@ -3281,6 +3295,62 @@ func _build_helper_explanation_text(trainer_hint: Dictionary, recommended: Dicti
 	if risk_label == "低危":
 		return "这张相对更安全"
 	return "这手先保宽叫和安全"
+
+
+func _build_helper_csharp_probability_text(option: Dictionary) -> String:
+	var has_csharp_detail := option.has("csharp_expected_net_score") \
+		or option.has("csharp_self_draw_probability") \
+		or option.has("csharp_deal_in_probability") \
+		or option.has("csharp_defense_adjustment") \
+		or option.has("csharp_shape_score") \
+		or option.has("csharp_wait_shape_label") \
+		or option.has("csharp_limited_lookahead_score") \
+		or not Array(option.get("csharp_reasons", [])).is_empty()
+	if not has_csharp_detail:
+		return ""
+	var parts: Array[String] = []
+	var expected_net := float(option.get("expected_net_score", option.get("csharp_expected_net_score", 0.0)))
+	var self_draw := float(option.get("self_draw_probability", option.get("csharp_self_draw_probability", 0.0)))
+	var deal_in := float(option.get("deal_in_probability", option.get("csharp_deal_in_probability", 0.0)))
+	var defense_adjustment := float(option.get("defense_adjustment", option.get("csharp_defense_adjustment", 0.0)))
+	var shape_score := float(option.get("shape_score", option.get("csharp_shape_score", 0.0)))
+	parts.append("净分%.2f" % expected_net)
+	if self_draw > 0.0:
+		parts.append("自摸%.0f%%" % (self_draw * 100.0))
+	if deal_in > 0.0:
+		parts.append("点炮%.0f%%" % (deal_in * 100.0))
+	if defense_adjustment > 0.01:
+		parts.append("防守压分%.2f" % defense_adjustment)
+	if absf(shape_score) >= 0.5:
+		parts.append("牌效%+.0f" % shape_score)
+	var wait_shape_label := str(option.get("wait_shape_label", option.get("csharp_wait_shape_label", "")))
+	if not wait_shape_label.is_empty() and wait_shape_label != "未成听":
+		parts.append("听形%s" % wait_shape_label)
+	var limited_lookahead := float(option.get("limited_lookahead_score", option.get("csharp_limited_lookahead_score", 0.0)))
+	if absf(limited_lookahead) >= 3.0:
+		parts.append("前瞻%+.1f" % limited_lookahead)
+	var posterior_reasons: Array = option.get("posterior_reasons", option.get("csharp_posterior_reasons", []))
+	if not posterior_reasons.is_empty() and str(posterior_reasons[0]) != "后验未明显压分":
+		parts.append(str(posterior_reasons[0]))
+	var risk_reasons: Array = option.get("risk_reasons", option.get("csharp_risk_reasons", []))
+	if not risk_reasons.is_empty():
+		parts.append(str(risk_reasons[0]))
+	var csharp_reasons: Array = option.get("reasons", option.get("csharp_reasons", []))
+	for reason in csharp_reasons:
+		var reason_text := str(reason)
+		if reason_text.is_empty():
+			continue
+		if reason_text.begins_with("最小向听") \
+			or reason_text.begins_with("活进张") \
+			or reason_text.begins_with("净分期望") \
+			or reason_text.begins_with("危险度") \
+			or reason_text.begins_with("阶段") \
+			or reason_text.begins_with("策略"):
+			continue
+		parts.append(reason_text)
+		if parts.size() >= 8:
+			break
+	return "｜".join(parts.slice(0, 8))
 
 
 func _build_helper_selected_option_reason(selected_option: Dictionary, recommended: Dictionary) -> String:
@@ -6927,7 +6997,18 @@ func _on_hand_tile_pressed(tile_id: int) -> void:
 			selected_tile_id = -1
 			return
 	selected_tile_id = tile_id
-	_on_snapshot_changed(game_manager.get_snapshot())
+	_refresh_self_selection_only()
+
+
+func _refresh_self_selection_only() -> void:
+	if last_snapshot.is_empty():
+		return
+	var players: Array = last_snapshot.get("players", [])
+	var self_player := _player_by_seat(players, 0)
+	var self_hand_tiles: Array = game_manager.game_state.call("get_player_hand_tiles", 0)
+	if selected_tile_id != -1 and not _hand_contains_tile(self_hand_tiles, selected_tile_id):
+		selected_tile_id = -1
+	_update_self_area(last_snapshot, self_hand_tiles)
 
 
 func _on_discard_helper_action_pressed() -> void:
@@ -6964,6 +7045,12 @@ func _on_top_ai_helper_button_pressed() -> void:
 func _on_top_opponent_hand_button_pressed() -> void:
 	opponent_hands_enabled = not opponent_hands_enabled
 	_save_ui_preferences()
+	_update_top_bar(game_manager.get_snapshot())
+	_on_snapshot_changed(game_manager.get_snapshot())
+
+
+func _on_hell_mark_button_pressed() -> void:
+	game_manager.mark_current_hell_training_case("manual_mark_from_ui")
 	_update_top_bar(game_manager.get_snapshot())
 	_on_snapshot_changed(game_manager.get_snapshot())
 

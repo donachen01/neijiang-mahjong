@@ -19,4 +19,7 @@ public sealed class NeijiangStateView
     public bool[] IsCalled { get; init; } = new bool[4];
     public bool[] IsReady { get; init; } = new bool[4];
     public bool[] HasHu { get; init; } = new bool[4];
+    public int[][] PassedHu18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    public int[][] PassedPeng18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    public int[][] PassedGang18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
 }

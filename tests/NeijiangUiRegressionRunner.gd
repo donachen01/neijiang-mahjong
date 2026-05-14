@@ -16,6 +16,7 @@ func _run() -> void:
 
 	_run_test("self_hu_helper_prioritizes_hu_over_discard_recommendation", _test_self_hu_helper_prioritizes_hu_over_discard_recommendation.bind(root_node), failures)
 	_run_test("selected_tile_helper_uses_csharp_candidate_details", _test_selected_tile_helper_uses_csharp_candidate_details.bind(root_node), failures)
+	_run_test("recommended_tile_helper_prioritizes_csharp_probability_details", _test_recommended_tile_helper_prioritizes_csharp_probability_details.bind(root_node), failures)
 	_run_test("neijiang_settlement_hides_stale_ding_que_tags", _test_neijiang_settlement_hides_stale_ding_que_tags.bind(root_node), failures)
 	_run_test("top_right_x_exit_button_is_visible", _test_top_right_x_exit_button_is_visible.bind(root_node), failures)
 	_run_test("main_controls_are_layered_by_purpose", _test_main_controls_are_layered_by_purpose.bind(root_node), failures)
@@ -174,6 +175,67 @@ func _test_selected_tile_helper_uses_csharp_candidate_details(root_node: Node):
 	for expected in ["不建议打5筒", "向听更慢1", "活进张少5", "风险高19", "净分低1.80", "C#后验：下家疑似等筒", "推荐9条"]:
 		if not text.contains(expected):
 			return "expected C# selected-option detail '%s' in helper text, got %s" % [expected, text]
+	return true
+
+
+func _test_recommended_tile_helper_prioritizes_csharp_probability_details(root_node: Node):
+	root_node.set("ai_helper_enabled", true)
+	root_node.set("selected_tile_id", -1)
+	var recommended_tile := _make_tile(9304, "tiao", 4)
+	var snapshot := {
+		"players": [
+			{
+				"seat": 0,
+				"nickname": "本家",
+				"score": 0,
+				"hand_tiles": [recommended_tile],
+			},
+		],
+		"rules": {"use_ding_que_phase": false},
+	}
+	var trainer_hint := {
+		"recommended": {
+			"tile_name": "4条",
+			"tile": recommended_tile,
+			"shanten": 1,
+			"live_ukeire": 7,
+			"risk": 44,
+			"risk_label": "中危",
+			"expected_net_score": 1.25,
+			"self_draw_probability": 0.31,
+			"deal_in_probability": 0.08,
+			"defense_adjustment": 0.42,
+			"shape_score": 16.0,
+			"explanation_hint": "这手先抢速度",
+			"posterior_reasons": ["中盘压力上升，开始压风险"],
+			"risk_reasons": ["座位2近期不要这张"],
+			"reasons": ["最小向听 1", "活进张 7", "策略 抢听", "手形好搭 5"],
+			"csharp_expected_net_score": 1.25,
+			"csharp_self_draw_probability": 0.31,
+			"csharp_deal_in_probability": 0.08,
+			"csharp_defense_adjustment": 0.42,
+			"csharp_shape_score": 16.0,
+			"csharp_posterior_reasons": ["中盘压力上升，开始压风险"],
+			"csharp_risk_reasons": ["座位2近期不要这张"],
+			"csharp_reasons": ["最小向听 1", "活进张 7", "策略 抢听", "手形好搭 5"],
+		},
+		"recommended_tile_id": 9304,
+		"options": [],
+		"backend_mode": "csharp_native",
+	}
+	root_node.call("_update_discard_helper_panel", snapshot, trainer_hint, true)
+
+	var compare: Label = root_node.get("discard_helper_compare") as Label
+	if compare == null:
+		return "missing discard helper compare label"
+	if not compare.visible:
+		return "expected recommended C# probability details to be visible"
+	var text := str(compare.text)
+	for expected in ["净分1.25", "自摸31%", "点炮8%", "防守压分0.42", "牌效+16", "中盘压力上升", "座位2近期不要这张", "手形好搭 5"]:
+		if not text.contains(expected):
+			return "expected C# probability detail '%s' in helper text, got %s" % [expected, text]
+	if text == "这手先抢速度":
+		return "expected C# probability details to override short explanation_hint"
 	return true
 
 

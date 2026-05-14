@@ -36,6 +36,14 @@ func set_ai_preset(preset_name: String) -> bool:
 	return false if game_state == null else bool(game_state.call("set_ai_preset", preset_name))
 
 
+func mark_current_hell_training_case(reason: String = "manual_mark") -> bool:
+	return false if game_state == null else bool(game_state.call("mark_current_hell_training_case", reason))
+
+
+func set_hell_diagnostics_recording_enabled(enabled: bool) -> bool:
+	return false if game_state == null else bool(game_state.call("set_hell_diagnostics_recording_enabled", enabled))
+
+
 func set_ai_tuning_value(key: String, value: int) -> bool:
 	return false if game_state == null else bool(game_state.call("set_ai_tuning_value", key, value))
 

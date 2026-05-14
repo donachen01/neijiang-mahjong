@@ -13,6 +13,7 @@ func _init() -> void:
 func _run() -> void:
 	var total_rounds := _read_int_arg("--rounds=", DEFAULT_TOTAL_ROUNDS)
 	var max_steps_per_round := _read_int_arg("--max-steps=", DEFAULT_MAX_STEPS_PER_ROUND)
+	var seed_value := _read_int_arg("--seed=", 20260514)
 	var preset_name := _read_string_arg("--preset=", "bone_ash")
 	var compare_preset_name := _read_string_arg("--compare-preset=", "")
 	var output_path := _read_string_arg("--output=", _build_default_report_path(total_rounds, preset_name, compare_preset_name, "json"))
@@ -20,23 +21,32 @@ func _run() -> void:
 	var game_state: Node = GAME_STATE_SCRIPT.new()
 	get_root().add_child(game_state)
 	await process_frame
+	if game_state.has_method("set_test_seed"):
+		game_state.call("set_test_seed", seed_value)
+		game_state.call("start_new_round", true)
+		await process_frame
 
 	var report: Dictionary
 	if compare_preset_name != "":
-		report = await _run_ab_benchmark(game_state, preset_name, compare_preset_name, total_rounds, max_steps_per_round)
+		report = await _run_ab_benchmark(game_state, preset_name, compare_preset_name, total_rounds, max_steps_per_round, seed_value)
 	else:
-		report = await _run_single_preset_benchmark(game_state, preset_name, total_rounds, max_steps_per_round)
+		report = await _run_single_preset_benchmark(game_state, preset_name, total_rounds, max_steps_per_round, seed_value)
 	_print_summary(report)
 	_write_report(report, output_path)
 	_write_csv_report(report, csv_output_path)
 	quit()
 
 
-func _run_single_preset_benchmark(game_state: Node, preset_name: String, total_rounds: int, max_steps_per_round: int) -> Dictionary:
+func _run_single_preset_benchmark(game_state: Node, preset_name: String, total_rounds: int, max_steps_per_round: int, seed_value: int) -> Dictionary:
+	if game_state.has_method("set_test_seed"):
+		game_state.call("set_test_seed", seed_value)
+		game_state.call("start_new_round", true)
+		await process_frame
 	game_state.call("set_ai_preset", preset_name)
 	var stats := _create_stats()
 	stats["benchmark_mode"] = "single"
 	stats["preset_name"] = preset_name
+	stats["seed"] = seed_value
 	var round_counter := 0
 	while round_counter < total_rounds:
 		print("benchmark_round_start=", round_counter + 1, " preset=", preset_name)
@@ -53,16 +63,17 @@ func _run_single_preset_benchmark(game_state: Node, preset_name: String, total_r
 	return stats
 
 
-func _run_ab_benchmark(game_state: Node, preset_a: String, preset_b: String, total_rounds: int, max_steps_per_round: int) -> Dictionary:
+func _run_ab_benchmark(game_state: Node, preset_a: String, preset_b: String, total_rounds: int, max_steps_per_round: int, seed_value: int) -> Dictionary:
 	var combined := {
 		"benchmark_mode": "ab_compare",
 		"preset_a": preset_a,
 		"preset_b": preset_b,
+		"seed": seed_value,
 	}
-	var stats_a := await _run_single_preset_benchmark(game_state, preset_a, total_rounds, max_steps_per_round)
+	var stats_a := await _run_single_preset_benchmark(game_state, preset_a, total_rounds, max_steps_per_round, seed_value)
 	game_state.call("start_new_round")
 	await process_frame
-	var stats_b := await _run_single_preset_benchmark(game_state, preset_b, total_rounds, max_steps_per_round)
+	var stats_b := await _run_single_preset_benchmark(game_state, preset_b, total_rounds, max_steps_per_round, seed_value)
 	combined["report_a"] = stats_a
 	combined["report_b"] = stats_b
 	combined["comparison"] = _build_comparison(stats_a, stats_b)

@@ -68,6 +68,7 @@ var embedded_left_gap: float = 0.0
 var embedded_right_width: float = 0.0
 var embedded_right_gap: float = 0.0
 var recommended_marker_contract: Dictionary = {}
+var configure_signature: String = ""
 
 static var texture_cache: Dictionary = {}
 static var _face_stylebox: StyleBoxFlat = _build_face_stylebox()
@@ -77,6 +78,10 @@ static var _selected_stylebox: StyleBoxFlat = _build_selected_stylebox()
 
 
 func configure(tiles: Array, selected_id: int, new_id: int, canvas_size: Vector2, markers: Dictionary = {}, layout_options: Dictionary = {}) -> void:
+	var next_signature := _build_configure_signature(tiles, selected_id, new_id, canvas_size, markers, layout_options)
+	if next_signature == configure_signature:
+		return
+	configure_signature = next_signature
 	hand_tiles = tiles.duplicate(true)
 	selected_tile_id = selected_id
 	new_draw_tile_id = new_id
@@ -88,6 +93,28 @@ func configure(tiles: Array, selected_id: int, new_id: int, canvas_size: Vector2
 	embedded_right_gap = float(layout_options.get("embedded_right_gap", 0.0))
 	_rebuild_layout()
 	queue_redraw()
+
+
+func _build_configure_signature(tiles: Array, selected_id: int, new_id: int, canvas_size: Vector2, markers: Dictionary, layout_options: Dictionary) -> String:
+	var tile_ids: Array[int] = []
+	for tile in tiles:
+		var tile_data: Dictionary = tile
+		tile_ids.append(int(tile_data.get("id", -1)))
+	var marker_ids: Array = markers.get("danger_tile_ids", [])
+	return JSON.stringify({
+		"tiles": tile_ids,
+		"selected": selected_id,
+		"new": new_id,
+		"size": [int(round(canvas_size.x)), int(round(canvas_size.y))],
+		"recommended": int(markers.get("recommended_tile_id", -1)),
+		"danger": marker_ids.duplicate(),
+		"winning": int(markers.get("winning_tile_id", -1)),
+		"winning_source": int(markers.get("winning_source_seat", -1)),
+		"left_width": int(round(float(layout_options.get("embedded_left_width", 0.0)))),
+		"left_gap": int(round(float(layout_options.get("embedded_left_gap", 0.0)))),
+		"right_width": int(round(float(layout_options.get("embedded_right_width", 0.0)))),
+		"right_gap": int(round(float(layout_options.get("embedded_right_gap", 0.0)))),
+	})
 
 
 func get_tile_id_at_point(point: Vector2) -> int:

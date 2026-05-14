@@ -34,6 +34,7 @@ public sealed class NeijiangDangerEngine
             var suitDemand = belief.SeatSuitDemand.TryGetValue(seat, out var suits)
                 ? suits.GetValueOrDefault(suit, 0.0)
                 : 0.0;
+            var strongAbandonedSuit = false;
 
             var seatRisk = pressure * 18.0
                 + readyPosterior * 22.0
@@ -43,25 +44,48 @@ public sealed class NeijiangDangerEngine
                 + suitDemand * 10.0
                 + threatScore * 10.0;
 
-            if (belief.SeatExactSafeTiles.TryGetValue(seat, out var exactSafeTiles) && exactSafeTiles.Contains(tileType))
+            var isExactSafe = belief.SeatExactSafeTiles.TryGetValue(seat, out var exactSafeTiles) && exactSafeTiles.Contains(tileType);
+            var isTailRisk = state.WallCount <= 7 && readyPosterior >= 0.52;
+            if (isExactSafe)
             {
-                seatRisk *= 0.14;
+                seatRisk *= isTailRisk ? 0.36 : 0.14;
                 reasons.Add($"座位{seat}现物偏安全");
             }
-            else if (belief.SeatAbandonedSuits.TryGetValue(seat, out var abandonedSuits) && abandonedSuits.Contains(suit))
+            var isAbandonedSuit = belief.SeatAbandonedSuits.TryGetValue(seat, out var abandonedSuits) && abandonedSuits.Contains(suit);
+            strongAbandonedSuit = isAbandonedSuit && state.WallCount <= 3 && suitDemand <= 0.10;
+            if (isAbandonedSuit)
             {
-                seatRisk *= 0.72;
+                seatRisk *= isTailRisk ? (strongAbandonedSuit ? 0.46 : 0.82) : 0.72;
                 reasons.Add($"座位{seat}该门已弃多张");
             }
             if (noHuEvidence >= 0.56)
             {
-                seatRisk *= 0.58;
+                seatRisk *= isTailRisk ? 0.82 : 0.58;
                 reasons.Add($"座位{seat}近期不要这张");
             }
             else if (noHuEvidence >= 0.24)
             {
-                seatRisk *= 0.82;
+                seatRisk *= isTailRisk ? 0.94 : 0.82;
                 reasons.Add($"座位{seat}邻张舍出较多");
+            }
+            if (!isExactSafe && isTailRisk)
+            {
+                var tailFloorBase = strongAbandonedSuit ? 8.0 : isAbandonedSuit ? 30.0 : 38.0;
+                var readyFloorScale = strongAbandonedSuit ? 6.0 : isAbandonedSuit ? 18.0 : 36.0;
+                var waitFloorScale = strongAbandonedSuit ? 10.0 : isAbandonedSuit ? 24.0 : 34.0;
+                var holdFloorScale = strongAbandonedSuit ? 5.0 : isAbandonedSuit ? 12.0 : 22.0;
+                var floor = tailFloorBase
+                    + Math.Max(0.0, readyPosterior - 0.52) * readyFloorScale
+                    + waitProbability * waitFloorScale
+                    + holdProbability * holdFloorScale
+                    + (state.WallCount <= 3 && !strongAbandonedSuit ? 5.0 : 0.0);
+                seatRisk = Math.Max(seatRisk, floor);
+                reasons.Add($"座位{seat}尾盘安全证据打折");
+            }
+            else if (!isExactSafe && state.WallCount <= 3 && readyPosterior >= 0.40 && (holdProbability >= 0.18 || waitProbability >= 0.08))
+            {
+                seatRisk = Math.Max(seatRisk, 34.0 + holdProbability * 18.0 + waitProbability * 28.0);
+                reasons.Add($"座位{seat}极尾盘保守处理");
             }
 
             if (state.IsCalled[seat] || state.IsReady[seat])

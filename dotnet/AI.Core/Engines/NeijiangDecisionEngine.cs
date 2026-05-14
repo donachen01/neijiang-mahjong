@@ -12,6 +12,9 @@ public sealed class NeijiangDecisionEngine
     private readonly NeijiangMctsEngine _search = new();
     private readonly NeijiangExpectedScoreEngine _expectedScore = new();
     private readonly NeijiangSelfDrawProbabilityEngine _selfDraw = new();
+    private readonly NeijiangHandShapeEngine _shape = new();
+    private readonly NeijiangWaitShapeEngine _waitShape = new();
+    private readonly NeijiangLimitedLookaheadEngine _limitedLookahead = new();
 
     public NeijiangDecisionResult DecideDiscard(NeijiangStateView state)
     {
@@ -44,13 +47,16 @@ public sealed class NeijiangDecisionEngine
             var routesAfter = EstimateRoutes(remainingHand, state);
             var routeLoss = currentRoutes.Where(route => !routesAfter.Contains(route)).ToArray();
             var qualityScore = _quality.EvaluateScore(effectiveImprovingTiles, state.Remaining18);
+            var shapeSummary = _shape.Evaluate(remainingHand, state.Remaining18, meldCount, effectiveShanten);
             var waitCount = exactReadyTiles.Count > 0 ? exactReadyTiles.Count : (effectiveShanten <= 0 ? improvingTiles.Count : 0);
+            var waitShapeSummary = _waitShape.Evaluate(remainingHand, waitCount > 0 ? effectiveImprovingTiles : Array.Empty<int>());
+            var limitedLookahead = _limitedLookahead.Evaluate(remainingHand, state.Remaining18, meldCount, effectiveShanten, effectiveLiveUkeire);
             var dangerEval = _danger.EvaluateDetail(tileType, state, belief);
             var danger = dangerEval.Risk;
             var wallDrawPosterior = EstimateWallDrawPosterior(effectiveImprovingTiles, belief);
             var tenpaiProbability = EstimateTenpaiProbability(effectiveShanten, effectiveLiveUkeire);
             var selfDrawProbability = _selfDraw.Estimate(state, effectiveImprovingTiles, waitCount, effectiveLiveUkeire, effectiveShanten, danger, belief);
-            var dealInProbability = danger / 100.0;
+            var dealInProbability = NeijiangRiskCalibration.ToDealInProbability(danger, roundStage, maxReadyPosterior);
             var winProbability = Math.Clamp(tenpaiProbability * 0.58 + selfDrawProbability * 0.42, 0.01, 0.95);
             var posteriorAdjustment = EstimatePosteriorDefensePenalty(effectiveShanten, effectiveLiveUkeire, dealInProbability, maxReadyPosterior, wallDrawPosterior, state.WallCount, roundStage);
             var expectedScore = _expectedScore.EvaluateDiscardCandidate(
@@ -69,8 +75,12 @@ public sealed class NeijiangDecisionEngine
                 wallDrawPosterior,
                 roundStage,
                 routesAfter);
-            var shapeValue = EstimateShapeValue(effectiveShanten, effectiveUkeire, effectiveLiveUkeire, waitCount, qualityScore, wallDrawPosterior, roundStage, routesAfter.Count, routeLoss.Length);
-            var expectedValue = expectedScore.Net + shapeValue;
+            var shapeValue = EstimateShapeValue(effectiveShanten, effectiveUkeire, effectiveLiveUkeire, waitCount, qualityScore, wallDrawPosterior, roundStage, routesAfter.Count, routeLoss.Length)
+                + shapeSummary.ShapeScore
+                + waitShapeSummary.WaitShapeScore
+                + limitedLookahead.Score;
+            var defenseAdjustment = posteriorAdjustment * ResolveDefenseAdjustmentWeight(effectiveShanten, waitCount, roundStage, maxReadyPosterior);
+            var expectedValue = expectedScore.Net + shapeValue - defenseAdjustment;
             var score = (int)Math.Round(expectedValue * 100.0);
             var fastTingDiscardRank = ResolveFastRank(effectiveShanten, waitCount, effectiveLiveUkeire);
             var riskLabel = dangerEval.RiskLabel;
@@ -80,6 +90,11 @@ public sealed class NeijiangDecisionEngine
             var posteriorReasons = BuildPosteriorReasons(effectiveShanten, effectiveLiveUkeire, dealInProbability, maxReadyPosterior, wallDrawPosterior, state.WallCount, roundStage, posteriorAdjustment);
             var riskReasons = BuildRiskReasons(danger, riskLabel, state.WallCount, roundStage, effectiveLiveUkeire, dangerEval);
             var candidateReasons = BuildReasons(effectiveShanten, effectiveLiveUkeire, danger, riskLabel, strategyTag, waitCount, roundStage, posteriorReasons, expectedScore);
+            var mergedReasons = candidateReasons
+                .Concat(waitCount > 0 ? waitShapeSummary.Reasons : Array.Empty<string>())
+                .Concat(shapeSummary.Reasons)
+                .Concat(limitedLookahead.Reasons)
+                .ToArray();
             candidateScores[tileType] = score;
             candidates.Add(new NeijiangCandidateDetail
             {
@@ -110,12 +125,31 @@ public sealed class NeijiangDecisionEngine
                 ExpectedDrawRiskLoss = expectedScore.DrawRiskLoss,
                 ExpectedReadyValue = expectedScore.ReadyValue,
                 PosteriorAdjustment = posteriorAdjustment,
+                DefenseAdjustment = defenseAdjustment,
+                GoodShapeCount = shapeSummary.GoodShapeCount,
+                BadShapeCount = shapeSummary.BadShapeCount,
+                PairPressure = shapeSummary.PairPressure,
+                TaatsuOverflow = shapeSummary.TaatsuOverflow,
+                SameShantenImprovementCount = shapeSummary.SameShantenImprovementCount,
+                MiddleTileFlexibility = shapeSummary.MiddleTileFlexibility,
+                ShapeScore = shapeSummary.ShapeScore,
+                WaitShapeLabel = waitShapeSummary.Label,
+                WaitShapeScore = waitShapeSummary.WaitShapeScore,
+                RyanmenWaitCount = waitShapeSummary.RyanmenCount,
+                KanchanWaitCount = waitShapeSummary.KanchanCount,
+                PenchanWaitCount = waitShapeSummary.PenchanCount,
+                TankiWaitCount = waitShapeSummary.TankiCount,
+                ShanponWaitCount = waitShapeSummary.ShanponCount,
+                LimitedLookaheadScore = limitedLookahead.Score,
+                LimitedLookaheadSamples = limitedLookahead.SampledDrawCount,
+                LimitedLookaheadBestShanten = limitedLookahead.BestNextShanten,
+                LimitedLookaheadBestLiveUkeire = limitedLookahead.BestNextLiveUkeire,
                 SearchBonus = 0.0,
                 SearchSimulations = 0,
                 SearchUsed = false,
                 PosteriorReasons = posteriorReasons,
                 RiskReasons = riskReasons,
-                Reasons = candidateReasons
+                Reasons = mergedReasons
             });
             if (effectiveShanten < bestShanten || (effectiveShanten == bestShanten && score > bestScore))
             {
@@ -157,9 +191,23 @@ public sealed class NeijiangDecisionEngine
                 .ToList();
         }
 
+        var lateWallDefense = SelectLateWallDefenseOverride(candidates, bestTile, state, maxReadyPosterior);
+        if (lateWallDefense is not null)
+        {
+            bestTile = lateWallDefense.TileType;
+            bestScore = lateWallDefense.Score;
+            bestShanten = lateWallDefense.Shanten;
+            bestUkeire = lateWallDefense.Ukeire;
+            bestLive = lateWallDefense.LiveUkeire;
+            bestSearchBonus = lateWallDefense.SearchBonus;
+            reasons = lateWallDefense.Reasons
+                .Concat(new[] { "尾盘硬防守：牌墙极少时优先避开证据不牢的抢听风险" })
+                .ToList();
+        }
+
         var bestCandidateSnapshot = candidates.FirstOrDefault(item => item.TileType == bestTile);
         var finalDanger = bestTile >= 0 ? _danger.EvaluateDetail(bestTile, state, belief) : new NeijiangDangerEvaluation { Risk = 0, RiskLabel = "低危" };
-        var finalDealInProbability = finalDanger.Risk / 100.0;
+        var finalDealInProbability = NeijiangRiskCalibration.ToDealInProbability(finalDanger.Risk, roundStage, maxReadyPosterior);
         var finalTenpaiProbability = EstimateTenpaiProbability(bestShanten, bestLive);
         var finalSelfDrawProbability = bestCandidateSnapshot?.SelfDrawProbability ?? 0.01;
         var finalWinProbability = Math.Clamp(finalTenpaiProbability * 0.58 + finalSelfDrawProbability * 0.42, 0.01, 0.95);
@@ -389,6 +437,18 @@ public sealed class NeijiangDecisionEngine
         return Math.Clamp(total / improvingTiles.Count, 0.0, 0.98);
     }
 
+    private static double ResolveDefenseAdjustmentWeight(int shanten, int waitCount, int roundStage, double maxReadyPosterior)
+    {
+        var weight = 0.55;
+        if (roundStage == 1) weight += 0.25;
+        else if (roundStage >= 2) weight += 0.55;
+        if (shanten > 0) weight += 0.24;
+        if (waitCount <= 1) weight += 0.12;
+        if (maxReadyPosterior >= 0.72) weight += 0.22;
+        else if (maxReadyPosterior >= 0.56) weight += 0.12;
+        return Math.Clamp(weight, 0.40, 1.75);
+    }
+
     private static string ResolveStrategyTag(int shanten, int liveUkeire, int danger, int roundStage)
     {
         if (shanten <= 1 && liveUkeire >= 10) return "抢听";
@@ -503,6 +563,69 @@ public sealed class NeijiangDecisionEngine
         _ => "后期"
     };
 
+    private static NeijiangCandidateDetail? SelectLateWallDefenseOverride(
+        IReadOnlyList<NeijiangCandidateDetail> candidates,
+        int currentTile,
+        NeijiangStateView state,
+        double maxReadyPosterior)
+    {
+        if (state.WallCount > 5 || candidates.Count < 2)
+            return null;
+        var current = candidates.FirstOrDefault(item => item.TileType == currentTile);
+        if (current is null)
+            return null;
+
+        if (state.WallCount <= 0 && current.WaitCount > 0)
+        {
+            var wallEmptyAlternative = candidates
+                .Where(item => item.TileType != current.TileType
+                    && item.Shanten == current.Shanten
+                    && item.WaitCount >= current.WaitCount
+                    && item.Danger <= current.Danger + 8)
+                .OrderBy(item => item.Danger)
+                .ThenBy(item => item.LiveUkeire)
+                .ThenBy(item => item.TileType)
+                .FirstOrDefault();
+            if (wallEmptyAlternative is not null)
+                return wallEmptyAlternative;
+        }
+
+        if (state.WallCount <= 5 && maxReadyPosterior >= 0.56 && current.Danger >= 22)
+        {
+            var safeSameSpeed = candidates
+                .Where(item => item.TileType != current.TileType
+                    && item.Shanten <= current.Shanten
+                    && item.Danger <= 12)
+                .OrderBy(item => item.Danger)
+                .ThenByDescending(item => item.WaitCount)
+                .ThenByDescending(item => item.LiveUkeire)
+                .ThenByDescending(item => item.Score)
+                .FirstOrDefault();
+            if (safeSameSpeed is not null)
+                return safeSameSpeed;
+        }
+
+        if (state.WallCount <= 3 && current.WaitCount > 0 && current.LiveUkeire <= 6 && current.Danger > 24)
+        {
+            var safeFold = candidates
+                .Where(item => item.TileType != current.TileType
+                    && item.Shanten <= current.Shanten + 1
+                    && item.Danger <= 12
+                    && (item.Shanten <= current.Shanten
+                        || item.LiveUkeire >= 10
+                        || current.Danger >= 78))
+                .OrderBy(item => item.Shanten)
+                .ThenBy(item => item.Danger)
+                .ThenByDescending(item => item.LiveUkeire)
+                .ThenByDescending(item => item.Score)
+                .FirstOrDefault();
+            if (safeFold is not null)
+                return safeFold;
+        }
+
+        return null;
+    }
+
     private static List<NeijiangCandidateDetail> ApplySearchBonuses(
         IReadOnlyList<NeijiangCandidateDetail> candidates,
         NeijiangSearchResult searchResult)
@@ -544,6 +667,14 @@ public sealed class NeijiangDecisionEngine
                 ExpectedDrawRiskLoss = candidate.ExpectedDrawRiskLoss,
                 ExpectedReadyValue = candidate.ExpectedReadyValue,
                 PosteriorAdjustment = candidate.PosteriorAdjustment,
+                DefenseAdjustment = candidate.DefenseAdjustment,
+                GoodShapeCount = candidate.GoodShapeCount,
+                BadShapeCount = candidate.BadShapeCount,
+                PairPressure = candidate.PairPressure,
+                TaatsuOverflow = candidate.TaatsuOverflow,
+                SameShantenImprovementCount = candidate.SameShantenImprovementCount,
+                MiddleTileFlexibility = candidate.MiddleTileFlexibility,
+                ShapeScore = candidate.ShapeScore,
                 SearchBonus = bonus,
                 SearchSimulations = searchResult.Simulations,
                 SearchUsed = searchResult.Used,

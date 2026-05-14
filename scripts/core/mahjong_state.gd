@@ -12,6 +12,8 @@ func build_player_state(player: Dictionary) -> Dictionary:
 		"score": int(player.get("score", 0)),
 		"ding_que": str(player.get("ding_que", "")),
 		"bao_jiao": bool(player.get("bao_jiao", false)),
+		"bao_gang_tiles": player.get("bao_gang_tiles", []).duplicate(true),
+		"bao_jiao_ting_tiles": player.get("bao_jiao_ting_tiles", []).duplicate(true),
 		"has_won": bool(player.get("has_won", false)),
 		"win_type": str(player.get("win_type", "")),
 		"winning_source_seat": int(player.get("winning_source_seat", -1)),

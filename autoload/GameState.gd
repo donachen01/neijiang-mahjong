@@ -45,6 +45,9 @@ const STARTING_SCORE := 0
 const AI_LEVEL_LABELS := ["初级", "中级", "骨灰级", "作弊级"]
 const AI_ASYNC_TIMEOUT_MS := 1000
 const AI_REACTION_REVIEW_LIMIT := 24
+const HELL_TRAINING_DIR := "res://测试数据统计/hell_training"
+const HELL_MARKED_CASE_DIR := "res://测试数据统计/hell_marked_cases"
+const HELL_REPLAY_DIR := "res://测试数据统计/hell_replay"
 
 var current_phase: RoundPhase = RoundPhase.BOOT
 var current_dealer_seat: int = 0
@@ -88,6 +91,7 @@ var latest_trainer_hint_cache_key: String = ""
 var ai_decision_metrics: Dictionary = {}
 var ai_reaction_review_history: Array[Dictionary] = []
 var latest_ai_reaction_review: Dictionary = {}
+var reaction_pass_evidence: Array[Dictionary] = []
 var self_hu_pass_locks: Dictionary = {}
 var opening_roll_data: Dictionary = {}
 var opening_roll_pending_completion: bool = false
@@ -103,8 +107,17 @@ var ai_chain_debug_history: Array[String] = []
 var opening_bao_jiao_pending: bool = false
 var opening_bao_jiao_queue: Array[int] = []
 var opening_bao_jiao_current_seat: int = -1
+var hell_training_session_id: String = ""
+var hell_training_decision_count: int = 0
+var hell_training_marked_count: int = 0
+var hell_training_category_counts: Dictionary = {}
+var hell_training_severity_counts: Dictionary = {}
+var latest_hell_decision_snapshot: Dictionary = {}
+var hell_last_marked_signature: String = ""
 
 var _rng := RandomNumberGenerator.new()
+var deterministic_seed_enabled: bool = false
+var deterministic_seed: int = 0
 
 
 func _ready() -> void:
@@ -122,7 +135,8 @@ func _ready() -> void:
 	reaction_advisor = ReactionAdvisorScript.new()
 	gang_advisor = GangAdvisorScript.new()
 	ai_tuning_config = AITuningConfigScript.new()
-	ai_tuning_config.apply_preset("bone_ash")
+	ai_tuning_config.apply_preset(AITuningConfigScript.PRESET_HELL)
+	ai_level = AILevel.CHEATING
 	ai_learning_engine = AILearningEngineScript.new()
 	ai_learning_engine.load_profile()
 	_apply_ai_learning_adjustment()
@@ -136,8 +150,21 @@ func _ready() -> void:
 	start_new_round()
 
 
+func set_test_seed(seed_value: int) -> void:
+	deterministic_seed_enabled = true
+	deterministic_seed = seed_value
+	_rng.seed = seed_value
+
+
+func clear_test_seed() -> void:
+	deterministic_seed_enabled = false
+	_rng.randomize()
+
+
 func start_new_round(preserve_dealer: bool = false) -> void:
 	current_phase = RoundPhase.TABLE_SETUP
+	if deterministic_seed_enabled:
+		_rng.seed = deterministic_seed + int(round_index)
 	_reload_ai_learning_for_new_round()
 	var previous_players: Array[Dictionary] = players.duplicate(true)
 	discard_pile.clear()
@@ -155,6 +182,7 @@ func start_new_round(preserve_dealer: bool = false) -> void:
 	ai_decision_metrics = _create_empty_ai_decision_metrics()
 	ai_reaction_review_history.clear()
 	latest_ai_reaction_review.clear()
+	reaction_pass_evidence.clear()
 	self_hu_pass_locks.clear()
 	pending_ai_turn_decision.clear()
 	pending_ai_reaction_decision.clear()
@@ -233,7 +261,7 @@ func get_debug_snapshot() -> Dictionary:
 		"pending_ai_turn_request_id": pending_ai_turn_request_id,
 		"pending_ai_turn_request_meta": pending_ai_turn_request_meta.duplicate(true),
 		"pending_ai_turn_decision": pending_ai_turn_decision.duplicate(true),
-		"ai_core_debug": {} if ai_manager == null else ai_manager.get_debug_snapshot(),
+		"ai_core_debug": _build_ai_core_debug_snapshot(),
 		"ai_chain_debug": ai_chain_debug_history.duplicate(),
 		"trainer_hint": _get_human_trainer_hint_snapshot() if human_trainer_hint_enabled else {},
 		"opening_roll": opening_roll_data.duplicate(true),
@@ -241,6 +269,7 @@ func get_debug_snapshot() -> Dictionary:
 		"opening_bao_jiao_pending": opening_bao_jiao_pending,
 		"opening_bao_jiao_current_seat": opening_bao_jiao_current_seat,
 		"opening_bao_jiao_queue": opening_bao_jiao_queue.duplicate(),
+		"hell_training": _build_hell_training_debug_snapshot(),
 		"players": players.duplicate(true),
 	}
 
@@ -251,6 +280,8 @@ func get_ai_level_index() -> int:
 
 func set_human_trainer_hint_enabled(enabled: bool) -> void:
 	human_trainer_hint_enabled = enabled
+	if ai_manager != null:
+		ai_manager.set_compact_runtime_snapshots(not enabled and not _is_hell_training_mode())
 	if not enabled:
 		latest_trainer_hint.clear()
 		latest_trainer_hint_cache_key = ""
@@ -260,8 +291,34 @@ func set_ai_preset(preset_name: String) -> bool:
 	if ai_tuning_config == null:
 		return false
 	ai_tuning_config.apply_preset(preset_name)
+	if str(ai_tuning_config.preset_name) == AITuningConfigScript.PRESET_HELL:
+		ai_level = AILevel.CHEATING
+		if bool(ai_tuning_config.diagnostics_recording_enabled):
+			_ensure_hell_training_session()
+	elif str(ai_tuning_config.preset_name) == AITuningConfigScript.PRESET_INTERMEDIATE:
+		ai_level = AILevel.INTERMEDIATE
+	else:
+		ai_level = AILevel.ADVANCED
+	for player in players:
+		if bool(player.get("is_ai", false)):
+			player["ai_level"] = int(ai_level)
 	_apply_ai_runtime_tuning()
 	debug_last_message = "AI 参数预设已切换为 %s。" % preset_name
+	_emit_state_changed()
+	return true
+
+
+func set_hell_diagnostics_recording_enabled(enabled: bool) -> bool:
+	if ai_tuning_config == null:
+		return false
+	ai_tuning_config.set_diagnostics_recording_enabled(enabled)
+	if enabled and str(ai_tuning_config.preset_name) == AITuningConfigScript.PRESET_HELL:
+		_ensure_hell_training_session()
+	elif not enabled:
+		latest_hell_decision_snapshot.clear()
+	hell_last_marked_signature = ""
+	_apply_ai_runtime_tuning()
+	debug_last_message = "AI 训练记录已%s。" % ("开启" if enabled else "关闭")
 	_emit_state_changed()
 	return true
 
@@ -276,6 +333,21 @@ func _reload_ai_learning_for_new_round() -> void:
 	ai_learning_engine.load_profile()
 	ai_tuning_config.apply_preset(str(ai_tuning_config.preset_name))
 	_apply_ai_runtime_tuning()
+
+
+func _build_ai_core_debug_snapshot() -> Dictionary:
+	if ai_manager == null:
+		return {}
+	if _is_hell_training_mode() or human_trainer_hint_enabled:
+		return ai_manager.get_debug_snapshot()
+	if not ai_manager.has_method("get_backend_status"):
+		return ai_manager.get_debug_snapshot()
+	var status: Dictionary = ai_manager.get_backend_status()
+	return {
+		"backend_status": status,
+		"latest_turn_snapshot": ai_manager.latest_turn_snapshot.duplicate(true),
+		"latest_reaction_snapshot": ai_manager.latest_reaction_snapshot.duplicate(true),
+	}
 
 
 func _apply_ai_learning_adjustment() -> void:
@@ -321,6 +393,8 @@ func _apply_ai_manual_tuning() -> void:
 func _apply_ai_runtime_tuning() -> void:
 	_apply_ai_learning_adjustment()
 	_apply_ai_manual_tuning()
+	if ai_manager != null:
+		ai_manager.set_compact_runtime_snapshots(not human_trainer_hint_enabled and not _is_hell_training_mode())
 
 
 func set_ai_tuning_value(key: String, value: int) -> bool:
@@ -436,7 +510,7 @@ func _update_ai_learning_after_round(score_changes: Dictionary) -> void:
 		"ai_decision_metrics": ai_decision_metrics.duplicate(true),
 		"latest_ai_reaction_review": latest_ai_reaction_review.duplicate(true),
 		"ai_reaction_review_history": ai_reaction_review_history.duplicate(true),
-		"ai_core_debug": {} if ai_manager == null else ai_manager.get_debug_snapshot(),
+		"ai_core_debug": _build_ai_core_debug_snapshot(),
 	}
 	ai_learning_engine.record_human_round(round_result)
 	ai_tuning_config.apply_preset(str(ai_tuning_config.preset_name))
@@ -562,7 +636,7 @@ func _build_player_state(seat: int) -> Dictionary:
 
 
 func _build_table_state() -> Dictionary:
-	return mahjong_state.build_table_state(
+	var table_state: Dictionary = mahjong_state.build_table_state(
 		players,
 		current_turn_seat,
 		int(current_phase),
@@ -571,6 +645,8 @@ func _build_table_state() -> Dictionary:
 		pending_reactions,
 		wall_count
 	)
+	table_state["reaction_pass_evidence"] = reaction_pass_evidence.duplicate(true)
+	return table_state
 
 
 func can_human_self_hu(seat: int) -> bool:
@@ -677,7 +753,9 @@ func get_human_reaction_options(seat: int) -> Dictionary:
 	var reaction_tile: Dictionary = current_discard_context.get("tile", {})
 	var ding_que_claim_blocked := not reaction_tile.is_empty() and _is_ding_que_tile_for_seat(seat, reaction_tile)
 	var can_peng := false if bao_jiao_locked else bool(candidate["can_peng"])
-	var can_gang := false if bao_jiao_locked else bool(candidate["can_gang"])
+	var can_gang := bool(candidate["can_gang"])
+	if bao_jiao_locked and not _is_bao_gang_allowed(seat, reaction_tile):
+		can_gang = false
 	if ding_que_claim_blocked:
 		can_peng = false
 		can_gang = false
@@ -764,7 +842,8 @@ func execute_human_peng(seat: int) -> bool:
 func execute_human_gang(seat: int) -> bool:
 	if current_phase != RoundPhase.REACTION:
 		return false
-	if _is_bao_jiao_reaction_locked(seat):
+	var reaction_tile: Dictionary = current_discard_context.get("tile", {})
+	if _is_bao_jiao_reaction_locked(seat) and not _is_bao_gang_allowed(seat, reaction_tile):
 		return false
 	var candidate: Dictionary = _get_reaction_candidate_for_seat(seat)
 	if candidate.is_empty() or not candidate["can_gang"]:
@@ -823,6 +902,7 @@ func pass_human_reaction(seat: int) -> bool:
 	var candidate: Dictionary = _get_reaction_candidate_for_seat(seat)
 	if candidate.is_empty():
 		return false
+	_record_reaction_pass_evidence(seat, candidate)
 	_remove_reaction_candidate_for_seat(seat)
 	_apply_passed_hu_lock_if_needed(seat, candidate)
 	debug_last_message = "%s 选择过牌。剩余可响应：%s" % [_seat_display_name(seat), mahjong_judge.summarize_candidates(pending_reactions)]
@@ -959,6 +1039,9 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 		debug_last_message = "C# AI 已返回，但推荐牌未映射到当前手牌。"
 		_record_ai_chain_debug("turn_build_map_failed seat=%d analysis=%s" % [seat, JSON.stringify(analysis).left(900)])
 		return {}
+	var hell_result := _try_apply_hell_oracle_to_discard(seat, player_state, table_state, analysis, selected_tile)
+	selected_tile = hell_result.get("selected_tile", selected_tile)
+	var hell_oracle: Dictionary = hell_result.get("oracle", {})
 	_record_ai_chain_debug("turn_build_ok seat=%d tile=%s id=%d backend=%s" % [
 		seat,
 		str(selected_tile.get("display_name", selected_tile.get("tile_name", "?"))),
@@ -968,6 +1051,16 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 	base["action"] = "discard"
 	base["tile_id"] = int(selected_tile.get("id", -1))
 	base["analysis"] = analysis.duplicate(true)
+	if not hell_oracle.is_empty():
+		base["hell_oracle"] = hell_oracle.duplicate(true)
+		base["fair_tile_id"] = int(analysis.get("recommended", {}).get("tile", {}).get("id", -1))
+		base["fair_tile_type"] = int(analysis.get("recommended", {}).get("csharp_tile_type", -1))
+		base["actual_action"] = {
+			"action": "discard",
+			"tile_id": int(selected_tile.get("id", -1)),
+			"tile_type": _neijiang_tile_type(selected_tile),
+			"source": "hell_oracle" if bool(ai_tuning_config.hell_execute_oracle_action) else "fair_ai",
+		}
 	return base
 
 
@@ -1045,18 +1138,24 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 	match str(decision.get("action", "")):
 		"self_hu":
 			_record_ai_metric("self_hu_actions")
+			_record_hell_decision_snapshot(decision, "self_hu")
 			return _execute_self_draw_hu(seat)
 		"bao_jiao":
 			_record_ai_metric("bao_jiao_actions")
+			_record_hell_decision_snapshot(decision, "bao_jiao")
 			return execute_human_bao_jiao(seat)
 		"an_gang":
 			_record_ai_metric("an_gang_attempts")
+			_record_hell_decision_snapshot(decision, "an_gang")
 			return _execute_an_gang(seat, decision.get("gang_option", {}))
 		"add_gang":
 			_record_ai_metric("add_gang_attempts")
+			_record_hell_decision_snapshot(decision, "add_gang")
 			return _start_add_gang(seat, decision.get("gang_option", {}))
 		"discard":
 			var tile_id := int(decision.get("tile_id", -1))
+			var tile_type := _neijiang_tile_type(_tile_by_id_in_hand(seat, tile_id))
+			_record_hell_decision_snapshot(decision, "discard", tile_type)
 			var ok := _discard_tile_internal(seat, tile_id)
 			_record_ai_chain_debug("turn_execute_discard seat=%d tile_id=%d ok=%s msg=%s" % [
 				seat,
@@ -1091,6 +1190,7 @@ func run_ai_reaction() -> bool:
 	_record_ai_metric("reaction_total")
 	_record_ai_metric("reaction_" + resolved_action)
 	_record_ai_reaction_review(seat, candidate, decision, requested_action, resolved_action)
+	_record_hell_reaction_snapshot(seat, candidate, decision, requested_action, resolved_action)
 	var executed := false
 	if resolved_action == "hu":
 		executed = _execute_hu_on_discard(seat)
@@ -2409,6 +2509,23 @@ func _clear_reaction_context() -> void:
 	_clear_pending_ai_reaction_request()
 
 
+func _record_reaction_pass_evidence(seat: int, candidate: Dictionary) -> void:
+	var tile: Dictionary = current_discard_context.get("tile", {})
+	if tile.is_empty():
+		return
+	reaction_pass_evidence.append({
+		"round_index": round_index,
+		"seat": seat,
+		"tile": tile.duplicate(true),
+		"can_hu": bool(candidate.get("can_hu", false)),
+		"can_peng": bool(candidate.get("can_peng", false)),
+		"can_gang": bool(candidate.get("can_gang", false)),
+		"reaction_type": str(current_discard_context.get("reaction_type", "discard")),
+	})
+	while reaction_pass_evidence.size() > 96:
+		reaction_pass_evidence.remove_at(0)
+
+
 func _apply_passed_hu_lock_if_needed(seat: int, candidate: Dictionary) -> void:
 	if not candidate.get("can_hu", false):
 		return
@@ -2450,6 +2567,9 @@ func _apply_shun_he_lock_filter() -> void:
 func _find_add_gang_option(seat: int) -> Dictionary:
 	if seat < 0 or seat >= players.size():
 		return {}
+	var last_draw_tile_id := _get_last_draw_tile_id_for_seat(seat)
+	if last_draw_tile_id == -1:
+		return {}
 	var hand_tiles: Array = players[seat]["hand_tiles"]
 	var melds: Array = players[seat]["melds"]
 	for meld_index in range(melds.size()):
@@ -2464,6 +2584,8 @@ func _find_add_gang_option(seat: int) -> Dictionary:
 		if _is_ding_que_tile_for_seat(seat, target_tile):
 			continue
 		for hand_tile in hand_tiles:
+			if int(hand_tile.get("id", -1)) != last_draw_tile_id:
+				continue
 			if hand_tile["suit"] == target_tile["suit"] and hand_tile["rank"] == target_tile["rank"]:
 				if _is_ding_que_tile_for_seat(seat, hand_tile):
 					continue
@@ -2797,6 +2919,9 @@ func _find_all_add_gang_options(seat: int) -> Array:
 	var results: Array = []
 	if seat < 0 or seat >= players.size():
 		return results
+	var last_draw_tile_id := _get_last_draw_tile_id_for_seat(seat)
+	if last_draw_tile_id == -1:
+		return results
 	var hand_tiles: Array = players[seat]["hand_tiles"]
 	var melds: Array = players[seat]["melds"]
 	for meld_index in range(melds.size()):
@@ -2810,6 +2935,8 @@ func _find_all_add_gang_options(seat: int) -> Array:
 		if _is_ding_que_tile_for_seat(seat, target_tile):
 			continue
 		for hand_tile in hand_tiles:
+			if int(hand_tile.get("id", -1)) != last_draw_tile_id:
+				continue
 			if hand_tile["suit"] == target_tile["suit"] and hand_tile["rank"] == target_tile["rank"]:
 				if _is_ding_que_tile_for_seat(seat, hand_tile):
 					continue
@@ -3229,6 +3356,9 @@ func _remove_reaction_candidate_for_seat(seat: int) -> void:
 
 
 func _pass_ai_reaction(seat: int) -> bool:
+	var candidate: Dictionary = _get_reaction_candidate_for_seat(seat)
+	if not candidate.is_empty():
+		_record_reaction_pass_evidence(seat, candidate)
 	_remove_reaction_candidate_for_seat(seat)
 	debug_last_message = "AI seat %d passed. Remaining reactions: %s" % [
 		seat,
@@ -4076,6 +4206,460 @@ func _apply_settlement_scores_once() -> void:
 		player["score"] = int(player.get("score", STARTING_SCORE)) + int(score_changes.get(seat, 0))
 	settlement_data["scores_applied"] = true
 	_update_ai_learning_after_round(score_changes)
+	_write_hell_training_report()
+
+
+func mark_current_hell_training_case(reason: String = "manual_mark") -> bool:
+	if not _is_hell_training_mode():
+		debug_last_message = "当前不是地狱训练模式，无法标记训练手牌。"
+		_emit_state_changed()
+		return false
+	_ensure_hell_training_session()
+	var mark_signature := _current_hell_mark_signature()
+	if mark_signature != "" and mark_signature == hell_last_marked_signature:
+		debug_last_message = "当前训练手牌已经标记过。"
+		_emit_state_changed()
+		return true
+	hell_training_marked_count += 1
+	var snapshot := _build_hell_case_snapshot("manual_mark", -1, {}, {}, {}, {
+		"reason": reason,
+		"latest_decision": latest_hell_decision_snapshot.duplicate(true),
+	})
+	snapshot["marked_index"] = hell_training_marked_count
+	var path := "%s/%s_mark_%04d.json" % [HELL_MARKED_CASE_DIR, hell_training_session_id, hell_training_marked_count]
+	var ok := _write_json_file(path, snapshot)
+	if ok:
+		hell_last_marked_signature = mark_signature
+		debug_last_message = "已标记当前训练手牌：%s" % ProjectSettings.globalize_path(path)
+		_write_hell_training_report()
+	else:
+		debug_last_message = "标记训练手牌失败：%s" % path
+	_emit_state_changed()
+	return ok
+
+
+func _current_hell_mark_signature() -> String:
+	var visible: Dictionary = _build_hell_visible_state_snapshot()
+	var player_discards := []
+	for player in Array(visible.get("players", [])):
+		var player_data: Dictionary = player
+		player_discards.append(Array(player_data.get("discards", [])).size())
+	return JSON.stringify({
+		"latest_index": int(latest_hell_decision_snapshot.get("decision_index", -1)),
+		"latest_type": str(latest_hell_decision_snapshot.get("decision_type", "")),
+		"round_index": int(round_index),
+		"phase": int(current_phase),
+		"turn": int(current_turn_seat),
+		"wall": int(wall_count),
+		"discards": player_discards,
+	})
+
+
+func _is_hell_training_mode() -> bool:
+	return ai_tuning_config != null \
+		and str(ai_tuning_config.preset_name) == "hell" \
+		and bool(ai_tuning_config.diagnostics_recording_enabled) \
+		and bool(ai_tuning_config.hell_record_oracle)
+
+
+func _ensure_hell_training_session() -> void:
+	if not hell_training_session_id.is_empty():
+		_ensure_hell_output_dirs()
+		return
+	hell_training_session_id = "%s_seed%s" % [_hell_timestamp_slug(), str(deterministic_seed if deterministic_seed_enabled else "live")]
+	hell_training_decision_count = 0
+	hell_training_marked_count = 0
+	hell_training_category_counts.clear()
+	hell_training_severity_counts.clear()
+	latest_hell_decision_snapshot.clear()
+	hell_last_marked_signature = ""
+	_ensure_hell_output_dirs()
+
+
+func _ensure_hell_output_dirs() -> void:
+	for path in [HELL_TRAINING_DIR, HELL_MARKED_CASE_DIR, HELL_REPLAY_DIR]:
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path))
+
+
+func _hell_timestamp_slug() -> String:
+	var dt := Time.get_datetime_dict_from_system()
+	return "%04d%02d%02d_%02d%02d%02d" % [
+		int(dt.get("year", 0)),
+		int(dt.get("month", 0)),
+		int(dt.get("day", 0)),
+		int(dt.get("hour", 0)),
+		int(dt.get("minute", 0)),
+		int(dt.get("second", 0)),
+	]
+
+
+func _build_hell_training_debug_snapshot() -> Dictionary:
+	return {
+		"enabled": _is_hell_training_mode(),
+		"session_id": hell_training_session_id,
+		"decision_count": hell_training_decision_count,
+		"marked_count": hell_training_marked_count,
+		"category_counts": hell_training_category_counts.duplicate(true),
+		"severity_counts": hell_training_severity_counts.duplicate(true),
+		"latest_decision": latest_hell_decision_snapshot.duplicate(true),
+		"output_dirs": {
+			"training": HELL_TRAINING_DIR,
+			"marked_cases": HELL_MARKED_CASE_DIR,
+			"replay": HELL_REPLAY_DIR,
+		},
+	}
+
+
+func _record_hell_decision_snapshot(decision: Dictionary, decision_type: String, actual_tile_type: int = -1) -> void:
+	if not _is_hell_training_mode():
+		return
+	_ensure_hell_training_session()
+	hell_training_decision_count += 1
+	var snapshot := _build_hell_case_snapshot(
+		decision_type,
+		int(decision.get("seat", current_turn_seat)),
+		decision.get("analysis", {}).duplicate(true),
+		decision.get("hell_oracle", {}).duplicate(true),
+		decision.get("actual_action", {}).duplicate(true),
+		{
+			"decision": decision.duplicate(true),
+			"actual_tile_type": actual_tile_type,
+		}
+	)
+	snapshot["decision_index"] = hell_training_decision_count
+	latest_hell_decision_snapshot = snapshot.duplicate(true)
+	_update_hell_training_summary(snapshot)
+	var path := "%s/%s_decision_%06d.json" % [HELL_TRAINING_DIR, hell_training_session_id, hell_training_decision_count]
+	_write_json_file(path, snapshot)
+
+
+func _record_hell_reaction_snapshot(seat: int, candidate: Dictionary, decision: Dictionary, requested_action: String, resolved_action: String) -> void:
+	if not _is_hell_training_mode():
+		return
+	var action_snapshot := {
+		"requested_action": requested_action,
+		"resolved_action": resolved_action,
+		"reaction_tile_type": _neijiang_tile_type(current_discard_context.get("tile", {})),
+		"source_seat": int(current_discard_context.get("source_seat", -1)),
+	}
+	_record_hell_decision_snapshot({
+		"seat": seat,
+		"analysis": decision.duplicate(true),
+		"actual_action": action_snapshot,
+		"reaction_candidate": candidate.duplicate(true),
+	}, "reaction", int(action_snapshot.get("reaction_tile_type", -1)))
+
+
+func _build_hell_case_snapshot(decision_type: String, seat: int, fair_ai: Dictionary, oracle_ai: Dictionary, actual_action: Dictionary, extra: Dictionary = {}) -> Dictionary:
+	var category := str(oracle_ai.get("category", "not_evaluated"))
+	var severity := str(oracle_ai.get("severity", "none"))
+	return {
+		"schema_version": 1,
+		"session_id": hell_training_session_id,
+		"created_at": Time.get_datetime_string_from_system(),
+		"round_index": round_index,
+		"phase": int(current_phase),
+		"decision_type": decision_type,
+		"seat": seat,
+		"preset": "" if ai_tuning_config == null else str(ai_tuning_config.preset_name),
+		"hell_flags": _hell_flags_snapshot(),
+		"visible_state": _build_hell_visible_state_snapshot(),
+		"hidden_state": _build_hell_hidden_state_snapshot(),
+		"fair_ai": fair_ai.duplicate(true),
+		"oracle_ai": oracle_ai.duplicate(true),
+		"actual_action": actual_action.duplicate(true),
+		"difference": {
+			"category": category,
+			"severity": severity,
+		},
+		"extra": extra.duplicate(true),
+	}
+
+
+func _hell_flags_snapshot() -> Dictionary:
+	if ai_tuning_config == null:
+		return {}
+	return {
+		"share_ai_hands": bool(ai_tuning_config.hell_ai_share_ai_hands),
+		"can_see_human_hand": bool(ai_tuning_config.hell_ai_can_see_human_hand),
+		"can_see_wall": bool(ai_tuning_config.hell_ai_can_see_wall),
+		"record_oracle": bool(ai_tuning_config.hell_record_oracle),
+		"execute_oracle_action": bool(ai_tuning_config.hell_execute_oracle_action),
+		"log_marked_cases": bool(ai_tuning_config.hell_log_marked_cases),
+	}
+
+
+func _build_hell_visible_state_snapshot() -> Dictionary:
+	var player_summaries: Array = []
+	for player in players:
+		var summary := {
+			"seat": int(player.get("seat", -1)),
+			"nickname": str(player.get("nickname", "")),
+			"score": int(player.get("score", 0)),
+			"is_ai": bool(player.get("is_ai", false)),
+			"hand_count": int(player.get("hand_count", 0)),
+			"bao_jiao": bool(player.get("bao_jiao", false)),
+			"has_won": bool(player.get("has_won", false)),
+			"melds": Array(player.get("melds", [])).duplicate(true),
+			"discards": Array(player.get("discards", [])).duplicate(true),
+		}
+		player_summaries.append(summary)
+	return {
+		"current_turn_seat": current_turn_seat,
+		"current_dealer_seat": current_dealer_seat,
+		"wall_count": wall_count,
+		"discard_pile": discard_pile.duplicate(true),
+		"current_discard_context": current_discard_context.duplicate(true),
+		"last_draw_tile": last_draw_tile.duplicate(true),
+		"players": player_summaries,
+	}
+
+
+func _build_hell_hidden_state_snapshot() -> Dictionary:
+	return {
+		"all_hands18": _all_hands18_for_hell(),
+		"exact_wall18": _exact_wall18_for_hell(),
+		"human_hand_visible_to_ai": ai_tuning_config != null and bool(ai_tuning_config.hell_ai_can_see_human_hand),
+		"raw_wall_count": wall.size(),
+	}
+
+
+func _all_hands18_for_hell() -> Array:
+	var result: Array = []
+	for player in players:
+		var seat := int(player.get("seat", -1))
+		var can_include := true
+		if seat == 0 and ai_tuning_config != null and not bool(ai_tuning_config.hell_ai_can_see_human_hand):
+			can_include = false
+		if bool(player.get("is_ai", false)) and ai_tuning_config != null and not bool(ai_tuning_config.hell_ai_share_ai_hands):
+			can_include = false
+		result.append(_tile_counts18(Array(player.get("hand_tiles", []))) if can_include else _zero_counts18())
+	while result.size() < 4:
+		result.append(_zero_counts18())
+	return result
+
+
+func _exact_wall18_for_hell() -> Array:
+	if ai_tuning_config == null or not bool(ai_tuning_config.hell_ai_can_see_wall):
+		return _zero_counts18()
+	return _tile_counts18(wall)
+
+
+func _tile_counts18(tiles: Array) -> Array:
+	var counts := _zero_counts18()
+	for tile in tiles:
+		var item: Dictionary = tile
+		var tile_type := _neijiang_tile_type(item)
+		if tile_type >= 0 and tile_type < counts.size():
+			counts[tile_type] = int(counts[tile_type]) + 1
+	return counts
+
+
+func _zero_counts18() -> Array:
+	var counts: Array[int] = []
+	for _i in range(18):
+		counts.append(0)
+	return counts
+
+
+func _try_apply_hell_oracle_to_discard(seat: int, player_state: Dictionary, table_state: Dictionary, analysis: Dictionary, selected_tile: Dictionary) -> Dictionary:
+	if not _is_hell_training_mode() or ai_manager == null:
+		return {
+			"selected_tile": selected_tile.duplicate(true),
+			"oracle": {},
+		}
+	var fair_tile_type := int(analysis.get("recommended", {}).get("csharp_tile_type", _neijiang_tile_type(selected_tile)))
+	var payload: Dictionary = ai_manager.csharp_bridge.build_discard_transport_payload(player_state, table_state, rules)
+	payload["allHands18"] = _all_hands18_for_hell()
+	payload["exactWall18"] = _exact_wall18_for_hell()
+	payload["fairTileType"] = fair_tile_type
+	payload["actualTileType"] = fair_tile_type
+	var oracle: Dictionary = ai_manager.analyze_hell_oracle_discard(payload)
+	var final_tile := selected_tile.duplicate(true)
+	if not oracle.is_empty() and bool(ai_tuning_config.hell_execute_oracle_action):
+		var oracle_tile_type := int(oracle.get("tileType", -1))
+		var oracle_tile := _find_hand_tile_by_tile_type(seat, oracle_tile_type)
+		if not oracle_tile.is_empty():
+			final_tile = oracle_tile
+			oracle["actualTileType"] = oracle_tile_type
+	return {
+		"selected_tile": final_tile,
+		"oracle": oracle,
+	}
+
+
+func _find_hand_tile_by_tile_type(seat: int, tile_type: int) -> Dictionary:
+	if seat < 0 or seat >= players.size():
+		return {}
+	for tile in Array(players[seat].get("hand_tiles", [])):
+		var item: Dictionary = tile
+		if _neijiang_tile_type(item) == tile_type:
+			return item.duplicate(true)
+	return {}
+
+
+func _tile_by_id_in_hand(seat: int, tile_id: int) -> Dictionary:
+	if seat < 0 or seat >= players.size():
+		return {}
+	for tile in Array(players[seat].get("hand_tiles", [])):
+		var item: Dictionary = tile
+		if int(item.get("id", -1)) == tile_id:
+			return item.duplicate(true)
+	return {}
+
+
+func _update_hell_training_summary(snapshot: Dictionary) -> void:
+	var diff: Dictionary = snapshot.get("difference", {})
+	var category := str(diff.get("category", "not_evaluated"))
+	var severity := str(diff.get("severity", "none"))
+	hell_training_category_counts[category] = int(hell_training_category_counts.get(category, 0)) + 1
+	hell_training_severity_counts[severity] = int(hell_training_severity_counts.get(severity, 0)) + 1
+
+
+func _write_hell_training_report() -> void:
+	if hell_training_session_id.is_empty() or not _is_hell_training_mode():
+		return
+	_ensure_hell_output_dirs()
+	var summary := {
+		"schema_version": 1,
+		"session_id": hell_training_session_id,
+		"updated_at": Time.get_datetime_string_from_system(),
+		"round_index": round_index,
+		"decision_count": hell_training_decision_count,
+		"marked_count": hell_training_marked_count,
+		"category_counts": hell_training_category_counts.duplicate(true),
+		"severity_counts": hell_training_severity_counts.duplicate(true),
+		"current_scores": _hell_score_snapshot(),
+		"calibration_suggestions": _build_hell_calibration_suggestions(),
+		"replay_manifest_path": "%s/%s_replay_manifest.json" % [HELL_REPLAY_DIR, hell_training_session_id],
+	}
+	_write_json_file("%s/%s_summary.json" % [HELL_TRAINING_DIR, hell_training_session_id], summary)
+	_write_text_file("%s/%s_summary.csv" % [HELL_TRAINING_DIR, hell_training_session_id], _build_hell_summary_csv(summary))
+	_write_text_file("%s/%s_report.md" % [HELL_TRAINING_DIR, hell_training_session_id], _build_hell_report_md(summary))
+	_write_json_file(str(summary.get("replay_manifest_path", "")), _build_hell_replay_manifest(summary))
+
+
+func _hell_score_snapshot() -> Dictionary:
+	var result := {}
+	for player in players:
+		result[str(int(player.get("seat", -1)))] = int(player.get("score", 0))
+	return result
+
+
+func _build_hell_summary_csv(summary: Dictionary) -> String:
+	var lines: Array[String] = ["kind,key,count"]
+	for key in Dictionary(summary.get("category_counts", {})).keys():
+		lines.append("category,%s,%d" % [str(key), int(summary["category_counts"].get(key, 0))])
+	for key in Dictionary(summary.get("severity_counts", {})).keys():
+		lines.append("severity,%s,%d" % [str(key), int(summary["severity_counts"].get(key, 0))])
+	lines.append("total,decisions,%d" % int(summary.get("decision_count", 0)))
+	lines.append("total,marked,%d" % int(summary.get("marked_count", 0)))
+	return "\n".join(lines) + "\n"
+
+
+func _build_hell_report_md(summary: Dictionary) -> String:
+	var lines: Array[String] = [
+		"# Hell Training Report",
+		"",
+		"- Session: `%s`" % str(summary.get("session_id", "")),
+		"- Decisions: %d" % int(summary.get("decision_count", 0)),
+		"- Marked cases: %d" % int(summary.get("marked_count", 0)),
+		"- Round index: %d" % int(summary.get("round_index", 0)),
+		"",
+		"## Category Counts",
+	]
+	for key in Dictionary(summary.get("category_counts", {})).keys():
+		lines.append("- `%s`: %d" % [str(key), int(summary["category_counts"].get(key, 0))])
+	lines.append("")
+	lines.append("## Severity Counts")
+	for key in Dictionary(summary.get("severity_counts", {})).keys():
+		lines.append("- `%s`: %d" % [str(key), int(summary["severity_counts"].get(key, 0))])
+	lines.append("")
+	lines.append("## Calibration Notes")
+	var suggestions: Array = summary.get("calibration_suggestions", [])
+	if suggestions.is_empty():
+		lines.append("- No calibration suggestion yet. Continue collecting hell-mode decisions.")
+	else:
+		for suggestion in suggestions:
+			var item: Dictionary = suggestion
+			lines.append("- `%s`: %s" % [str(item.get("target", "")), str(item.get("reason", ""))])
+	lines.append("")
+	lines.append("## Replay")
+	lines.append("- Manifest: `%s`" % str(summary.get("replay_manifest_path", "")))
+	lines.append("- Use high-severity marked JSON cases first. Do not auto-apply weight changes without replaying the same seed or marked case.")
+	return "\n".join(lines) + "\n"
+
+
+func _build_hell_calibration_suggestions() -> Array:
+	var suggestions: Array = []
+	var high_count := int(hell_training_severity_counts.get("high", 0))
+	var risk_count := int(hell_training_category_counts.get("risk_underestimated", 0))
+	var hand_eff_count := int(hell_training_category_counts.get("hand_efficiency_error", 0))
+	var wait_shape_count := int(hell_training_category_counts.get("wait_shape_error", 0))
+	var wall_count_errors := int(hell_training_category_counts.get("wall_posterior_error", 0))
+	var situation_count := int(hell_training_category_counts.get("situation_goal_error", 0))
+	if risk_count > 0:
+		suggestions.append({
+			"target": "defense_weight / deal_in_loss",
+			"reason": "%d 个风险低估差异，优先检查对手听口后验与点炮损失。" % risk_count,
+			"severity": "high" if high_count > 0 else "medium",
+		})
+	if hand_eff_count > 0:
+		suggestions.append({
+			"target": "shape_score / live_ukeire / limited_lookahead",
+			"reason": "%d 个牌效差异，优先看候选牌的向听、活张、3-5巡前瞻。" % hand_eff_count,
+			"severity": "medium",
+		})
+	if wait_shape_count > 0:
+		suggestions.append({
+			"target": "wait_shape_score",
+			"reason": "%d 个听口形状差异，优先检查两面/坎张/边张/单骑分类。" % wait_shape_count,
+			"severity": "medium",
+		})
+	if wall_count_errors > 0:
+		suggestions.append({
+			"target": "wall_posterior",
+			"reason": "%d 个牌墙后验差异，优先检查 remaining18 与 exact wall 的偏差。" % wall_count_errors,
+			"severity": "medium",
+		})
+	if situation_count > 0:
+		suggestions.append({
+			"target": "situation_goal",
+			"reason": "%d 个局势目标差异，优先检查领先/落后/庄闲/后期守攻切换。" % situation_count,
+			"severity": "medium",
+		})
+	return suggestions
+
+
+func _build_hell_replay_manifest(summary: Dictionary) -> Dictionary:
+	return {
+		"schema_version": 1,
+		"session_id": hell_training_session_id,
+		"created_at": Time.get_datetime_string_from_system(),
+		"deterministic_seed_enabled": deterministic_seed_enabled,
+		"deterministic_seed": deterministic_seed,
+		"round_index": round_index,
+		"training_dir": HELL_TRAINING_DIR,
+		"marked_case_dir": HELL_MARKED_CASE_DIR,
+		"summary_path": "%s/%s_summary.json" % [HELL_TRAINING_DIR, hell_training_session_id],
+		"decision_count": int(summary.get("decision_count", 0)),
+		"marked_count": int(summary.get("marked_count", 0)),
+		"acceptance_note": "Replay this session after code changes and compare category/severity counts before accepting calibration.",
+	}
+
+
+func _write_json_file(path: String, data: Dictionary) -> bool:
+	return _write_text_file(path, JSON.stringify(data, "\t"))
+
+
+func _write_text_file(path: String, text: String) -> bool:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir()))
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(text)
+	file.close()
+	return true
 
 
 func _format_score_change_summary(score_changes: Dictionary) -> String:

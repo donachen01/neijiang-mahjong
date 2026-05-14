@@ -1,6 +1,7 @@
 extends Node
 
 const GAME_STATE_SCRIPT := preload("res://autoload/GameState.gd")
+const AI_MANAGER_SCRIPT := preload("res://scripts/ai/AIManager.gd")
 
 
 func _ready() -> void:
@@ -16,6 +17,7 @@ func _ready() -> void:
 	_run_test("neijiang_csharp_reaction_rejects_peng_that_re_discards_same_tile", _test_neijiang_csharp_reaction_rejects_peng_that_re_discards_same_tile, failures)
 	_run_test("neijiang_csharp_reaction_search_marks_close_choices", _test_neijiang_csharp_reaction_search_marks_close_choices, failures)
 	_run_test("neijiang_csharp_self_action_cli_covers_self_hu_and_gang", _test_neijiang_csharp_self_action_cli_covers_self_hu_and_gang, failures)
+	_run_test("neijiang_csharp_self_action_exposes_gang_subtype", _test_neijiang_csharp_self_action_exposes_gang_subtype, failures)
 	_run_test("neijiang_reaction_review_log_records_reasoning", _test_neijiang_reaction_review_log_records_reasoning, failures)
 	_run_test("neijiang_trainer_hint_uses_two_suit_labels", _test_neijiang_trainer_hint_uses_two_suit_labels, failures)
 	_run_test("neijiang_trainer_hint_uses_csharp_analysis", _test_neijiang_trainer_hint_uses_csharp_analysis, failures)
@@ -24,7 +26,9 @@ func _ready() -> void:
 	_run_test("neijiang_bao_jiao_is_opening_ready_only", _test_neijiang_bao_jiao_is_opening_ready_only, failures)
 	_run_test("neijiang_opening_bao_jiao_does_not_discard", _test_neijiang_opening_bao_jiao_does_not_discard, failures)
 	_run_test("neijiang_opening_bao_jiao_window_blocks_dealer_first_discard", _test_neijiang_opening_bao_jiao_window_blocks_dealer_first_discard, failures)
+	_run_test("neijiang_opening_bao_jiao_queue_scans_ai_and_human_players", _test_neijiang_opening_bao_jiao_queue_scans_ai_and_human_players, failures)
 	_run_test("neijiang_bao_jiao_blocks_peng_and_discard_gang", _test_neijiang_bao_jiao_blocks_peng_and_discard_gang, failures)
+	_run_test("neijiang_bao_jiao_allows_whitelisted_discard_gang", _test_neijiang_bao_jiao_allows_whitelisted_discard_gang, failures)
 	_run_test("neijiang_bao_gang_whitelist_requires_keep_ting", _test_neijiang_bao_gang_whitelist_requires_keep_ting, failures)
 	_run_test("neijiang_non_whitelist_gang_is_blocked_after_bao_jiao", _test_neijiang_non_whitelist_gang_is_blocked_after_bao_jiao, failures)
 	_run_test("neijiang_bao_jiao_payer_pays_extra_on_loss", _test_neijiang_bao_jiao_payer_pays_extra_on_loss, failures)
@@ -86,7 +90,7 @@ func _ready() -> void:
 	_run_test("neijiang_stale_reaction_request_restarts_csharp_chain", _test_neijiang_stale_reaction_request_restarts_csharp_chain, failures)
 
 	if failures.is_empty():
-		print("NEIJIANG REGRESSION OK: 70/70")
+		print("NEIJIANG REGRESSION OK")
 		get_tree().quit(0)
 	else:
 		push_error("NEIJIANG REGRESSION FAILED:\n- " + "\n- ".join(failures))
@@ -570,6 +574,28 @@ func _test_neijiang_csharp_self_action_cli_covers_self_hu_and_gang():
 	return true
 
 
+func _test_neijiang_csharp_self_action_exposes_gang_subtype():
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	var analysis: Dictionary = ai_manager._build_csharp_self_action_analysis(
+		{
+			"action": "gang",
+			"tileType": 1,
+			"gangSubtype": "add_gang",
+			"score": 312,
+			"reason": "补杠后仍可下叫",
+			"reasons": ["补杠后最快向听 0"],
+			"actionScores": {"pass": 20, "add_gang:1": 312},
+			"backendMode": "csharp_native_self_action",
+		},
+		"csharp_native_self_action"
+	)
+	if str(analysis.get("gang_subtype", "")) != "add_gang":
+		return "expected top-level gang_subtype=add_gang for GameState execution, got %s" % [analysis]
+	if str(analysis.get("gangSubtype", "")) != "add_gang":
+		return "expected camelCase gangSubtype mirror for compatibility, got %s" % [analysis]
+	return true
+
+
 func _test_neijiang_reaction_review_log_records_reasoning():
 	var game_state = _build_neijiang_test_game_state()
 	if not bool(game_state.set_ai_prefer_csharp_backend(true)):
@@ -867,6 +893,46 @@ func _test_neijiang_opening_bao_jiao_window_blocks_dealer_first_discard():
 	return true
 
 
+func _test_neijiang_opening_bao_jiao_queue_scans_ai_and_human_players():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
+	game_state.current_dealer_seat = 1
+	game_state.current_turn_seat = 1
+	game_state.wall_count = 19
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, [
+			_make_tile(3121, "tiao", 1), _make_tile(3122, "tiao", 1), _make_tile(3123, "tiao", 1),
+			_make_tile(3124, "tiao", 2), _make_tile(3125, "tiao", 2), _make_tile(3126, "tiao", 2),
+			_make_tile(3127, "tiao", 3), _make_tile(3128, "tiao", 3), _make_tile(3129, "tiao", 3),
+			_make_tile(3130, "tong", 5), _make_tile(3131, "tong", 6), _make_tile(3132, "tong", 7),
+			_make_tile(3133, "tong", 8),
+		]),
+		_make_player_neijiang(1, [
+			_make_tile(3134, "tiao", 1), _make_tile(3135, "tiao", 2), _make_tile(3136, "tiao", 3),
+			_make_tile(3137, "tiao", 4), _make_tile(3138, "tiao", 5), _make_tile(3139, "tiao", 6),
+			_make_tile(3140, "tong", 1), _make_tile(3141, "tong", 2), _make_tile(3142, "tong", 3),
+			_make_tile(3143, "tong", 4), _make_tile(3144, "tong", 5), _make_tile(3145, "tong", 6),
+			_make_tile(3146, "tong", 7), _make_tile(3147, "tong", 8),
+		]),
+		_make_player_neijiang(2, [
+			_make_tile(3148, "tiao", 4), _make_tile(3149, "tiao", 4), _make_tile(3150, "tiao", 4),
+			_make_tile(3151, "tiao", 5), _make_tile(3152, "tiao", 5), _make_tile(3153, "tiao", 5),
+			_make_tile(3154, "tiao", 6), _make_tile(3155, "tiao", 6), _make_tile(3156, "tiao", 6),
+			_make_tile(3157, "tong", 2), _make_tile(3158, "tong", 3), _make_tile(3159, "tong", 4),
+			_make_tile(3160, "tong", 5),
+		]),
+		_make_player_neijiang(3, []),
+	])
+	var queue: Array = game_state._build_opening_bao_jiao_queue()
+	if not queue.has(0):
+		return "expected opening bao jiao queue to scan human player seat 0, got %s" % [queue]
+	if not queue.has(2):
+		return "expected opening bao jiao queue to scan AI player seat 2, got %s" % [queue]
+	if queue.has(1):
+		return "expected dealer seat 1 to be excluded because dealer has 14 tiles, got %s" % [queue]
+	return true
+
+
 func _test_neijiang_bao_jiao_blocks_peng_and_discard_gang():
 	var game_state = _build_neijiang_test_game_state()
 	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
@@ -892,6 +958,35 @@ func _test_neijiang_bao_jiao_blocks_peng_and_discard_gang():
 		return "expected bao jiao to block peng"
 	if bool(options.get("can_gang", false)):
 		return "expected bao jiao to block discard gang"
+	return true
+
+
+func _test_neijiang_bao_jiao_allows_whitelisted_discard_gang():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
+	game_state.current_dealer_seat = 1
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, [
+			_make_tile(3241, "tong", 8), _make_tile(3242, "tong", 8), _make_tile(3243, "tong", 8),
+			_make_tile(3244, "tong", 9), _make_tile(3245, "tong", 9), _make_tile(3246, "tong", 9),
+		], [], true),
+		_make_player_neijiang(1, []),
+		_make_player_neijiang(2, []),
+		_make_player_neijiang(3, []),
+	])
+	game_state.players[0]["bao_gang_tiles"] = ["tong_8"]
+	game_state.current_discard_context = {
+		"source_seat": 1,
+		"tile": _make_tile(3247, "tong", 8),
+		"reaction_type": "discard",
+		"winner_seats": [],
+	}
+	game_state.pending_reactions = game_state.mahjong_judge.build_reaction_candidates(game_state._build_table_state(), game_state.current_discard_context, game_state.rules)
+	var options: Dictionary = game_state.get_human_reaction_options(0)
+	if bool(options.get("can_peng", false)):
+		return "expected bao jiao to continue blocking peng even when gang is whitelisted"
+	if not bool(options.get("can_gang", false)):
+		return "expected whitelisted bao gang tile to allow discard gang after bao jiao, got options=%s pending=%s" % [options, game_state.pending_reactions]
 	return true
 
 

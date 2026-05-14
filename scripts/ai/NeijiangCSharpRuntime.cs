@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Godot;
 using NeijiangMahjong.AI.Core.Codec;
+using NeijiangMahjong.AI.Core.Engines;
 using NeijiangMahjong.AI.Core.Entry;
 using NeijiangMahjong.AI.Core.Learning;
 using NeijiangMahjong.AI.Core.Models;
@@ -10,6 +11,7 @@ public partial class NeijiangCSharpRuntime : Node
 {
     private readonly NeijiangAiFacade _facade = new();
     private readonly NeijiangLearningEngine _learningEngine = new();
+    private readonly NeijiangHellOracleEngine _hellOracle = new();
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -69,6 +71,48 @@ public partial class NeijiangCSharpRuntime : Node
 
             var output = BuildSelfActionObject(payload);
             return JsonSerializer.Serialize(output, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+        }
+    }
+
+    public string AnalyzeHellOracleDiscardJson(string payloadJson)
+    {
+        try
+        {
+            var payload = JsonSerializer.Deserialize<HellOraclePayload>(payloadJson, JsonOptions);
+            if (payload is null)
+                return "{\"ok\":false,\"error\":\"invalid_hell_oracle_payload\"}";
+
+            var state = BuildState(payload);
+            var result = _hellOracle.DecideDiscard(
+                state,
+                payload.AllHands18.Select(item => (IReadOnlyList<int>)item).ToArray(),
+                payload.ExactWall18,
+                payload.FairTileType,
+                payload.ActualTileType);
+            return JsonSerializer.Serialize(new
+            {
+                ok = true,
+                decisionType = result.DecisionType,
+                action = result.Action.ActionType.ToString().ToLowerInvariant(),
+                tileType = result.Action.TileType,
+                score = result.Action.Score,
+                category = result.Category,
+                severity = result.Severity,
+                exactDealIn = result.ExactDealIn,
+                fairExactDealIn = result.FairExactDealIn,
+                fairDealInTargetSeats = result.FairDealInTargetSeats,
+                oracleExactDealIn = result.OracleExactDealIn,
+                oracleDealInTargetSeats = result.OracleDealInTargetSeats,
+                exactKeepsReady = result.ExactKeepsReady,
+                exactWallRemaining = result.ExactWallRemaining,
+                fairTileType = result.FairTileType,
+                actualTileType = result.ActualTileType,
+                reasons = result.Reasons
+            }, JsonOptions);
         }
         catch (Exception ex)
         {
@@ -217,6 +261,25 @@ public partial class NeijiangCSharpRuntime : Node
                 expectedDrawRiskLoss = item.ExpectedDrawRiskLoss,
                 expectedReadyValue = item.ExpectedReadyValue,
                 posteriorAdjustment = item.PosteriorAdjustment,
+                defenseAdjustment = item.DefenseAdjustment,
+                goodShapeCount = item.GoodShapeCount,
+                badShapeCount = item.BadShapeCount,
+                pairPressure = item.PairPressure,
+                taatsuOverflow = item.TaatsuOverflow,
+                sameShantenImprovementCount = item.SameShantenImprovementCount,
+                middleTileFlexibility = item.MiddleTileFlexibility,
+                shapeScore = item.ShapeScore,
+                waitShapeLabel = item.WaitShapeLabel,
+                waitShapeScore = item.WaitShapeScore,
+                ryanmenWaitCount = item.RyanmenWaitCount,
+                kanchanWaitCount = item.KanchanWaitCount,
+                penchanWaitCount = item.PenchanWaitCount,
+                tankiWaitCount = item.TankiWaitCount,
+                shanponWaitCount = item.ShanponWaitCount,
+                limitedLookaheadScore = item.LimitedLookaheadScore,
+                limitedLookaheadSamples = item.LimitedLookaheadSamples,
+                limitedLookaheadBestShanten = item.LimitedLookaheadBestShanten,
+                limitedLookaheadBestLiveUkeire = item.LimitedLookaheadBestLiveUkeire,
                 posteriorReasons = item.PosteriorReasons,
                 searchBonus = item.SearchBonus,
                 searchSimulations = item.SearchSimulations,
@@ -301,7 +364,10 @@ public partial class NeijiangCSharpRuntime : Node
             payload.Visible18,
             payload.Remaining18,
             payload.Discards18,
-            payload.Melds18);
+            payload.Melds18,
+            payload.PassedHu18,
+            payload.PassedPeng18,
+            payload.PassedGang18);
 
         if (payload.IsCalled is { Length: 4 }) Array.Copy(payload.IsCalled, state.IsCalled, 4);
         if (payload.IsReady is { Length: 4 }) Array.Copy(payload.IsReady, state.IsReady, 4);
@@ -476,6 +542,9 @@ public partial class NeijiangCSharpRuntime : Node
         public int[] Remaining18 { get; set; } = Array.Empty<int>();
         public List<List<int>> Discards18 { get; set; } = new();
         public List<List<int>> Melds18 { get; set; } = new();
+        public List<List<int>> PassedHu18 { get; set; } = new();
+        public List<List<int>> PassedPeng18 { get; set; } = new();
+        public List<List<int>> PassedGang18 { get; set; } = new();
         public bool[] IsCalled { get; set; } = Array.Empty<bool>();
         public bool[] IsReady { get; set; } = Array.Empty<bool>();
         public bool[] HasHu { get; set; } = Array.Empty<bool>();
@@ -497,6 +566,14 @@ public partial class NeijiangCSharpRuntime : Node
         public List<int> AnGangTileTypes { get; set; } = new();
         public List<int> AddGangTileTypes { get; set; } = new();
         public Dictionary<int, int> AddGangQiangGangCounts { get; set; } = new();
+    }
+
+    private sealed class HellOraclePayload : DiscardPayload
+    {
+        public List<List<int>> AllHands18 { get; set; } = new();
+        public List<int> ExactWall18 { get; set; } = new();
+        public int FairTileType { get; set; } = -1;
+        public int ActualTileType { get; set; } = -1;
     }
 
     private sealed record OpponentThreatSummary(

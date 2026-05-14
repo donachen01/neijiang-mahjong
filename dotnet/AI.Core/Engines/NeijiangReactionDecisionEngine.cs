@@ -160,6 +160,23 @@ public sealed class NeijiangReactionDecisionEngine
             best = forcedGangAfterSearch.result;
         }
 
+        var lateWallTripletGang = candidates
+            .FirstOrDefault(item => item.action == "gang"
+                && ShouldForceLateWallTripletGang(state, reactionTileType, currentFollowUp, item.result, reactionType, sourceSeat));
+        if (lateWallTripletGang.result is not null && lateWallTripletGang.result.Action.Score <= best.Action.Score)
+        {
+            lateWallTripletGang.result.Action = lateWallTripletGang.result.Action with
+            {
+                Score = best.Action.Score + 96,
+                Reason = "尾张明杠优先收雨钱"
+            };
+            var forcedReasons = lateWallTripletGang.result.Reasons.ToList();
+            forcedReasons.Add("尾张三张在手且别人打出第四张，明杠不比当前路径更慢，优先直接杠");
+            lateWallTripletGang.result.Reasons = forcedReasons;
+            scores["gang"] = lateWallTripletGang.result.Action.Score;
+            best = lateWallTripletGang.result;
+        }
+
         if (!scores.ContainsKey("peng")) scores["peng"] = int.MinValue / 4;
         if (!scores.ContainsKey("gang")) scores["gang"] = int.MinValue / 4;
         best.ActionScores = new Dictionary<string, int>(scores);
@@ -181,7 +198,9 @@ public sealed class NeijiangReactionDecisionEngine
         var reDiscardsClaimedTile = followUp.BestDiscardTile == reactionTileType && followUp.BestDiscardTile >= 0;
         var currentPairCount = CountPairs(state.Hand18);
         var pairCountAfter = CountPairs(handAfter);
-        var sevenPairsLikely = IsSevenPairsLikely(state.Hand18, state.Melds18[state.SeatIndex].Count / 3);
+        var currentMeldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var sevenPairsLikely = IsSevenPairsLikely(state.Hand18, currentMeldCount);
+        var sevenPairsTenpai = IsSevenPairsTenpai(state.Hand18, currentMeldCount);
         var structureBoost = EstimatePengStructureBoost(
             reactionTileType,
             currentFollowUp,
@@ -243,6 +262,10 @@ public sealed class NeijiangReactionDecisionEngine
             score -= 1080;
         if (reDiscardsClaimedTile)
             score -= 640;
+        if (reDiscardsClaimedTile && state.Hand18[reactionTileType] >= 3)
+            score -= 980;
+        if (sevenPairsTenpai)
+            score -= 1320;
 
         var reasons = new List<string>
         {
@@ -250,7 +273,10 @@ public sealed class NeijiangReactionDecisionEngine
             $"碰后活张 {followUp.LiveUkeire}",
             $"碰后首打危险 {discardRisk.Risk}",
         };
+        if (sevenPairsTenpai) reasons.Add("七对已听，碰牌会破坏听牌，优先过牌");
         if (reDiscardsClaimedTile) reasons.Add("碰后最优首打仍是同张，直接改碰属于无效副露");
+        if (reDiscardsClaimedTile && state.Hand18[reactionTileType] >= 3)
+            reasons.Add("已有三张可明杠时，碰后再打同张不如直接杠");
         if (followUp.Shanten <= 0) reasons.Add("碰后可直接成叫");
         if (followUp.Shanten < currentFollowUp.Shanten) reasons.Add("碰牌明显提速");
         if (followUp.Shanten == currentFollowUp.Shanten && followUp.Shanten <= 1 && followUp.LiveUkeire >= currentFollowUp.LiveUkeire - 2)
@@ -665,6 +691,8 @@ public sealed class NeijiangReactionDecisionEngine
         if (threatLevel >= 4 && maxReadyPosterior >= 0.70 && pengResult.ShantenAfter > 0 && pengResult.ShantenAfter >= currentFollowUp.Shanten)
             return false;
         var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        if (IsSevenPairsTenpai(state.Hand18, meldCount))
+            return false;
         var sevenPairsLikely = IsSevenPairsLikely(state.Hand18, meldCount);
         if (sevenPairsLikely && currentFollowUp.Shanten <= 1 && roundStage <= 0)
             return false;
@@ -715,6 +743,26 @@ public sealed class NeijiangReactionDecisionEngine
         return roundStage <= 1 && gangResult.LiveUkeireAfter + 3 >= currentFollowUp.LiveUkeire;
     }
 
+    private static bool ShouldForceLateWallTripletGang(
+        NeijiangStateView state,
+        int reactionTileType,
+        FollowUpSummary currentFollowUp,
+        NeijiangReactionDecisionResult gangResult,
+        string reactionType,
+        int sourceSeat)
+    {
+        if (reactionType != "discard" || sourceSeat < 0)
+            return false;
+        if (state.WallCount > 2)
+            return false;
+        if (reactionTileType < 0 || reactionTileType >= state.Hand18.Length || state.Hand18[reactionTileType] < 3)
+            return false;
+        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        if (IsSevenPairsLikely(state.Hand18, meldCount))
+            return false;
+        return gangResult.ShantenAfter <= currentFollowUp.Shanten;
+    }
+
     private static bool IsSevenPairsLikely(int[] hand18, int meldCount)
     {
         if (meldCount > 0) return false;
@@ -728,6 +776,11 @@ public sealed class NeijiangReactionDecisionEngine
             if (hand18[index] == 1) singles++;
         }
         return pairs >= 5 && triplets <= 1 && singles <= 3;
+    }
+
+    private bool IsSevenPairsTenpai(int[] hand18, int meldCount)
+    {
+        return meldCount <= 0 && _shanten.CalcSevenPairsShanten(hand18) <= 0;
     }
 
     private static bool IsEdgeHeavyPair(int tileType)

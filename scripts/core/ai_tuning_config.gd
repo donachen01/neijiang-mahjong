@@ -21,6 +21,13 @@ var big_hand_tendency: int = 0
 var opponent_read_tendency: int = 3
 var endgame_absolute_defense: bool = true
 var auto_learning_enabled: bool = true
+var hell_ai_share_ai_hands: bool = false
+var hell_ai_can_see_human_hand: bool = false
+var hell_ai_can_see_wall: bool = false
+var hell_record_oracle: bool = false
+var hell_execute_oracle_action: bool = false
+var hell_log_marked_cases: bool = false
+var diagnostics_recording_enabled: bool = false
 var preset_name: String = PRESET_BONE_ASH
 var learning_adjustment: Dictionary = {}
 
@@ -28,6 +35,12 @@ var learning_adjustment: Dictionary = {}
 func apply_preset(name: String) -> void:
 	preset_name = name
 	learning_adjustment = {}
+	hell_ai_share_ai_hands = false
+	hell_ai_can_see_human_hand = false
+	hell_ai_can_see_wall = false
+	hell_record_oracle = false
+	hell_execute_oracle_action = false
+	hell_log_marked_cases = false
 	match name:
 		PRESET_INTERMEDIATE:
 			lookahead_candidate_count = 2
@@ -59,6 +72,12 @@ func apply_preset(name: String) -> void:
 			big_hand_tendency = 0
 			opponent_read_tendency = 4
 			endgame_absolute_defense = true
+			hell_ai_share_ai_hands = true
+			hell_ai_can_see_human_hand = false
+			hell_ai_can_see_wall = true
+			hell_record_oracle = diagnostics_recording_enabled
+			hell_execute_oracle_action = false
+			hell_log_marked_cases = diagnostics_recording_enabled
 		_:
 			preset_name = PRESET_BONE_ASH
 			lookahead_candidate_count = 4
@@ -123,6 +142,12 @@ func _apply_direct_learning_adjustments(adjustments: Dictionary) -> void:
 	opponent_read_tendency = clampi(opponent_read_tendency + int(adjustments.get("opponent_read_tendency", 0)), 0, 4)
 
 
+func set_diagnostics_recording_enabled(enabled: bool) -> void:
+	diagnostics_recording_enabled = enabled
+	hell_record_oracle = enabled and preset_name == PRESET_HELL
+	hell_log_marked_cases = enabled and preset_name == PRESET_HELL
+
+
 func to_debug_dict() -> Dictionary:
 	return {
 		"preset_name": preset_name,
@@ -141,5 +166,12 @@ func to_debug_dict() -> Dictionary:
 		"opponent_read_tendency": opponent_read_tendency,
 		"endgame_absolute_defense": endgame_absolute_defense,
 		"auto_learning_enabled": auto_learning_enabled,
+		"hell_ai_share_ai_hands": hell_ai_share_ai_hands,
+		"hell_ai_can_see_human_hand": hell_ai_can_see_human_hand,
+		"hell_ai_can_see_wall": hell_ai_can_see_wall,
+		"hell_record_oracle": hell_record_oracle,
+		"hell_execute_oracle_action": hell_execute_oracle_action,
+		"hell_log_marked_cases": hell_log_marked_cases,
+		"diagnostics_recording_enabled": diagnostics_recording_enabled,
 		"learning_adjustment": learning_adjustment.duplicate(true),
 	}

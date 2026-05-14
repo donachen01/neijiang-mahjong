@@ -486,6 +486,25 @@ static object BuildDiscardObject(NeijiangAiFacade facade, DiscardPayload payload
             expectedDrawRiskLoss = item.ExpectedDrawRiskLoss,
             expectedReadyValue = item.ExpectedReadyValue,
             posteriorAdjustment = item.PosteriorAdjustment,
+            defenseAdjustment = item.DefenseAdjustment,
+            goodShapeCount = item.GoodShapeCount,
+            badShapeCount = item.BadShapeCount,
+            pairPressure = item.PairPressure,
+            taatsuOverflow = item.TaatsuOverflow,
+            sameShantenImprovementCount = item.SameShantenImprovementCount,
+            middleTileFlexibility = item.MiddleTileFlexibility,
+            shapeScore = item.ShapeScore,
+            waitShapeLabel = item.WaitShapeLabel,
+            waitShapeScore = item.WaitShapeScore,
+            ryanmenWaitCount = item.RyanmenWaitCount,
+            kanchanWaitCount = item.KanchanWaitCount,
+            penchanWaitCount = item.PenchanWaitCount,
+            tankiWaitCount = item.TankiWaitCount,
+            shanponWaitCount = item.ShanponWaitCount,
+            limitedLookaheadScore = item.LimitedLookaheadScore,
+            limitedLookaheadSamples = item.LimitedLookaheadSamples,
+            limitedLookaheadBestShanten = item.LimitedLookaheadBestShanten,
+            limitedLookaheadBestLiveUkeire = item.LimitedLookaheadBestLiveUkeire,
             posteriorReasons = item.PosteriorReasons,
             searchBonus = item.SearchBonus,
             searchSimulations = item.SearchSimulations,
@@ -568,7 +587,10 @@ static NeijiangStateView BuildState(DiscardPayload payload)
         payload.Visible18,
         payload.Remaining18,
         payload.Discards18,
-        payload.Melds18);
+        payload.Melds18,
+        payload.PassedHu18,
+        payload.PassedPeng18,
+        payload.PassedGang18);
 
     if (payload.IsCalled is { Length: 4 }) Array.Copy(payload.IsCalled, state.IsCalled, 4);
     if (payload.IsReady is { Length: 4 }) Array.Copy(payload.IsReady, state.IsReady, 4);
@@ -803,6 +825,9 @@ internal class DiscardPayload
     public int[] Remaining18 { get; init; } = Array.Empty<int>();
     public List<int>[] Discards18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new List<int>()).ToArray();
     public List<int>[] Melds18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new List<int>()).ToArray();
+    public List<int>[] PassedHu18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new List<int>()).ToArray();
+    public List<int>[] PassedPeng18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new List<int>()).ToArray();
+    public List<int>[] PassedGang18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new List<int>()).ToArray();
     public bool[]? IsCalled { get; init; }
     public bool[]? IsReady { get; init; }
     public bool[]? HasHu { get; init; }

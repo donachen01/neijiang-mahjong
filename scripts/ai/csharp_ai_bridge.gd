@@ -166,6 +166,9 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 	var remaining18: PackedInt32Array = tile_codec.build_remaining_count_array(hand_tiles, players, active_suits, self_seat)
 	var discards18: Array = []
 	var melds18: Array = []
+	var passed_hu18: Array = _build_reaction_pass_count_matrix(table_state.get("reaction_pass_evidence", []), active_suits, "can_hu")
+	var passed_peng18: Array = _build_reaction_pass_count_matrix(table_state.get("reaction_pass_evidence", []), active_suits, "can_peng")
+	var passed_gang18: Array = _build_reaction_pass_count_matrix(table_state.get("reaction_pass_evidence", []), active_suits, "can_gang")
 	var is_called := PackedByteArray()
 	is_called.resize(4)
 	var is_ready := PackedByteArray()
@@ -193,10 +196,35 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 		"remaining18": remaining18,
 		"discards18": discards18,
 		"melds18": melds18,
+		"passedHu18": passed_hu18,
+		"passedPeng18": passed_peng18,
+		"passedGang18": passed_gang18,
 		"isCalled": _byte_array_to_bool_array(is_called),
 		"isReady": _byte_array_to_bool_array(is_ready),
 		"hasHu": _byte_array_to_bool_array(has_hu),
 	}
+
+
+func _build_reaction_pass_count_matrix(pass_evidence: Array, active_suits: Array, flag_key: String) -> Array:
+	var matrix: Array = []
+	for _seat in range(4):
+		var row: Array[int] = []
+		for _tile_type in range(18):
+			row.append(0)
+		matrix.append(row)
+	for item in pass_evidence:
+		var event: Dictionary = item
+		if not bool(event.get(flag_key, false)):
+			continue
+		var seat := int(event.get("seat", -1))
+		if seat < 0 or seat >= 4:
+			continue
+		var tile: Dictionary = event.get("tile", {})
+		var tile_type := tile_codec.tile_type(tile, active_suits)
+		if tile_type < 0 or tile_type >= 18:
+			continue
+		matrix[seat][tile_type] = int(matrix[seat][tile_type]) + 1
+	return matrix
 
 
 func _build_reaction_payload(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config) -> Dictionary:

@@ -4,9 +4,14 @@ namespace NeijiangMahjong.AI.Core.Engines;
 
 public sealed class NeijiangBeliefEngine
 {
+    private readonly NeijiangEvidenceEngine _evidence = new();
+    private readonly NeijiangOpponentRangeEngine _range = new();
+    private readonly NeijiangPosteriorNormalizer _normalizer = new();
+
     public NeijiangBeliefSnapshot Build(NeijiangStateView state)
     {
         var snapshot = new NeijiangBeliefSnapshot();
+        var evidence = _evidence.Build(state);
         snapshot.Unknown18 = state.Remaining18.Take(18).Concat(Enumerable.Repeat(0, 18)).Take(18).ToArray();
         var seatWeightsByTile = new Dictionary<int, Dictionary<int, double>>();
         var activeSeats = new List<int>();
@@ -19,6 +24,7 @@ public sealed class NeijiangBeliefEngine
             var discardCount = discards.Count;
             var meldGroupCount = meldTiles.Count / 3;
             var isAggressive = state.IsCalled[seat] || state.IsReady[seat];
+            var range = _range.BuildSeatRange(state, evidence, seat);
 
             var wallPressure = state.WallCount <= 6 ? 0.16 : state.WallCount <= 10 ? 0.08 : 0.0;
             var pressure = 0.14
@@ -29,7 +35,7 @@ public sealed class NeijiangBeliefEngine
                 + wallPressure;
             pressure = Math.Clamp(pressure, 0.05, 0.95);
             snapshot.SeatPressure[seat] = pressure;
-            snapshot.SeatReadyPosterior[seat] = EstimateReadyPosterior(state, seat, discardCount, meldGroupCount, pressure);
+            snapshot.SeatReadyPosterior[seat] = range.ReadyProbability;
 
             var discardBySuit = new[] { 0, 0 };
             var meldBySuit = new[] { 0, 0 };
@@ -46,14 +52,14 @@ public sealed class NeijiangBeliefEngine
                 meldBySuit[tileType / 9]++;
             }
 
-            var exactSafeTiles = new HashSet<int>(discards);
+            var exactSafeTiles = evidence.SeatExactSafeTiles[seat];
             snapshot.SeatExactSafeTiles[seat] = exactSafeTiles;
 
             var abandonedSuits = new HashSet<int>();
             var suitDemand = new Dictionary<int, double>();
             for (var suit = 0; suit < 2; suit++)
             {
-                if (discardBySuit[suit] >= 3)
+                if (evidence.SeatAbandonedSuitEvidence[seat][suit] >= 0.56)
                     abandonedSuits.Add(suit);
 
                 var meldFocus = meldTiles.Count == 0 ? 0.0 : meldBySuit[suit] / (double)meldTiles.Count;
@@ -63,7 +69,7 @@ public sealed class NeijiangBeliefEngine
                     + visibleScarcity * 0.18
                     + (isAggressive ? 0.08 : 0.0)
                     - discardBySuit[suit] * 0.09;
-                suitDemand[suit] = Math.Clamp(heat, 0.04, 0.98);
+                suitDemand[suit] = range.SuitDemand2[suit];
             }
             snapshot.SeatAbandonedSuits[seat] = abandonedSuits;
             snapshot.SeatSuitDemand[seat] = suitDemand;
@@ -76,13 +82,13 @@ public sealed class NeijiangBeliefEngine
             {
                 var suit = tileType / 9;
                 var rank = tileType % 9 + 1;
-                var noHu = EstimateNoHuEvidence(discards, discardByTile, tileType);
+                var noHu = evidence.SeatNoHuEvidence[seat][tileType];
                 noHuEvidence[tileType] = noHu;
                 if (exactSafeTiles.Contains(tileType))
                 {
                     perTile[tileType] = 0.03;
-                    holdWeights[tileType] = 0.01;
-                    waitWeights[tileType] = Math.Clamp(snapshot.SeatReadyPosterior[seat] * 0.05 * (1.0 - noHu), 0.0, 0.12);
+                    holdWeights[tileType] = range.HoldProbability18[tileType];
+                    waitWeights[tileType] = range.WaitProbability18[tileType];
                     continue;
                 }
 
@@ -113,24 +119,8 @@ public sealed class NeijiangBeliefEngine
                 posterior *= 1.0 - noHu * 0.42;
 
                 perTile[tileType] = Math.Clamp(posterior, 0.03, 0.98);
-                holdWeights[tileType] = Math.Clamp(
-                    posterior * 0.48
-                    + snapshot.SeatReadyPosterior[seat] * 0.24
-                    + suitDemand[suit] * 0.20
-                    + visibleBias * 0.08
-                    + sequenceAffinity * 0.07,
-                    0.01,
-                    0.99);
-                waitWeights[tileType] = Math.Clamp(
-                    snapshot.SeatReadyPosterior[seat] * (
-                        posterior * 0.38
-                        + suitDemand[suit] * 0.24
-                        + sequenceAffinity * 0.20
-                        + tileHeat * 0.10
-                        + visibleBias * 0.08)
-                    * (1.0 - noHu * 0.72),
-                    0.0,
-                    0.98);
+                holdWeights[tileType] = range.HoldProbability18[tileType];
+                waitWeights[tileType] = range.WaitProbability18[tileType];
             }
 
             snapshot.SeatTileDanger[seat] = perTile;
@@ -148,7 +138,7 @@ public sealed class NeijiangBeliefEngine
                 0.99);
         }
 
-        BuildPosteriorMatrix(state, snapshot, activeSeats, seatWeightsByTile);
+        BuildPosteriorMatrix(state, snapshot, activeSeats, seatWeightsByTile, _normalizer);
         return snapshot;
     }
 
@@ -156,27 +146,19 @@ public sealed class NeijiangBeliefEngine
         NeijiangStateView state,
         NeijiangBeliefSnapshot snapshot,
         IReadOnlyList<int> activeSeats,
-        IReadOnlyDictionary<int, Dictionary<int, double>> seatWeightsByTile)
+        IReadOnlyDictionary<int, Dictionary<int, double>> seatWeightsByTile,
+        NeijiangPosteriorNormalizer normalizer)
     {
+        var normalized = normalizer.Normalize(state, activeSeats, seatWeightsByTile);
         for (var tileType = 0; tileType < 18; tileType++)
         {
-            var wallMass = Math.Max(0.01, state.Remaining18[tileType]);
-            var totalMass = wallMass;
-            foreach (var seat in activeSeats)
-            {
-                if (!seatWeightsByTile.TryGetValue(seat, out var weights)) continue;
-                totalMass += weights.GetValueOrDefault(tileType, 0.01);
-            }
-
-            snapshot.TileWallPosterior[tileType] = Math.Clamp(wallMass / totalMass, 0.01, 0.98);
+            snapshot.TileWallPosterior[tileType] = Math.Clamp(normalized.WallProbability18[tileType], 0.0, 0.98);
             foreach (var seat in activeSeats)
             {
                 if (!snapshot.SeatTileHoldProbability.TryGetValue(seat, out var seatMap))
                     continue;
-                var seatMass = seatWeightsByTile.TryGetValue(seat, out var weights)
-                    ? weights.GetValueOrDefault(tileType, 0.01)
-                    : 0.01;
-                seatMap[tileType] = Math.Clamp(seatMass / totalMass, 0.01, 0.98);
+                if (normalized.SeatHoldProbability18.TryGetValue(seat, out var seatProbabilities))
+                    seatMap[tileType] = Math.Clamp(seatProbabilities[tileType], 0.0, 0.98);
             }
         }
     }
@@ -192,37 +174,6 @@ public sealed class NeijiangBeliefEngine
             + (discardCount >= 10 ? 0.16 : discardCount >= 7 ? 0.09 : 0.0)
             + (state.WallCount <= 6 ? 0.08 : state.WallCount <= 10 ? 0.04 : 0.0);
         return Math.Clamp(posterior, 0.04, 0.92);
-    }
-
-    private static double EstimateNoHuEvidence(IReadOnlyList<int> discards, int[] discardByTile, int tileType)
-    {
-        var sameDiscardCount = tileType is >= 0 and < 18 ? discardByTile[tileType] : 0;
-        var evidence = sameDiscardCount switch
-        {
-            >= 2 => 0.82,
-            1 => 0.58,
-            _ => 0.0
-        };
-        if (discards.Count > 0 && discards[^1] == tileType)
-            evidence = Math.Max(evidence, 0.76);
-        if (discards.Count >= 2 && discards[^2] == tileType)
-            evidence = Math.Max(evidence, 0.66);
-
-        var suitStart = (tileType / 9) * 9;
-        var rank = tileType % 9;
-        var nearbyDiscards = 0;
-        for (var offset = -1; offset <= 1; offset++)
-        {
-            if (offset == 0) continue;
-            var neighbor = suitStart + rank + offset;
-            if (neighbor >= suitStart && neighbor < suitStart + 9)
-                nearbyDiscards += discardByTile[neighbor];
-        }
-        if (nearbyDiscards >= 3)
-            evidence = Math.Max(evidence, 0.38);
-        else if (nearbyDiscards >= 2)
-            evidence = Math.Max(evidence, 0.24);
-        return Math.Clamp(evidence, 0.0, 0.92);
     }
 
     private static double AverageVisibleScarcity(NeijiangStateView state, int suit)

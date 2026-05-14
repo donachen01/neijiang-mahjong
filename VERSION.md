@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.26`
+Current app version: `1.0.27`
 
-`1.0.26` continues from the `1.0.25` stable development base.
+`1.0.27` continues from the `1.0.26` AI tuning base and disables default test-data recording while improving table responsiveness.
 
 ## Versioning Workflow
 
