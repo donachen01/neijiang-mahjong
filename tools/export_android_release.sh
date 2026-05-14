@@ -73,6 +73,7 @@ SIGNED_APK="$PROJECT_DIR/build/android/${RELEASE_BASENAME}.apk"
 
 cp "$FINAL_APK" "$PRUNED_APK"
 zip -q -d "$PRUNED_APK" 'assets/docs/*' 'assets/.godot/imported/main_scene_v1_0*' 'assets/.godot/imported/table_main_3d_cartoon*' 'assets/.godot/imported/table_refined_v17*' 'assets/.godot/imported/target_layout_zone*' 'assets/.godot/imported/tile_symbols_v1*' 'assets/.godot/imported/v17_final_template*' 'assets/.godot/imported/tile_face_options*' 'assets/.godot/imported/tile_face_f_rounded_variants*' 'assets/.godot/imported/tile_back_options*' 'assets/.godot/imported/table_3d_luxury_scheme*' 'assets/.godot/imported/table_scheme_b_v3*' 2>/dev/null || true
+zip -q -d "$PRUNED_APK" 'assets/*/current_ai_*' 'assets/*/hell_training/*' 'assets/*/hell_marked_cases/*' 'assets/*/hell_replay/*' 'assets/*/*seedlive*' 'assets/*/*seed250514*' 2>/dev/null || true
 "$BUILD_TOOLS/zipalign" -f -p 4 "$PRUNED_APK" "$ALIGNED_APK"
 "$BUILD_TOOLS/apksigner" sign \
   --ks "$GODOT_ANDROID_RELEASE_KEYSTORE" \

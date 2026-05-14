@@ -18,6 +18,9 @@ obj/
 
 # Local/generated scratch assets
 .tmp_tts/
+测试数据统计/**
+!测试数据统计/
+!测试数据统计/.gdignore
 
 # Signing and local secrets
 *.keystore
