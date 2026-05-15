@@ -1,14 +1,89 @@
+using System.Diagnostics;
+using System.Text;
 using NeijiangMahjong.AI.Core.Models;
 
 namespace NeijiangMahjong.AI.Core.Engines;
 
 public sealed class NeijiangBeliefEngine
 {
+    private const int CacheLimit = 256;
+    private static readonly object CacheLock = new();
+    private static readonly Dictionary<string, NeijiangBeliefSnapshot> Cache = new();
+    private static readonly Queue<string> CacheOrder = new();
+    private static long _callCount;
+    private static long _cacheHits;
+    private static long _cacheMisses;
+    private static long _buildCount;
+    private static long _totalBuildMs;
+
     private readonly NeijiangEvidenceEngine _evidence = new();
     private readonly NeijiangOpponentRangeEngine _range = new();
     private readonly NeijiangPosteriorNormalizer _normalizer = new();
 
     public NeijiangBeliefSnapshot Build(NeijiangStateView state)
+    {
+        var cacheKey = BuildCacheKey(state);
+        lock (CacheLock)
+        {
+            _callCount++;
+            if (Cache.TryGetValue(cacheKey, out var cached))
+            {
+                _cacheHits++;
+                return cached;
+            }
+
+            _cacheMisses++;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        var snapshot = BuildUncached(state);
+        stopwatch.Stop();
+
+        lock (CacheLock)
+        {
+            _buildCount++;
+            _totalBuildMs += stopwatch.ElapsedMilliseconds;
+            Cache[cacheKey] = snapshot;
+            CacheOrder.Enqueue(cacheKey);
+            while (CacheOrder.Count > CacheLimit)
+            {
+                var oldestKey = CacheOrder.Dequeue();
+                Cache.Remove(oldestKey);
+            }
+        }
+
+        return snapshot;
+    }
+
+    public static NeijiangBeliefDiagnostics GetDiagnostics()
+    {
+        lock (CacheLock)
+        {
+            return new NeijiangBeliefDiagnostics(
+                _callCount,
+                _cacheHits,
+                _cacheMisses,
+                _buildCount,
+                _totalBuildMs,
+                Cache.Count);
+        }
+    }
+
+    public static void ResetDiagnostics()
+    {
+        lock (CacheLock)
+        {
+            _callCount = 0;
+            _cacheHits = 0;
+            _cacheMisses = 0;
+            _buildCount = 0;
+            _totalBuildMs = 0;
+            Cache.Clear();
+            CacheOrder.Clear();
+        }
+    }
+
+    private NeijiangBeliefSnapshot BuildUncached(NeijiangStateView state)
     {
         var snapshot = new NeijiangBeliefSnapshot();
         var evidence = _evidence.Build(state);
@@ -140,6 +215,77 @@ public sealed class NeijiangBeliefEngine
 
         BuildPosteriorMatrix(state, snapshot, activeSeats, seatWeightsByTile, _normalizer);
         return snapshot;
+    }
+
+    private static string BuildCacheKey(NeijiangStateView state)
+    {
+        var builder = new StringBuilder(512);
+        builder.Append("seat=").Append(state.SeatIndex)
+            .Append("|dealer=").Append(state.DealerSeat)
+            .Append("|current=").Append(state.CurrentSeat)
+            .Append("|wall=").Append(state.WallCount)
+            .Append("|turn=").Append(state.TurnIndex)
+            .Append("|phase=").Append(state.Phase);
+        AppendIntArray(builder, "|hand=", state.Hand18);
+        AppendIntArray(builder, "|visible=", state.Visible18);
+        AppendIntArray(builder, "|remaining=", state.Remaining18);
+        AppendBoolArray(builder, "|called=", state.IsCalled);
+        AppendBoolArray(builder, "|ready=", state.IsReady);
+        AppendBoolArray(builder, "|hu=", state.HasHu);
+        AppendListArray(builder, "|discards=", state.Discards18);
+        AppendListArray(builder, "|melds=", state.Melds18);
+        AppendMatrix(builder, "|passedHu=", state.PassedHu18);
+        AppendMatrix(builder, "|passedPeng=", state.PassedPeng18);
+        AppendMatrix(builder, "|passedGang=", state.PassedGang18);
+        return builder.ToString();
+    }
+
+    private static void AppendIntArray(StringBuilder builder, string label, IReadOnlyList<int> values)
+    {
+        builder.Append(label);
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (index > 0) builder.Append(',');
+            builder.Append(values[index]);
+        }
+    }
+
+    private static void AppendBoolArray(StringBuilder builder, string label, IReadOnlyList<bool> values)
+    {
+        builder.Append(label);
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (index > 0) builder.Append(',');
+            builder.Append(values[index] ? '1' : '0');
+        }
+    }
+
+    private static void AppendListArray(StringBuilder builder, string label, IReadOnlyList<List<int>> values)
+    {
+        builder.Append(label);
+        for (var seat = 0; seat < values.Count; seat++)
+        {
+            if (seat > 0) builder.Append('/');
+            for (var index = 0; index < values[seat].Count; index++)
+            {
+                if (index > 0) builder.Append(',');
+                builder.Append(values[seat][index]);
+            }
+        }
+    }
+
+    private static void AppendMatrix(StringBuilder builder, string label, IReadOnlyList<int[]> values)
+    {
+        builder.Append(label);
+        for (var seat = 0; seat < values.Count; seat++)
+        {
+            if (seat > 0) builder.Append('/');
+            for (var index = 0; index < values[seat].Length; index++)
+            {
+                if (index > 0) builder.Append(',');
+                builder.Append(values[seat][index]);
+            }
+        }
     }
 
     private static void BuildPosteriorMatrix(

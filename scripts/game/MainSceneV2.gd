@@ -223,6 +223,9 @@ var left_ui
 var right_ui
 var an_gang_button: Button
 var bao_jiao_button: Button
+var bao_gang_dialog: ConfirmationDialog
+var bao_gang_dialog_content: VBoxContainer
+var bao_gang_option_checks: Array[CheckBox] = []
 var selected_tile_id: int = -1
 var settlement_selected_seat: int = -1
 var last_snapshot: Dictionary = {}
@@ -357,6 +360,7 @@ func _ready() -> void:
 	game_manager.set_human_trainer_hint_enabled(ai_helper_enabled)
 	_ensure_an_gang_button()
 	_ensure_bao_jiao_button()
+	_ensure_bao_gang_dialog()
 	_apply_style()
 	_mount_self_won_stamp_overlay()
 	_configure_board_lanes()
@@ -3483,6 +3487,7 @@ func _refresh_action_panel(snapshot: Dictionary) -> void:
 	var can_an_gang := bool(snapshot.get("human_can_an_gang", false))
 	var can_bao_jiao := bool(snapshot.get("human_can_bao_jiao", false))
 	var can_pass_opening_bao_jiao := bool(snapshot.get("human_can_pass_opening_bao_jiao", false))
+	var human_is_bao_jiao := bool(_player_by_seat(snapshot.get("players", []), 0).get("bao_jiao", false))
 	var show_cancel_self_hu := can_self_hu and not bool(reaction_options.get("can_pass", false))
 	var show_panel := can_self_hu \
 		or can_add_gang \
@@ -3515,10 +3520,12 @@ func _refresh_action_panel(snapshot: Dictionary) -> void:
 	gang_button.text = "补杠" if can_add_gang else "杠"
 	if an_gang_button != null:
 		an_gang_button.visible = can_an_gang
-		an_gang_button.text = "暗杠"
+		an_gang_button.text = "报杠" if human_is_bao_jiao else "暗杠"
 	if bao_jiao_button != null:
 		bao_jiao_button.visible = can_bao_jiao
-		bao_jiao_button.text = "报叫"
+		var bao_plan: Dictionary = snapshot.get("human_bao_jiao_plan", {})
+		var bao_options: Array = bao_plan.get("bao_gang_options", [])
+		bao_jiao_button.text = "报叫/报杠" if not bao_options.is_empty() else "报叫"
 	peng_button.visible = bool(reaction_options.get("can_peng", false))
 	pass_button.visible = can_pass_opening_bao_jiao or bool(reaction_options.get("can_pass", false)) or show_cancel_self_hu
 	pass_button.text = "过"
@@ -7239,8 +7246,13 @@ func _on_an_gang_pressed() -> void:
 
 
 func _on_bao_jiao_pressed() -> void:
-	if not _execute_human_action_sequence(["bao_jiao"]).is_empty():
+	var snapshot := game_manager.get_snapshot()
+	var plan: Dictionary = snapshot.get("human_bao_jiao_plan", {})
+	var options: Array = plan.get("bao_gang_options", [])
+	if not options.is_empty():
+		_show_bao_gang_selection_dialog(options)
 		return
+	_execute_human_bao_jiao_with_selection([])
 
 
 func _on_pass_pressed() -> void:
@@ -7287,6 +7299,60 @@ func _ensure_bao_jiao_button() -> void:
 	bao_jiao_button.focus_mode = Control.FOCUS_NONE
 	action_buttons.add_child(bao_jiao_button)
 	action_buttons.move_child(bao_jiao_button, 4)
+
+
+func _ensure_bao_gang_dialog() -> void:
+	if bao_gang_dialog != null:
+		return
+	bao_gang_dialog = ConfirmationDialog.new()
+	bao_gang_dialog.title = "报杠"
+	bao_gang_dialog.ok_button_text = "确认"
+	bao_gang_dialog.cancel_button_text = "取消"
+	bao_gang_dialog.exclusive = true
+	bao_gang_dialog.visible = false
+	bao_gang_dialog.confirmed.connect(_on_bao_gang_dialog_confirmed)
+	add_child(bao_gang_dialog)
+
+
+func _show_bao_gang_selection_dialog(options: Array) -> void:
+	_ensure_bao_gang_dialog()
+	bao_gang_option_checks.clear()
+	if bao_gang_dialog_content != null and is_instance_valid(bao_gang_dialog_content):
+		bao_gang_dialog_content.queue_free()
+	var box := VBoxContainer.new()
+	bao_gang_dialog_content = box
+	box.name = "BaoGangOptions"
+	box.add_theme_constant_override("separation", 8)
+	var title := Label.new()
+	title.text = "选择要声明的报杠"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	for option_item in options:
+		var option: Dictionary = option_item
+		var check := CheckBox.new()
+		check.text = str(option.get("display_name", option.get("key", "")))
+		check.button_pressed = true
+		check.set_meta("bao_gang_key", str(option.get("key", "")))
+		box.add_child(check)
+		bao_gang_option_checks.append(check)
+	bao_gang_dialog.add_child(box)
+	bao_gang_dialog.popup_centered(Vector2(360, 220 + options.size() * 34))
+
+
+func _on_bao_gang_dialog_confirmed() -> void:
+	var selected_keys: Array = []
+	for check in bao_gang_option_checks:
+		if check.button_pressed:
+			selected_keys.append(str(check.get_meta("bao_gang_key", "")))
+	_execute_human_bao_jiao_with_selection(selected_keys)
+
+
+func _execute_human_bao_jiao_with_selection(selected_keys: Array) -> void:
+	if game_manager == null or game_manager.game_state == null:
+		return
+	if bool(game_manager.game_state.call("execute_human_bao_jiao", 0, selected_keys)):
+		var snapshot := game_manager.get_snapshot()
+		_on_snapshot_changed(snapshot)
 
 
 func _ensure_an_gang_button() -> void:

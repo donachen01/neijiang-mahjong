@@ -50,7 +50,7 @@ public sealed class NeijiangSelfActionDecisionEngine
         foreach (var tileType in anGangTileTypes.Where(tile => tile is >= 0 and < 18).Distinct())
         {
             if (state.Hand18[tileType] < 4) continue;
-            var candidate = EvaluateSelfGang(state, tileType, "an_gang", current, meldCount, roundStage, threatLevel, maxReadyPosterior);
+            var candidate = EvaluateSelfGang(state, belief, tileType, "an_gang", current, meldCount, roundStage, threatLevel, maxReadyPosterior);
             scores[$"an_gang:{tileType}"] = candidate.Action.Score;
             if (candidate.Action.Score > best.Action.Score)
                 best = candidate;
@@ -60,7 +60,7 @@ public sealed class NeijiangSelfActionDecisionEngine
         {
             if (state.Hand18[tileType] < 1) continue;
             var qiangGangCount = Math.Max(0, addGangQiangGangCounts?.GetValueOrDefault(tileType, 0) ?? 0);
-            var candidate = EvaluateSelfGang(state, tileType, "add_gang", current, meldCount, roundStage, threatLevel, maxReadyPosterior, qiangGangCount);
+            var candidate = EvaluateSelfGang(state, belief, tileType, "add_gang", current, meldCount, roundStage, threatLevel, maxReadyPosterior, qiangGangCount);
             scores[$"add_gang:{tileType}"] = candidate.Action.Score;
             if (qiangGangCount > 0 && candidate.Action.Score <= best.Action.Score)
             {
@@ -78,6 +78,7 @@ public sealed class NeijiangSelfActionDecisionEngine
 
     private NeijiangSelfActionDecisionResult EvaluateSelfGang(
         NeijiangStateView state,
+        NeijiangBeliefSnapshot belief,
         int tileType,
         string subtype,
         FollowUpSummary current,
@@ -90,7 +91,6 @@ public sealed class NeijiangSelfActionDecisionEngine
         var removeCount = subtype == "an_gang" ? 4 : 1;
         var handAfter = RemoveCopies(state.Hand18, tileType, removeCount);
         var followUp = EvaluateBestFollowUp(handAfter, state.Remaining18, meldCount + 1);
-        var belief = _belief.Build(state);
         var discardRisk = followUp.BestDiscardTile >= 0
             ? _danger.EvaluateDetail(followUp.BestDiscardTile, state, belief).Risk
             : 0;

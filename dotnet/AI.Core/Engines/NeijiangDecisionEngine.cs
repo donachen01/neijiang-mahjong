@@ -16,6 +16,11 @@ public sealed class NeijiangDecisionEngine
     private readonly NeijiangWaitShapeEngine _waitShape = new();
     private readonly NeijiangLimitedLookaheadEngine _limitedLookahead = new();
 
+    private sealed record NeijiangBigHandRouteAdjustment(double Score, IReadOnlyList<string> Reasons)
+    {
+        public static readonly NeijiangBigHandRouteAdjustment Empty = new(0.0, Array.Empty<string>());
+    }
+
     public NeijiangDecisionResult DecideDiscard(NeijiangStateView state)
     {
         var belief = _belief.Build(state);
@@ -46,6 +51,7 @@ public sealed class NeijiangDecisionEngine
             var effectiveImprovingTiles = exactReadyTiles.Count > 0 ? exactReadyTiles : improvingTiles;
             var routesAfter = EstimateRoutes(remainingHand, state);
             var routeLoss = currentRoutes.Where(route => !routesAfter.Contains(route)).ToArray();
+            var bigHandRoute = EvaluateBigHandRouteAdjustment(state.Hand18, remainingHand, state, tileType, meldCount, roundStage);
             var qualityScore = _quality.EvaluateScore(effectiveImprovingTiles, state.Remaining18);
             var shapeSummary = _shape.Evaluate(remainingHand, state.Remaining18, meldCount, effectiveShanten);
             var waitCount = exactReadyTiles.Count > 0 ? exactReadyTiles.Count : (effectiveShanten <= 0 ? improvingTiles.Count : 0);
@@ -78,7 +84,8 @@ public sealed class NeijiangDecisionEngine
             var shapeValue = EstimateShapeValue(effectiveShanten, effectiveUkeire, effectiveLiveUkeire, waitCount, qualityScore, wallDrawPosterior, roundStage, routesAfter.Count, routeLoss.Length)
                 + shapeSummary.ShapeScore
                 + waitShapeSummary.WaitShapeScore
-                + limitedLookahead.Score;
+                + limitedLookahead.Score
+                + bigHandRoute.Score;
             var defenseAdjustment = posteriorAdjustment * ResolveDefenseAdjustmentWeight(effectiveShanten, waitCount, roundStage, maxReadyPosterior);
             var expectedValue = expectedScore.Net + shapeValue - defenseAdjustment;
             var score = (int)Math.Round(expectedValue * 100.0);
@@ -94,6 +101,7 @@ public sealed class NeijiangDecisionEngine
                 .Concat(waitCount > 0 ? waitShapeSummary.Reasons : Array.Empty<string>())
                 .Concat(shapeSummary.Reasons)
                 .Concat(limitedLookahead.Reasons)
+                .Concat(bigHandRoute.Reasons)
                 .ToArray();
             candidateScores[tileType] = score;
             candidates.Add(new NeijiangCandidateDetail
@@ -151,7 +159,9 @@ public sealed class NeijiangDecisionEngine
                 RiskReasons = riskReasons,
                 Reasons = mergedReasons
             });
-            if (effectiveShanten < bestShanten || (effectiveShanten == bestShanten && score > bestScore))
+            var challenger = candidates[^1];
+            var incumbent = bestTile >= 0 ? candidates.FirstOrDefault(item => item.TileType == bestTile) : null;
+            if (IsBetterDiscardCandidate(challenger, incumbent, roundStage))
             {
                 bestTile = tileType;
                 bestScore = score;
@@ -165,7 +175,8 @@ public sealed class NeijiangDecisionEngine
 
         candidates = candidates
             .OrderBy(item => item.WaitCount > 0 ? 0 : 1)
-            .ThenBy(item => item.Shanten)
+            .ThenBy(item => StrategicShantenRank(item, roundStage))
+            .ThenBy(item => StrategicRouteRank(item, roundStage))
             .ThenBy(item => item.FastTingDiscardRank)
             .ThenByDescending(item => item.WaitCount)
             .ThenByDescending(item => item.LiveUkeire)
@@ -177,7 +188,7 @@ public sealed class NeijiangDecisionEngine
         var searchResult = _search.EvaluateTopCandidates(state, candidates);
         if (searchResult.Used)
         {
-            candidates = ApplySearchBonuses(candidates, searchResult);
+            candidates = ApplySearchBonuses(candidates, searchResult, roundStage);
             candidateScores = candidates.ToDictionary(item => item.TileType, item => item.Score);
             var bestCandidate = candidates[0];
             bestTile = bestCandidate.TileType;
@@ -347,12 +358,125 @@ public sealed class NeijiangDecisionEngine
         }
         if (counts.Count <= 7 && meldGroupCount == 0 && pairCount >= 4)
             routes.Add("七对");
-        if (tripleLike + meldGroupCount >= 3)
+        var pairRoutePotential = pairCount + meldGroupCount;
+        var earlyPairRoute = state.WallCount >= 8
+            && meldGroupCount >= 1
+            && pairRoutePotential >= 5;
+        if (tripleLike + meldGroupCount >= 3 || earlyPairRoute)
             routes.Add("对对胡");
         var totalTiles = hand18.Sum() + state.Melds18[state.SeatIndex].Count;
         if (suitCounts.Count == 1 && suitCounts.Count > 0 && totalTiles >= 11 && state.WallCount >= 8)
             routes.Add("清一色");
         return routes;
+    }
+
+    private static bool IsBetterDiscardCandidate(NeijiangCandidateDetail challenger, NeijiangCandidateDetail? incumbent, int roundStage)
+    {
+        if (incumbent is null)
+            return true;
+        var challengerRank = StrategicShantenRank(challenger, roundStage);
+        var incumbentRank = StrategicShantenRank(incumbent, roundStage);
+        if (challengerRank != incumbentRank)
+            return challengerRank < incumbentRank;
+        var challengerRouteRank = StrategicRouteRank(challenger, roundStage);
+        var incumbentRouteRank = StrategicRouteRank(incumbent, roundStage);
+        if (challengerRouteRank != incumbentRouteRank)
+            return challengerRouteRank < incumbentRouteRank;
+        if (challenger.Shanten != incumbent.Shanten && Math.Abs(challenger.Score - incumbent.Score) < 900)
+            return challenger.Shanten < incumbent.Shanten;
+        return challenger.Score > incumbent.Score;
+    }
+
+    private static int StrategicShantenRank(NeijiangCandidateDetail candidate, int roundStage)
+    {
+        var rank = candidate.Shanten;
+        if (roundStage <= 1 && HasBigPairRoute(candidate) && candidate.WaitCount <= 0)
+            rank = Math.Max(0, rank - 1);
+        return rank;
+    }
+
+    private static int StrategicRouteRank(NeijiangCandidateDetail candidate, int roundStage)
+    {
+        return roundStage <= 1 && HasBigPairRoute(candidate) ? 0 : 1;
+    }
+
+    private static bool HasBigPairRoute(NeijiangCandidateDetail candidate)
+    {
+        return candidate.RoutesAfter.Contains("七对") || candidate.RoutesAfter.Contains("对对胡");
+    }
+
+    private static NeijiangBigHandRouteAdjustment EvaluateBigHandRouteAdjustment(
+        int[] handBeforeDiscard18,
+        int[] handAfterDiscard18,
+        NeijiangStateView state,
+        int discardTileType,
+        int meldCount,
+        int roundStage)
+    {
+        if (roundStage > 1 || state.WallCount < 8)
+            return NeijiangBigHandRouteAdjustment.Empty;
+
+        var beforePairs = CountPairLikeGroups(handBeforeDiscard18);
+        var afterPairs = CountPairLikeGroups(handAfterDiscard18);
+        var beforePairPotential = beforePairs + meldCount;
+        var afterPairPotential = afterPairs + meldCount;
+        var concealedQiDuiBefore = meldCount == 0 && beforePairs >= 4;
+        var concealedQiDuiAfter = meldCount == 0 && afterPairs >= 4;
+        var duiDuiBefore = meldCount >= 1 && beforePairPotential >= 5;
+        var duiDuiAfter = meldCount >= 1 && afterPairPotential >= 5;
+        var beforeBigPairRoute = concealedQiDuiBefore || duiDuiBefore;
+        var afterBigPairRoute = concealedQiDuiAfter || duiDuiAfter;
+        if (!beforeBigPairRoute && !afterBigPairRoute)
+            return NeijiangBigHandRouteAdjustment.Empty;
+
+        var score = 0.0;
+        var reasons = new List<string>();
+        var breaksPair = discardTileType is >= 0 and < 18
+            && handBeforeDiscard18[discardTileType] >= 2
+            && handAfterDiscard18[discardTileType] <= 1;
+        var breaksTriplet = discardTileType is >= 0 and < 18
+            && handBeforeDiscard18[discardTileType] >= 3
+            && handAfterDiscard18[discardTileType] <= 2;
+
+        if (afterBigPairRoute)
+        {
+            score += duiDuiAfter ? 4.8 : 3.6;
+            reasons.Add(duiDuiAfter ? "前期保留对子胡路线" : "前期保留七对路线");
+            if (handBeforeDiscard18[discardTileType] == 1)
+            {
+                score += 2.4;
+                reasons.Add("优先拆孤张保留对子");
+            }
+        }
+
+        if (beforeBigPairRoute && !afterBigPairRoute)
+        {
+            score -= breaksTriplet ? 22.0 : 16.0;
+            reasons.Add(breaksTriplet ? "拆刻子破坏大牌路线" : "拆对子破坏大牌路线");
+        }
+        else if (afterBigPairRoute && breaksTriplet)
+        {
+            score -= 12.0;
+            reasons.Add("大牌路线下降：拆刻子");
+        }
+        else if (afterBigPairRoute && breaksPair)
+        {
+            score -= 7.0;
+            reasons.Add("大牌路线下降：拆对子");
+        }
+
+        return new NeijiangBigHandRouteAdjustment(score, reasons);
+    }
+
+    private static int CountPairLikeGroups(int[] hand18)
+    {
+        var count = 0;
+        foreach (var tileCount in hand18)
+        {
+            if (tileCount >= 2)
+                count++;
+        }
+        return count;
     }
 
     private static int ResolveFastRank(int shanten, int waitCount, int liveUkeire)
@@ -628,7 +752,8 @@ public sealed class NeijiangDecisionEngine
 
     private static List<NeijiangCandidateDetail> ApplySearchBonuses(
         IReadOnlyList<NeijiangCandidateDetail> candidates,
-        NeijiangSearchResult searchResult)
+        NeijiangSearchResult searchResult,
+        int roundStage)
     {
         var updated = new List<NeijiangCandidateDetail>(candidates.Count);
         foreach (var candidate in candidates)
@@ -685,7 +810,8 @@ public sealed class NeijiangDecisionEngine
         }
 
         return updated
-            .OrderBy(item => item.Shanten)
+            .OrderBy(item => StrategicShantenRank(item, roundStage))
+            .ThenBy(item => StrategicRouteRank(item, roundStage))
             .ThenBy(item => item.FastTingDiscardRank)
             .ThenByDescending(item => item.LiveUkeire)
             .ThenBy(item => item.Danger)

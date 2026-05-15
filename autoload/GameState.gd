@@ -237,6 +237,7 @@ func get_debug_snapshot() -> Dictionary:
 		"human_can_add_gang": can_human_add_gang(0),
 		"human_can_an_gang": can_human_an_gang(0),
 		"human_can_bao_jiao": can_human_bao_jiao(0),
+		"human_bao_jiao_plan": get_human_bao_jiao_plan(0),
 		"human_can_pass_opening_bao_jiao": can_human_pass_opening_bao_jiao(0),
 		"human_last_draw_tile_id": _get_last_draw_tile_id_for_seat(0),
 		"human_ding_que_pending": is_human_ding_que_pending(0),
@@ -752,6 +753,7 @@ func get_human_reaction_options(seat: int) -> Dictionary:
 	var bao_jiao_locked := _is_bao_jiao_reaction_locked(seat)
 	var reaction_tile: Dictionary = current_discard_context.get("tile", {})
 	var ding_que_claim_blocked := not reaction_tile.is_empty() and _is_ding_que_tile_for_seat(seat, reaction_tile)
+	var must_bao_gang := _is_mandatory_bao_gang_reaction(seat, candidate)
 	var can_peng := false if bao_jiao_locked else bool(candidate["can_peng"])
 	var can_gang := bool(candidate["can_gang"])
 	if bao_jiao_locked and not _is_bao_gang_allowed(seat, reaction_tile):
@@ -760,19 +762,32 @@ func get_human_reaction_options(seat: int) -> Dictionary:
 		can_peng = false
 		can_gang = false
 	var can_hu := bool(candidate["can_hu"])
+	if must_bao_gang:
+		can_hu = false
 	return {
 		"can_peng": can_peng and not _has_higher_priority_candidate_than(seat, "peng"),
 		"can_gang": can_gang and not _has_higher_priority_candidate_than(seat, "gang"),
 		"can_hu": can_hu,
-		"can_pass": true,
+		"can_pass": not must_bao_gang,
 	}
 
 
-func execute_human_bao_jiao(seat: int) -> bool:
+func get_human_bao_jiao_plan(seat: int) -> Dictionary:
+	if not can_human_bao_jiao(seat):
+		return {}
+	return _build_bao_jiao_plan(seat)
+
+
+func execute_human_bao_jiao(seat: int, selected_bao_gang_keys: Variant = null) -> bool:
 	if not can_human_bao_jiao(seat):
 		return false
 	var plan: Dictionary = _build_bao_jiao_plan(seat)
 	if plan.is_empty():
+		return false
+	var selected_keys: Array = _resolve_selected_bao_gang_keys(plan, selected_bao_gang_keys)
+	if selected_keys.is_empty() and selected_bao_gang_keys != null and _bao_gang_selection_has_items(selected_bao_gang_keys):
+		debug_last_message = "报杠选择不符合条件，请重新选择。"
+		_emit_state_changed()
 		return false
 	var discard_tile: Dictionary = plan.get("discard_tile", {})
 	if not discard_tile.is_empty():
@@ -780,9 +795,9 @@ func execute_human_bao_jiao(seat: int) -> bool:
 			return false
 	players[seat]["bao_jiao"] = true
 	players[seat]["bao_jiao_ting_tiles"] = plan.get("ting_tiles", []).duplicate(true)
-	players[seat]["bao_gang_tiles"] = plan.get("bao_gang_keys", []).duplicate(true)
+	players[seat]["bao_gang_tiles"] = selected_keys.duplicate(true)
 	players[seat]["rule_marks"] = _build_rule_marks_for_player(players[seat])
-	var bao_gang_count := int(Array(plan.get("bao_gang_keys", [])).size())
+	var bao_gang_count := selected_keys.size()
 	var bao_gang_suffix := "，报%d杠" % bao_gang_count if bao_gang_count > 0 else ""
 	if discard_tile.is_empty():
 		debug_last_message = "%s 开局报叫%s，听 %s。" % [
@@ -802,6 +817,29 @@ func execute_human_bao_jiao(seat: int) -> bool:
 		_mark_opening_bao_jiao_reviewed(seat)
 		_process_opening_bao_jiao_queue()
 	return true
+
+
+func _resolve_selected_bao_gang_keys(plan: Dictionary, selected_bao_gang_keys: Variant) -> Array:
+	var legal_keys: Array = plan.get("bao_gang_keys", [])
+	if selected_bao_gang_keys == null:
+		return legal_keys.duplicate(true)
+	if not (selected_bao_gang_keys is Array):
+		return []
+	var selected: Array = selected_bao_gang_keys
+	var result: Array = []
+	for item in selected:
+		var key := str(item)
+		if key.is_empty() or not legal_keys.has(key):
+			return []
+		if not result.has(key):
+			result.append(key)
+	return result
+
+
+func _bao_gang_selection_has_items(selected_bao_gang_keys: Variant) -> bool:
+	if selected_bao_gang_keys is Array:
+		return not Array(selected_bao_gang_keys).is_empty()
+	return selected_bao_gang_keys != null
 
 
 func pass_human_opening_bao_jiao(seat: int) -> bool:
@@ -859,6 +897,9 @@ func execute_human_hu(seat: int) -> bool:
 	var candidate: Dictionary = _get_reaction_candidate_for_seat(seat)
 	if candidate.is_empty() or not candidate["can_hu"]:
 		return false
+	if _is_mandatory_bao_gang_reaction(seat, candidate):
+		debug_last_message = "%s 已报杠，遇到报杠牌必须杠。" % _seat_display_name(seat)
+		return false
 	return _execute_hu_on_discard(seat)
 
 
@@ -902,6 +943,10 @@ func pass_human_reaction(seat: int) -> bool:
 	var candidate: Dictionary = _get_reaction_candidate_for_seat(seat)
 	if candidate.is_empty():
 		return false
+	if _is_mandatory_bao_gang_reaction(seat, candidate):
+		debug_last_message = "%s 已报杠，遇到报杠牌必须杠。" % _seat_display_name(seat)
+		_emit_state_changed()
+		return false
 	_record_reaction_pass_evidence(seat, candidate)
 	_remove_reaction_candidate_for_seat(seat)
 	_apply_passed_hu_lock_if_needed(seat, candidate)
@@ -921,6 +966,10 @@ func discard_tile_by_id(seat: int, tile_id: int) -> bool:
 		return false
 	if bool(players[seat].get("bao_jiao", false)) and tile_id != _get_last_draw_tile_id_for_seat(seat):
 		debug_last_message = "报叫后需保持听口，当前仅允许打出新摸牌。"
+		_emit_state_changed()
+		return false
+	if _must_self_gang_bao_gang_tile(seat, tile_id):
+		debug_last_message = "摸到已报杠的牌必须杠，不能打出。"
 		_emit_state_changed()
 		return false
 	return _discard_tile_internal(seat, tile_id)
@@ -960,26 +1009,26 @@ func prepare_ai_reaction_decision() -> bool:
 func _get_or_prepare_ai_turn_decision() -> Dictionary:
 	if _is_pending_ai_turn_decision_valid():
 		return pending_ai_turn_decision.duplicate(true)
-	if _is_pending_ai_turn_request_valid() and _has_native_csharp_runtime():
-		_clear_pending_ai_turn_request()
 	if _is_pending_ai_turn_request_valid():
 		return {}
-	var inline_decision := {}
-	if _has_native_csharp_runtime():
-		inline_decision = _build_ai_turn_decision()
-		if not inline_decision.is_empty():
-			pending_ai_turn_decision = inline_decision
+	if _start_ai_turn_background_request():
+		if _is_pending_ai_turn_decision_valid():
 			return pending_ai_turn_decision.duplicate(true)
 		return {}
 	if OS.has_feature("android") or OS.has_feature("ios") or OS.has_feature("web"):
 		debug_last_message = "C# AI 运行时未就绪，严格模式下暂停 AI 出牌。"
 		return {}
-	_start_ai_turn_background_request()
 	return {}
 
 
 func _is_pending_ai_turn_decision_valid() -> bool:
 	if pending_ai_turn_decision.is_empty():
+		return false
+	var seat := int(pending_ai_turn_decision.get("seat", -1))
+	if seat < 0 or seat >= players.size():
+		return false
+	var state_signature := str(pending_ai_turn_decision.get("state_signature", ""))
+	if state_signature != "" and state_signature != _ai_turn_state_signature(seat):
 		return false
 	return int(pending_ai_turn_decision.get("round_index", -1)) == round_index \
 		and int(pending_ai_turn_decision.get("seat", -1)) == current_turn_seat \
@@ -990,6 +1039,12 @@ func _is_pending_ai_turn_decision_valid() -> bool:
 
 func _is_pending_ai_turn_request_valid() -> bool:
 	if pending_ai_turn_request_id <= 0 or pending_ai_turn_request_meta.is_empty():
+		return false
+	var seat := int(pending_ai_turn_request_meta.get("seat", -1))
+	if seat < 0 or seat >= players.size():
+		return false
+	var state_signature := str(pending_ai_turn_request_meta.get("state_signature", ""))
+	if state_signature != "" and state_signature != _ai_turn_state_signature(seat):
 		return false
 	return int(pending_ai_turn_request_meta.get("round_index", -1)) == round_index \
 		and int(pending_ai_turn_request_meta.get("seat", -1)) == current_turn_seat \
@@ -1009,6 +1064,7 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 		"phase": int(current_phase),
 		"wall_count": wall_count,
 		"hand_count": int(players[seat].get("hand_count", 0)),
+		"state_signature": _ai_turn_state_signature(seat),
 	}
 	var table_state := _build_table_state()
 	var player_state := _build_player_state(seat)
@@ -1069,6 +1125,17 @@ func _build_ai_self_action_decision(seat: int, player_state: Dictionary, table_s
 		return {}
 	var an_options := _find_all_an_gang_options(seat)
 	var add_options := _find_all_add_gang_options(seat)
+	var mandatory_an_gang := _find_mandatory_bao_gang_an_option(seat, an_options)
+	if not mandatory_an_gang.is_empty():
+		return {
+			"action": "an_gang",
+			"gang_option": mandatory_an_gang.duplicate(true),
+			"analysis": {
+				"action": "gang",
+				"gang_subtype": "an_gang",
+				"reason": "已报杠，摸到报杠牌必须杠",
+			},
+		}
 	var an_types := _tile_types_from_options(an_options, "tiles")
 	var add_types := _tile_types_from_options(add_options, "tile")
 	var add_qiang_counts := _add_gang_qiang_counts_by_tile_type(seat, add_options)
@@ -1226,6 +1293,12 @@ func _get_or_prepare_ai_reaction_decision() -> Dictionary:
 func _is_pending_ai_reaction_decision_valid() -> bool:
 	if pending_ai_reaction_decision.is_empty():
 		return false
+	var seat := int(pending_ai_reaction_decision.get("seat", -1))
+	if seat < 0 or seat >= players.size():
+		return false
+	var state_signature := str(pending_ai_reaction_decision.get("state_signature", ""))
+	if state_signature != "" and state_signature != _ai_reaction_state_signature(seat):
+		return false
 	var tile: Dictionary = current_discard_context.get("tile", {})
 	return int(pending_ai_reaction_decision.get("round_index", -1)) == round_index \
 		and int(pending_ai_reaction_decision.get("phase", -1)) == int(current_phase) \
@@ -1242,7 +1315,17 @@ func _is_pending_ai_reaction_request_valid() -> bool:
 		_clear_pending_ai_reaction_request()
 		return false
 	var tile: Dictionary = current_discard_context.get("tile", {})
-	return int(pending_ai_reaction_request_meta.get("round_index", -1)) == round_index 		and int(pending_ai_reaction_request_meta.get("phase", -1)) == int(current_phase) 		and int(pending_ai_reaction_request_meta.get("source_seat", -1)) == int(current_discard_context.get("source_seat", -1)) 		and int(pending_ai_reaction_request_meta.get("tile_id", -1)) == int(tile.get("id", -1)) 		and int(pending_ai_reaction_request_meta.get("pending_count", -1)) == pending_reactions.size()
+	var seat := int(pending_ai_reaction_request_meta.get("seat", -1))
+	if seat < 0 or seat >= players.size():
+		return false
+	var state_signature := str(pending_ai_reaction_request_meta.get("state_signature", ""))
+	if state_signature != "" and state_signature != _ai_reaction_state_signature(seat):
+		return false
+	return int(pending_ai_reaction_request_meta.get("round_index", -1)) == round_index \
+		and int(pending_ai_reaction_request_meta.get("phase", -1)) == int(current_phase) \
+		and int(pending_ai_reaction_request_meta.get("source_seat", -1)) == int(current_discard_context.get("source_seat", -1)) \
+		and int(pending_ai_reaction_request_meta.get("tile_id", -1)) == int(tile.get("id", -1)) \
+		and int(pending_ai_reaction_request_meta.get("pending_count", -1)) == pending_reactions.size()
 
 
 func _is_pending_ai_reaction_request_stale() -> bool:
@@ -1278,6 +1361,7 @@ func _build_ai_reaction_decision(force_lightweight: bool = false) -> Dictionary:
 		"tile_id": int(tile.get("id", -1)),
 		"pending_count": pending_reactions.size(),
 		"seat": seat,
+		"state_signature": _ai_reaction_state_signature(seat),
 		"candidate": candidate.duplicate(true),
 		"decision": decision.duplicate(true),
 	}
@@ -1287,12 +1371,24 @@ func _start_ai_turn_background_request() -> bool:
 	if not is_ai_turn_ready():
 		return false
 	if _has_native_csharp_runtime():
-		var decision := _build_ai_turn_decision()
-		if decision.is_empty():
-			return false
-		pending_ai_turn_decision = decision
-		_clear_pending_ai_turn_request()
-		return true
+		var native_seat: int = current_turn_seat
+		var native_player_state := _build_player_state(native_seat)
+		var native_table_state := _build_table_state()
+		var self_action := _build_ai_self_action_decision(native_seat, native_player_state, native_table_state)
+		if not self_action.is_empty():
+			var base := {
+				"round_index": round_index,
+				"seat": native_seat,
+				"phase": int(current_phase),
+				"wall_count": wall_count,
+				"hand_count": int(players[native_seat].get("hand_count", 0)),
+				"state_signature": _ai_turn_state_signature(native_seat),
+			}
+			for key in self_action.keys():
+				base[key] = self_action[key]
+			pending_ai_turn_decision = base
+			_clear_pending_ai_turn_request()
+			return true
 	if _is_pending_ai_turn_request_valid():
 		return true
 	var seat: int = current_turn_seat
@@ -1317,6 +1413,7 @@ func _start_ai_turn_background_request() -> bool:
 		"phase": int(current_phase),
 		"wall_count": wall_count,
 		"hand_count": int(players[seat].get("hand_count", 0)),
+		"state_signature": _ai_turn_state_signature(seat),
 		"started_at_ms": Time.get_ticks_msec(),
 	}
 	return true
@@ -1325,13 +1422,6 @@ func _start_ai_turn_background_request() -> bool:
 func _start_ai_reaction_background_request() -> bool:
 	if current_phase != RoundPhase.REACTION:
 		return false
-	if _has_native_csharp_runtime():
-		var decision := _build_ai_reaction_decision()
-		if decision.is_empty():
-			return false
-		pending_ai_reaction_decision = decision
-		_clear_pending_ai_reaction_request()
-		return true
 	if _is_pending_ai_reaction_request_valid():
 		return true
 	var candidate: Dictionary = _get_next_ai_reaction_candidate()
@@ -1364,6 +1454,7 @@ func _start_ai_reaction_background_request() -> bool:
 		"tile_id": int(tile.get("id", -1)),
 		"pending_count": pending_reactions.size(),
 		"seat": seat,
+		"state_signature": _ai_reaction_state_signature(seat),
 		"candidate": candidate.duplicate(true),
 		"started_at_ms": Time.get_ticks_msec(),
 	}
@@ -1437,6 +1528,7 @@ func _build_bao_jiao_plan(seat: int) -> Dictionary:
 			"discard_tile": {},
 			"ting_tiles": opening_ting_tiles.duplicate(true),
 			"bao_gang_keys": _collect_bao_gang_keys_for_seat(seat, {}),
+			"bao_gang_options": _collect_bao_gang_options_for_seat(seat, {}),
 		}
 		opening_plan["plan_score"] = _score_bao_jiao_plan(seat, hand_tiles.duplicate(true), opening_plan)
 		return opening_plan
@@ -1462,6 +1554,7 @@ func _build_bao_jiao_plan(seat: int) -> Dictionary:
 			"discard_tile": tile.duplicate(true),
 			"ting_tiles": ting_tiles.duplicate(true),
 			"bao_gang_keys": _collect_bao_gang_keys_for_seat(seat, tile),
+			"bao_gang_options": _collect_bao_gang_options_for_seat(seat, tile),
 		}
 		var plan_score: int = _score_bao_jiao_plan(seat, simulated_hand, plan)
 		plan["plan_score"] = plan_score
@@ -1473,6 +1566,16 @@ func _build_bao_jiao_plan(seat: int) -> Dictionary:
 
 func _collect_bao_gang_keys_for_seat(seat: int, discarded_tile: Dictionary = {}) -> Array:
 	var keys: Array = []
+	for option in _collect_bao_gang_options_for_seat(seat, discarded_tile):
+		var key := str(option.get("key", ""))
+		if not key.is_empty() and not keys.has(key):
+			keys.append(key)
+	return keys
+
+
+func _collect_bao_gang_options_for_seat(seat: int, discarded_tile: Dictionary = {}) -> Array:
+	var keys: Array = []
+	var options: Array = []
 	for option in _find_all_add_gang_options(seat):
 		var tile: Dictionary = option.get("tile", {})
 		if tile.is_empty():
@@ -1482,6 +1585,7 @@ func _collect_bao_gang_keys_for_seat(seat: int, discarded_tile: Dictionary = {})
 		var key := _tile_key(tile)
 		if not keys.has(key):
 			keys.append(key)
+			options.append(_build_bao_gang_declare_option(tile, key, "add_gang"))
 	for option in _find_all_an_gang_options(seat):
 		var tiles: Array = option.get("tiles", [])
 		if tiles.is_empty():
@@ -1491,7 +1595,27 @@ func _collect_bao_gang_keys_for_seat(seat: int, discarded_tile: Dictionary = {})
 		var key := _tile_key(tiles[0])
 		if not keys.has(key):
 			keys.append(key)
-	return keys
+			options.append(_build_bao_gang_declare_option(tiles[0], key, "an_gang"))
+	for option in _find_all_triplet_bao_gang_declare_options(seat):
+		var tiles: Array = option.get("tiles", [])
+		if tiles.is_empty():
+			continue
+		if not _can_keep_ting_after_bao_gang(seat, discarded_tile, option, true):
+			continue
+		var key := _tile_key(tiles[0])
+		if not keys.has(key):
+			keys.append(key)
+			options.append(_build_bao_gang_declare_option(tiles[0], key, "triplet_declare"))
+	return options
+
+
+func _build_bao_gang_declare_option(tile: Dictionary, key: String, subtype: String) -> Dictionary:
+	return {
+		"key": key,
+		"tile": tile.duplicate(true),
+		"display_name": str(tile.get("display_name", _tile_key(tile))),
+		"subtype": subtype,
+	}
 
 
 func _can_keep_ting_after_bao_gang(seat: int, discarded_tile: Dictionary, option: Dictionary, is_an_gang: bool) -> bool:
@@ -1511,19 +1635,26 @@ func _can_keep_ting_after_bao_gang(seat: int, discarded_tile: Dictionary, option
 	var gang_key := ""
 	if is_an_gang:
 		var gang_tiles: Array = option.get("tiles", [])
-		if gang_tiles.size() < 4:
+		var declare_only := bool(option.get("declare_only", false))
+		var required_count := 3 if declare_only else 4
+		if gang_tiles.size() < required_count:
 			return false
 		gang_key = _tile_key(gang_tiles[0])
-		for gang_tile in gang_tiles:
+		for gang_tile in gang_tiles.slice(0, required_count):
 			for i in range(base_hand.size() - 1, -1, -1):
 				if int(base_hand[i].get("id", -1)) == int(gang_tile.get("id", -1)):
 					base_hand.remove_at(i)
 					break
+		var meld_tiles: Array = gang_tiles.slice(0, required_count).duplicate(true)
+		if declare_only:
+			var future_tile: Dictionary = gang_tiles[0].duplicate(true)
+			future_tile["id"] = -1
+			meld_tiles.append(future_tile)
 		base_melds.append({
 			"type": "gang",
 			"from_seat": seat,
-			"tiles": gang_tiles.duplicate(true),
-			"gang_subtype": "an_gang",
+			"tiles": meld_tiles,
+			"gang_subtype": "bao_gang",
 		})
 	else:
 		var gang_tile: Dictionary = option.get("tile", {})
@@ -1574,6 +1705,42 @@ func _is_bao_gang_allowed(seat: int, tile: Dictionary) -> bool:
 	if not bool(players[seat].get("bao_jiao", false)):
 		return true
 	return Array(players[seat].get("bao_gang_tiles", [])).has(_tile_key(tile))
+
+
+func _is_mandatory_bao_gang_reaction(seat: int, candidate: Dictionary) -> bool:
+	if seat < 0 or seat >= players.size():
+		return false
+	if not bool(players[seat].get("bao_jiao", false)):
+		return false
+	if not bool(candidate.get("can_gang", false)):
+		return false
+	var tile: Dictionary = current_discard_context.get("tile", {})
+	return not tile.is_empty() and _is_bao_gang_allowed(seat, tile)
+
+
+func _must_self_gang_bao_gang_tile(seat: int, tile_id: int) -> bool:
+	if seat < 0 or seat >= players.size():
+		return false
+	if not bool(players[seat].get("bao_jiao", false)):
+		return false
+	var tile := _tile_by_id_in_hand(seat, tile_id)
+	if tile.is_empty() or not _is_bao_gang_allowed(seat, tile):
+		return false
+	return not _find_mandatory_bao_gang_an_option(seat, _find_all_an_gang_options(seat)).is_empty()
+
+
+func _find_mandatory_bao_gang_an_option(seat: int, options: Array) -> Dictionary:
+	if seat < 0 or seat >= players.size():
+		return {}
+	if not bool(players[seat].get("bao_jiao", false)):
+		return {}
+	for option in options:
+		var tiles: Array = option.get("tiles", [])
+		if tiles.is_empty():
+			continue
+		if _is_bao_gang_allowed(seat, tiles[0]):
+			return option.duplicate(true)
+	return {}
 
 
 func _is_bao_jiao_reaction_locked(seat: int) -> bool:
@@ -2435,6 +2602,7 @@ func _on_ai_turn_analysis_ready(request_id: int, seat_index: int, analysis: Dict
 		"phase": int(current_phase),
 		"wall_count": wall_count,
 		"hand_count": int(players[seat_index].get("hand_count", 0)),
+		"state_signature": str(pending_ai_turn_request_meta.get("state_signature", _ai_turn_state_signature(seat_index))),
 		"action": "discard",
 		"tile_id": int(selected_tile.get("id", -1)),
 		"analysis": analysis.duplicate(true),
@@ -2478,6 +2646,7 @@ func _on_ai_reaction_analysis_ready(request_id: int, seat_index: int, analysis: 
 		"tile_id": int(tile.get("id", -1)),
 		"pending_count": pending_reactions.size(),
 		"seat": seat_index,
+		"state_signature": str(pending_ai_reaction_request_meta.get("state_signature", _ai_reaction_state_signature(seat_index))),
 		"candidate": candidate,
 		"decision": analysis.duplicate(true),
 	}
@@ -2847,6 +3016,8 @@ func _record_ai_metric(key: String, amount: int = 1) -> void:
 	ai_decision_metrics[key] = int(ai_decision_metrics.get(key, 0)) + amount
 
 func _resolve_ai_reaction_action(seat: int, candidate: Dictionary, requested_action: String) -> String:
+	if _is_mandatory_bao_gang_reaction(seat, candidate) and not _has_higher_priority_candidate_than(seat, "gang"):
+		return "gang"
 	if requested_action == "hu" and bool(candidate.get("can_hu", false)):
 		return "hu"
 	if requested_action == "gang" and bool(candidate.get("can_gang", false)) and not _has_higher_priority_candidate_than(seat, "gang"):
@@ -2969,6 +3140,29 @@ func _find_all_an_gang_options(seat: int) -> Array:
 			if not _is_bao_gang_allowed(seat, tiles[0]):
 				continue
 			results.append({"tiles": tiles.slice(0, 4)})
+	return results
+
+
+func _find_all_triplet_bao_gang_declare_options(seat: int) -> Array:
+	var results: Array = []
+	if seat < 0 or seat >= players.size():
+		return results
+	var hand_tiles: Array = players[seat]["hand_tiles"]
+	var counts := {}
+	for tile in hand_tiles:
+		var key := "%s_%d" % [tile["suit"], tile["rank"]]
+		if not counts.has(key):
+			counts[key] = []
+		counts[key].append(tile)
+	for key in counts.keys():
+		var tiles: Array = counts[key]
+		if tiles.size() == 3:
+			if _is_ding_que_tile_for_seat(seat, tiles[0]):
+				continue
+			results.append({
+				"tiles": tiles.slice(0, 3),
+				"declare_only": true,
+			})
 	return results
 
 
@@ -4458,6 +4652,98 @@ func _zero_counts18() -> Array:
 	for _i in range(18):
 		counts.append(0)
 	return counts
+
+
+func _ai_turn_state_signature(seat: int) -> String:
+	if seat < 0 or seat >= players.size():
+		return ""
+	var player: Dictionary = players[seat]
+	return "r=%d|ph=%d|turn=%d|dealer=%d|wall=%d|hand=%s|pub=%s|pass=%s" % [
+		round_index,
+		int(current_phase),
+		current_turn_seat,
+		current_dealer_seat,
+		wall_count,
+		_counts18_signature(_tile_counts18(Array(player.get("hand_tiles", [])))),
+		_public_state_signature(),
+		_reaction_pass_evidence_signature(),
+	]
+
+
+func _ai_reaction_state_signature(seat: int) -> String:
+	var tile: Dictionary = current_discard_context.get("tile", {})
+	return "%s|src=%d|rtile=%d:%d|pending=%s" % [
+		_ai_turn_state_signature(seat),
+		int(current_discard_context.get("source_seat", -1)),
+		int(tile.get("id", -1)),
+		_neijiang_tile_type(tile),
+		_pending_reactions_signature(),
+	]
+
+
+func _public_state_signature() -> String:
+	var parts: Array[String] = []
+	for index in range(players.size()):
+		var player: Dictionary = players[index]
+		parts.append("%d:d%s:m%s:w%d:b%d" % [
+			index,
+			_counts18_signature(_tile_counts18(Array(player.get("discards", [])))),
+			_melds_signature(Array(player.get("melds", []))),
+			1 if bool(player.get("has_won", false)) else 0,
+			1 if bool(player.get("bao_jiao", false)) else 0,
+		])
+	return "/".join(parts)
+
+
+func _melds_signature(melds: Array) -> String:
+	var parts: Array[String] = []
+	for meld_item in melds:
+		var meld: Dictionary = meld_item
+		var tile_parts: Array[String] = []
+		for tile_item in Array(meld.get("tiles", [])):
+			var tile: Dictionary = tile_item
+			tile_parts.append(str(_neijiang_tile_type(tile)))
+		if meld.has("tile"):
+			tile_parts.append(str(_neijiang_tile_type(meld.get("tile", {}))))
+		parts.append("%s:%s:%s" % [
+			str(meld.get("type", "")),
+			",".join(tile_parts),
+			str(meld.get("from_seat", "")),
+		])
+	return ";".join(parts)
+
+
+func _reaction_pass_evidence_signature() -> String:
+	var parts: Array[String] = []
+	for evidence_item in reaction_pass_evidence:
+		var evidence: Dictionary = evidence_item
+		parts.append("%s:%s:%s:%s" % [
+			str(evidence.get("seat", "")),
+			str(evidence.get("source_seat", "")),
+			str(evidence.get("tile_type", "")),
+			str(evidence.get("action", "")),
+		])
+	return ";".join(parts)
+
+
+func _pending_reactions_signature() -> String:
+	var parts: Array[String] = []
+	for reaction_item in pending_reactions:
+		var reaction: Dictionary = reaction_item
+		parts.append("%d:%d:%d:%d" % [
+			int(reaction.get("seat", -1)),
+			1 if bool(reaction.get("can_hu", false)) else 0,
+			1 if bool(reaction.get("can_gang", false)) else 0,
+			1 if bool(reaction.get("can_peng", false)) else 0,
+		])
+	return ";".join(parts)
+
+
+func _counts18_signature(counts: Array) -> String:
+	var parts: Array[String] = []
+	for count in counts:
+		parts.append(str(int(count)))
+	return ",".join(parts)
 
 
 func _try_apply_hell_oracle_to_discard(seat: int, player_state: Dictionary, table_state: Dictionary, analysis: Dictionary, selected_tile: Dictionary) -> Dictionary:

@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.29`
+Current app version: `1.0.30`
 
-`1.0.29` keeps deliberate AI action pacing and separates human input from AI response calculation for smoother discard/action buttons.
+`1.0.30` keeps the smoother async AI/input path, tightens bao-gang declaration rules, and adds player-selected bao-gang options during bao-jiao.
 
 ## Versioning Workflow
 

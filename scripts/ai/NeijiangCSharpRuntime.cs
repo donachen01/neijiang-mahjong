@@ -1,5 +1,9 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
 using Godot;
 using NeijiangMahjong.AI.Core.Codec;
 using NeijiangMahjong.AI.Core.Engines;
@@ -12,6 +16,9 @@ public partial class NeijiangCSharpRuntime : Node
     private readonly NeijiangAiFacade _facade = new();
     private readonly NeijiangLearningEngine _learningEngine = new();
     private readonly NeijiangHellOracleEngine _hellOracle = new();
+    private readonly object _analysisLock = new();
+    private readonly ConcurrentDictionary<int, Task<string>> _asyncRequests = new();
+    private int _nextAsyncRequestId;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -26,6 +33,40 @@ public partial class NeijiangCSharpRuntime : Node
     {
         GD.Print("[NeijiangCSharpRuntime] ready");
     }
+
+    public int StartAnalyzeDiscardJson(string payloadJson)
+    {
+        return StartAsyncRequest(() => AnalyzeDiscardJson(payloadJson));
+    }
+
+    public int StartAnalyzeReactionJson(string payloadJson)
+    {
+        return StartAsyncRequest(() => AnalyzeReactionJson(payloadJson));
+    }
+
+    public int StartAnalyzeSelfActionJson(string payloadJson)
+    {
+        return StartAsyncRequest(() => AnalyzeSelfActionJson(payloadJson));
+    }
+
+    public string PollAiResultJson(int requestId)
+    {
+        if (!_asyncRequests.TryGetValue(requestId, out var task))
+            return "{\"ok\":false,\"error\":\"unknown_ai_request\"}";
+        if (!task.IsCompleted)
+            return "{\"ok\":true,\"pending\":true}";
+
+        _asyncRequests.TryRemove(requestId, out _);
+        if (task.IsFaulted)
+        {
+            var message = task.Exception?.GetBaseException().Message ?? "async_ai_request_failed";
+            return JsonSerializer.Serialize(new { ok = false, error = message }, JsonOptions);
+        }
+
+        return task.Result;
+    }
+
+    public bool HasPendingAiRequests() => !_asyncRequests.IsEmpty;
 
     public string AnalyzeDiscardJson(string payloadJson)
     {
@@ -150,13 +191,22 @@ public partial class NeijiangCSharpRuntime : Node
 
     private object BuildDiscardObject(DiscardPayload payload)
     {
+        var stopwatch = Stopwatch.StartNew();
+        var beforeBelief = NeijiangBeliefEngine.GetDiagnostics();
         var state = BuildState(payload);
-        var result = _facade.DecideDiscardCached(state);
+        NeijiangDecisionResult result;
+        lock (_analysisLock)
+        {
+            result = _facade.DecideDiscardCached(state);
+        }
+        stopwatch.Stop();
+        var beliefMetrics = BuildBeliefMetrics(beforeBelief, NeijiangBeliefEngine.GetDiagnostics());
         var cacheSnapshot = _facade.GetTurnCacheSnapshot();
         var strategyProfile = BuildStrategyProfile(state, result);
         var currentRoutes = EstimateRoutesForCli(state);
         return new
         {
+            ok = true,
             action = result.Action.ActionType.ToString().ToLowerInvariant(),
             tileType = result.Action.TileType,
             score = result.Action.Score,
@@ -230,6 +280,8 @@ public partial class NeijiangCSharpRuntime : Node
                 hits = cacheSnapshot.Hits,
                 misses = cacheSnapshot.Misses
             },
+            elapsedMs = stopwatch.ElapsedMilliseconds,
+            beliefMetrics,
             reasons = result.Reasons,
             candidateScores = result.CandidateScores,
             candidates = result.Candidates.Select(item => new
@@ -292,18 +344,27 @@ public partial class NeijiangCSharpRuntime : Node
 
     private object BuildReactionObject(ReactionPayload payload)
     {
+        var stopwatch = Stopwatch.StartNew();
+        var beforeBelief = NeijiangBeliefEngine.GetDiagnostics();
         var state = BuildState(payload);
-        var result = _facade.DecideReaction(
-            state,
-            payload.ReactionTileType,
-            payload.CanHu,
-            payload.CanPeng,
-            payload.CanGang,
-            payload.SourceSeat,
-            payload.ReactionType);
+        NeijiangReactionDecisionResult result;
+        lock (_analysisLock)
+        {
+            result = _facade.DecideReaction(
+                state,
+                payload.ReactionTileType,
+                payload.CanHu,
+                payload.CanPeng,
+                payload.CanGang,
+                payload.SourceSeat,
+                payload.ReactionType);
+        }
+        stopwatch.Stop();
+        var beliefMetrics = BuildBeliefMetrics(beforeBelief, NeijiangBeliefEngine.GetDiagnostics());
 
         return new
         {
+            ok = true,
             action = result.Action.ActionType.ToString().ToLowerInvariant(),
             tileType = result.Action.TileType,
             score = result.Action.Score,
@@ -324,22 +385,33 @@ public partial class NeijiangCSharpRuntime : Node
             searchSimulations = result.SearchSimulations,
             searchUsed = result.SearchUsed,
             actionScores = result.ActionScores,
+            elapsedMs = stopwatch.ElapsedMilliseconds,
+            beliefMetrics,
             backendMode = "hybrid_csharp_native"
         };
     }
 
     private object BuildSelfActionObject(SelfActionPayload payload)
     {
+        var stopwatch = Stopwatch.StartNew();
+        var beforeBelief = NeijiangBeliefEngine.GetDiagnostics();
         var state = BuildState(payload);
-        var result = _facade.DecideSelfAction(
-            state,
-            payload.CanSelfHu,
-            payload.AnGangTileTypes,
-            payload.AddGangTileTypes,
-            payload.AddGangQiangGangCounts);
+        NeijiangSelfActionDecisionResult result;
+        lock (_analysisLock)
+        {
+            result = _facade.DecideSelfAction(
+                state,
+                payload.CanSelfHu,
+                payload.AnGangTileTypes,
+                payload.AddGangTileTypes,
+                payload.AddGangQiangGangCounts);
+        }
+        stopwatch.Stop();
+        var beliefMetrics = BuildBeliefMetrics(beforeBelief, NeijiangBeliefEngine.GetDiagnostics());
 
         return new
         {
+            ok = true,
             action = result.Action.ActionType.ToString().ToLowerInvariant(),
             tileType = result.Action.TileType,
             gangSubtype = result.GangSubtype,
@@ -349,7 +421,29 @@ public partial class NeijiangCSharpRuntime : Node
             liveUkeireAfter = result.LiveUkeireAfter,
             reasons = result.Reasons,
             actionScores = result.ActionScores,
+            elapsedMs = stopwatch.ElapsedMilliseconds,
+            beliefMetrics,
             backendMode = "csharp_native_self_action"
+        };
+    }
+
+    private int StartAsyncRequest(Func<string> compute)
+    {
+        var requestId = Interlocked.Increment(ref _nextAsyncRequestId);
+        _asyncRequests[requestId] = Task.Run(compute);
+        return requestId;
+    }
+
+    private static object BuildBeliefMetrics(NeijiangBeliefDiagnostics before, NeijiangBeliefDiagnostics after)
+    {
+        return new
+        {
+            calls = after.CallCount - before.CallCount,
+            cacheHits = after.CacheHits - before.CacheHits,
+            cacheMisses = after.CacheMisses - before.CacheMisses,
+            builds = after.BuildCount - before.BuildCount,
+            buildMs = after.TotalBuildMs - before.TotalBuildMs,
+            cacheSize = after.CacheSize
         };
     }
 

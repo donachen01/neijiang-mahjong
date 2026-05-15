@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.30 - 2026-05-15
+
+- Improved discard/action responsiveness by separating stale AI calculations from current human input and adding safer async decision signatures.
+- Added belief-cache diagnostics and performance-oriented posterior reuse without changing the core AI scoring contracts.
+- Tuned early offensive hand-shape evaluation so strong pair-heavy starts keep higher-value routes instead of over-breaking useful groups.
+- Added player-selected bao-gang declarations during bao-jiao, with backend validation and mandatory future gang enforcement.
+
 ## 1.0.26 - 2026-05-13
 
 - Restyled the main action buttons into large circular mahjong controls with primary yellow-orange and secondary green variants.

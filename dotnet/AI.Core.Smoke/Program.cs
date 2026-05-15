@@ -153,6 +153,30 @@ if (!SmokeLateWallKeepsReadyAgainstAbandonedSuitThreat(facade))
     return 20;
 }
 
+if (!SmokeBeliefReuseWithinReaction(facade))
+{
+    Console.Error.WriteLine("belief_reuse_reaction_smoke_failed");
+    return 21;
+}
+
+if (!SmokeBeliefReuseWithinSelfAction(facade))
+{
+    Console.Error.WriteLine("belief_reuse_self_action_smoke_failed");
+    return 22;
+}
+
+if (!SmokeBeliefCacheExactStateHit())
+{
+    Console.Error.WriteLine("belief_cache_exact_state_smoke_failed");
+    return 23;
+}
+
+if (!SmokeEarlyBigPairRouteKeepsPair(facade))
+{
+    Console.Error.WriteLine("early_big_pair_route_smoke_failed");
+    return 24;
+}
+
 return 0;
 
 static bool SmokeAggressivePeng(NeijiangAiFacade facade)
@@ -204,6 +228,120 @@ static bool SmokeReasonableAnGang(NeijiangAiFacade facade)
     var result = facade.DecideSelfAction(state, false, new[] { gangTile }, Array.Empty<int>());
     Console.WriteLine($"an_gang_smoke_action={result.Action.ActionType} score={result.Action.Score} pass={result.ActionScores.GetValueOrDefault("pass")}");
     return result.Action.ActionType == NeijiangActionType.Gang;
+}
+
+static bool SmokeBeliefReuseWithinReaction(NeijiangAiFacade facade)
+{
+    var tile = NeijiangTileCodec.EncodeTileType(1, 5);
+    var hand18 = new int[18];
+    hand18[0] = 1;
+    hand18[1] = 1;
+    hand18[2] = 1;
+    hand18[3] = 1;
+    hand18[4] = 1;
+    hand18[5] = 1;
+    hand18[9] = 1;
+    hand18[10] = 1;
+    hand18[11] = 1;
+    hand18[tile] = 3;
+    hand18[17] = 1;
+    NeijiangBeliefEngine.ResetDiagnostics();
+    var state = NeijiangStateCodec.FromRaw(2, 0, 2, 12, hand18, new int[18]);
+    var result = facade.DecideReaction(state, tile, false, true, true, 1, "discard");
+    var diagnostics = NeijiangBeliefEngine.GetDiagnostics();
+    Console.WriteLine($"belief_reaction_action={result.Action.ActionType} calls={diagnostics.CallCount} builds={diagnostics.BuildCount} hits={diagnostics.CacheHits}");
+    return diagnostics.CallCount <= 1 && diagnostics.BuildCount <= 1;
+}
+
+static bool SmokeBeliefReuseWithinSelfAction(NeijiangAiFacade facade)
+{
+    var gangTile = NeijiangTileCodec.EncodeTileType(1, 8);
+    var hand = new[]
+    {
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(0, 4),
+        NeijiangTileCodec.EncodeTileType(0, 5),
+        NeijiangTileCodec.EncodeTileType(0, 6),
+        NeijiangTileCodec.EncodeTileType(0, 7),
+        NeijiangTileCodec.EncodeTileType(1, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 5),
+        gangTile,
+        gangTile,
+        gangTile,
+        gangTile,
+        NeijiangTileCodec.EncodeTileType(1, 9),
+    };
+    NeijiangBeliefEngine.ResetDiagnostics();
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 15, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    var result = facade.DecideSelfAction(state, false, new[] { gangTile }, Array.Empty<int>());
+    var diagnostics = NeijiangBeliefEngine.GetDiagnostics();
+    Console.WriteLine($"belief_self_action={result.Action.ActionType} calls={diagnostics.CallCount} builds={diagnostics.BuildCount} hits={diagnostics.CacheHits}");
+    return diagnostics.CallCount <= 1 && diagnostics.BuildCount <= 1;
+}
+
+static bool SmokeBeliefCacheExactStateHit()
+{
+    var beliefEngine = new NeijiangBeliefEngine();
+    var hand = new[]
+    {
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(0, 4),
+        NeijiangTileCodec.EncodeTileType(0, 5),
+        NeijiangTileCodec.EncodeTileType(0, 6),
+        NeijiangTileCodec.EncodeTileType(0, 7),
+        NeijiangTileCodec.EncodeTileType(1, 2),
+        NeijiangTileCodec.EncodeTileType(1, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 5),
+        NeijiangTileCodec.EncodeTileType(1, 6),
+        NeijiangTileCodec.EncodeTileType(1, 7),
+        NeijiangTileCodec.EncodeTileType(1, 8),
+    };
+    var state = NeijiangStateCodec.FromRaw(0, 0, 0, 14, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    NeijiangBeliefEngine.ResetDiagnostics();
+    beliefEngine.Build(state);
+    beliefEngine.Build(state);
+    var diagnostics = NeijiangBeliefEngine.GetDiagnostics();
+    Console.WriteLine($"belief_cache_calls={diagnostics.CallCount} builds={diagnostics.BuildCount} hits={diagnostics.CacheHits}");
+    return diagnostics.CallCount == 2 && diagnostics.BuildCount == 1 && diagnostics.CacheHits == 1;
+}
+
+static bool SmokeEarlyBigPairRouteKeepsPair(NeijiangAiFacade facade)
+{
+    var hand18 = new int[18];
+    hand18[4] = 1;  // 5条 singleton
+    hand18[6] = 1;  // 7条 singleton
+    hand18[8] = 2;  // 9条 pair should be preserved for 对子胡 route
+    hand18[11] = 1; // 3筒 singleton
+    hand18[13] = 1; // 5筒 singleton
+    hand18[15] = 2; // 7筒 pair
+    hand18[16] = 2; // 8筒 pair
+
+    var melds = new[]
+    {
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+        new[] { 1, 1, 1, 14, 14, 14 },
+    };
+    var visible18 = new int[18];
+    foreach (var tileType in melds[3])
+        visible18[tileType]++;
+
+    var state = NeijiangStateCodec.FromRaw(3, 0, 3, 16, hand18, visible18, null, null, melds);
+    var result = facade.DecideDiscard(state);
+    var nineTiao = result.Candidates.First(candidate => candidate.TileType == 8);
+    var threeTong = result.Candidates.First(candidate => candidate.TileType == 11);
+    var fiveTong = result.Candidates.First(candidate => candidate.TileType == 13);
+    var eightTong = result.Candidates.First(candidate => candidate.TileType == 16);
+    Console.WriteLine($"early_big_pair_tile={result.Action.TileType} nine_score={nineTiao.Score} eight_tong={eightTong.Score} three_tong={threeTong.Score} five_tong={fiveTong.Score} nine_routes={string.Join('/', nineTiao.RoutesAfter)}");
+    return (result.Action.TileType == 11 || result.Action.TileType == 13)
+        && nineTiao.Score < Math.Max(threeTong.Score, fiveTong.Score)
+        && eightTong.Score < Math.Max(threeTong.Score, fiveTong.Score)
+        && (threeTong.RoutesAfter.Contains("对对胡") || fiveTong.RoutesAfter.Contains("对对胡"));
 }
 
 static bool SmokeReactionPassesSevenPairsTenpai(NeijiangAiFacade facade)

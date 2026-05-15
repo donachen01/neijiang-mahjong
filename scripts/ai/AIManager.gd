@@ -57,6 +57,13 @@ func has_native_csharp_runtime() -> bool:
 	return native_csharp_runtime != null and native_csharp_runtime.has_method("IsRuntimeReady") and bool(native_csharp_runtime.call("IsRuntimeReady"))
 
 
+func has_native_csharp_async_runtime() -> bool:
+	return has_native_csharp_runtime() \
+		and native_csharp_runtime.has_method("StartAnalyzeDiscardJson") \
+		and native_csharp_runtime.has_method("StartAnalyzeReactionJson") \
+		and native_csharp_runtime.has_method("PollAiResultJson")
+
+
 func analyze_turn(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false) -> Dictionary:
 	var result := _compute_turn_analysis(player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, "sync")
 	_finalize_turn_analysis(int(player_state.get("seat", -1)), result)
@@ -262,6 +269,186 @@ func _analyze_reaction_via_native_runtime(candidate: Dictionary, player_state: D
 	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
 
 
+func _start_native_turn_analysis_background(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config) -> bool:
+	var payload_started_at := Time.get_ticks_msec()
+	var payload: Dictionary = csharp_bridge.build_discard_transport_payload(player_state, table_state, rules_config)
+	var payload_ms := maxi(0, Time.get_ticks_msec() - payload_started_at)
+	var native_request_id := int(native_csharp_runtime.call("StartAnalyzeDiscardJson", JSON.stringify(payload)))
+	if native_request_id <= 0:
+		last_native_turn_error = "native_async_turn_start_failed"
+		return false
+	last_native_turn_raw_summary = "async_payload seat=%d hand_sum=%d wall=%d payload_ms=%d native_id=%d" % [
+		int(payload.get("seatIndex", -1)),
+		_sum_int_array(payload.get("hand18", [])),
+		int(payload.get("wallCount", -1)),
+		payload_ms,
+		native_request_id,
+	]
+	active_async_requests[request_id] = {
+		"kind": "turn",
+		"seat": int(player_state.get("seat", -1)),
+		"native_request_id": native_request_id,
+		"player_state": player_state.duplicate(true),
+		"rules_config": rules_config,
+		"payload_ms": payload_ms,
+		"started_at_ms": Time.get_ticks_msec(),
+	}
+	return true
+
+
+func _start_native_reaction_analysis_background(request_id: int, candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config) -> bool:
+	var payload_started_at := Time.get_ticks_msec()
+	var payload: Dictionary = csharp_bridge.build_reaction_transport_payload(candidate, player_state, table_state, discard_context, rules_config)
+	var payload_ms := maxi(0, Time.get_ticks_msec() - payload_started_at)
+	var native_request_id := int(native_csharp_runtime.call("StartAnalyzeReactionJson", JSON.stringify(payload)))
+	if native_request_id <= 0:
+		last_native_reaction_error = "native_async_reaction_start_failed"
+		return false
+	last_native_reaction_raw_summary = "async_payload seat=%d tile=%d can=%s/%s/%s payload_ms=%d native_id=%d" % [
+		int(payload.get("seatIndex", -1)),
+		int(payload.get("reactionTileType", -1)),
+		str(payload.get("canHu", false)),
+		str(payload.get("canPeng", false)),
+		str(payload.get("canGang", false)),
+		payload_ms,
+		native_request_id,
+	]
+	active_async_requests[request_id] = {
+		"kind": "reaction",
+		"seat": int(player_state.get("seat", -1)),
+		"native_request_id": native_request_id,
+		"candidate": candidate.duplicate(true),
+		"player_state": player_state.duplicate(true),
+		"rules_config": rules_config,
+		"payload_ms": payload_ms,
+		"started_at_ms": Time.get_ticks_msec(),
+	}
+	return true
+
+
+func _poll_native_async_request(request_id: int, request: Dictionary) -> int:
+	if not has_native_csharp_async_runtime():
+		return 0
+	var native_request_id := int(request.get("native_request_id", 0))
+	var raw := str(native_csharp_runtime.call("PollAiResultJson", native_request_id))
+	var parsed = JSON.parse_string(raw)
+	var native_result: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+	if bool(native_result.get("pending", false)):
+		return -1
+	var kind := str(request.get("kind", ""))
+	if kind == "turn":
+		return _deliver_native_turn_payload(request_id, request, native_result)
+	if kind == "reaction":
+		return _deliver_native_reaction_payload(request_id, request, native_result)
+	return 0
+
+
+func _deliver_native_turn_payload(request_id: int, request: Dictionary, native_result: Dictionary) -> int:
+	var seat := int(request.get("seat", -1))
+	var payload_ms := int(request.get("payload_ms", 0))
+	var elapsed_ms := maxi(0, Time.get_ticks_msec() - int(request.get("started_at_ms", Time.get_ticks_msec())))
+	var native_error := _validate_native_discard_result(native_result)
+	var analysis: Dictionary = {}
+	var active_backend := "csharp_native_async"
+	if native_error.is_empty():
+		analysis = _build_csharp_discard_analysis(request.get("player_state", {}), native_result, request.get("rules_config"), csharp_bridge, active_backend)
+		last_native_turn_error = ""
+	else:
+		last_native_turn_error = native_error
+		active_backend = "csharp_native_async_error"
+	last_native_turn_raw_summary = "async_done request=%d native_id=%d elapsed_ms=%d payload_ms=%d native_ms=%d belief=%s err=%s raw=%s" % [
+		request_id,
+		int(request.get("native_request_id", 0)),
+		elapsed_ms,
+		payload_ms,
+		int(native_result.get("elapsedMs", -1)),
+		JSON.stringify(native_result.get("beliefMetrics", {})).left(220),
+		native_error,
+		JSON.stringify(native_result).left(700),
+	]
+	var budget_ms := _resolve_budget_ms("turn", active_backend)
+	var result := {
+		"analysis": analysis,
+		"active_backend": active_backend,
+		"elapsed_ms": elapsed_ms,
+		"budget_ms": budget_ms,
+		"over_budget": elapsed_ms > budget_ms,
+		"payload_ms": payload_ms,
+	}
+	return _deliver_async_payload({
+		"request_id": request_id,
+		"kind": "turn",
+		"seat": seat,
+		"result": result,
+	})
+
+
+func _deliver_native_reaction_payload(request_id: int, request: Dictionary, native_result: Dictionary) -> int:
+	var seat := int(request.get("seat", -1))
+	var payload_ms := int(request.get("payload_ms", 0))
+	var elapsed_ms := maxi(0, Time.get_ticks_msec() - int(request.get("started_at_ms", Time.get_ticks_msec())))
+	var native_error := _validate_native_reaction_result(native_result)
+	var analysis: Dictionary = {}
+	var active_backend := "hybrid_csharp_native_async"
+	if native_error.is_empty():
+		analysis = _build_csharp_reaction_analysis(native_result, active_backend)
+		last_native_reaction_error = ""
+	else:
+		last_native_reaction_error = native_error
+		active_backend = "hybrid_csharp_native_async_error"
+	last_native_reaction_raw_summary = "async_done request=%d native_id=%d elapsed_ms=%d payload_ms=%d native_ms=%d belief=%s err=%s raw=%s" % [
+		request_id,
+		int(request.get("native_request_id", 0)),
+		elapsed_ms,
+		payload_ms,
+		int(native_result.get("elapsedMs", -1)),
+		JSON.stringify(native_result.get("beliefMetrics", {})).left(220),
+		native_error,
+		JSON.stringify(native_result).left(700),
+	]
+	var budget_ms := _resolve_budget_ms("reaction", active_backend)
+	var result := {
+		"analysis": analysis,
+		"active_backend": active_backend,
+		"elapsed_ms": elapsed_ms,
+		"budget_ms": budget_ms,
+		"over_budget": elapsed_ms > budget_ms,
+		"payload_ms": payload_ms,
+	}
+	return _deliver_async_payload({
+		"request_id": request_id,
+		"kind": "reaction",
+		"seat": seat,
+		"result": result,
+	})
+
+
+func _build_csharp_reaction_analysis(csharp_result: Dictionary, default_backend: String) -> Dictionary:
+	return {
+		"action": str(csharp_result.get("action", "pass")),
+		"score": int(csharp_result.get("score", 0)),
+		"reasons": csharp_result.get("reasons", []).duplicate(true),
+		"reason": str(csharp_result.get("reason", "")),
+		"shanten_after": int(csharp_result.get("shantenAfter", 8)),
+		"live_ukeire_after": int(csharp_result.get("liveUkeireAfter", 0)),
+		"ukeire_after": int(csharp_result.get("ukeireAfter", 0)),
+		"current_shanten": int(csharp_result.get("currentShanten", 8)),
+		"current_live_ukeire": int(csharp_result.get("currentLiveUkeire", 0)),
+		"threat_level": int(csharp_result.get("threatLevel", 0)),
+		"round_stage": int(csharp_result.get("roundStage", 0)),
+		"round_stage_label": str(csharp_result.get("roundStageLabel", "")),
+		"max_ready_posterior": float(csharp_result.get("maxReadyPosterior", 0.0)),
+		"posterior_summary": csharp_result.get("posteriorSummary", []).duplicate(true),
+		"future_summary": csharp_result.get("futureSummary", []).duplicate(true),
+		"search_bonus": float(csharp_result.get("searchBonus", 0.0)),
+		"search_simulations": int(csharp_result.get("searchSimulations", 0)),
+		"search_used": bool(csharp_result.get("searchUsed", false)),
+		"action_scores": csharp_result.get("actionScores", {}).duplicate(true),
+		"backend_mode": str(csharp_result.get("backendMode", default_backend)),
+		"csharp_result": csharp_result.duplicate(true),
+	}
+
+
 func _build_csharp_discard_analysis(player_state: Dictionary, csharp_result: Dictionary, rules_config, bridge_instance, backend_mode: String) -> Dictionary:
 	if csharp_result.is_empty():
 		return {}
@@ -308,6 +495,11 @@ func _build_csharp_discard_analysis(player_state: Dictionary, csharp_result: Dic
 func start_turn_analysis_background(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false) -> int:
 	var seat := int(player_state.get("seat", -1))
 	var request_id := _begin_request("turn", seat)
+	if has_native_csharp_async_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
+		if _start_native_turn_analysis_background(request_id, player_state, table_state, rules_config):
+			return request_id
+		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
+		return 0
 	var thread := Thread.new()
 	active_async_requests[request_id] = {
 		"kind": "turn",
@@ -334,6 +526,11 @@ func start_turn_analysis_background(player_state: Dictionary, table_state: Dicti
 func start_reaction_analysis_background(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, ai_config, hu_checker, allow_cheat: bool = false) -> int:
 	var seat := int(player_state.get("seat", -1))
 	var request_id := _begin_request("reaction", seat)
+	if has_native_csharp_async_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
+		if _start_native_reaction_analysis_background(request_id, candidate, player_state, table_state, discard_context, rules_config):
+			return request_id
+		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
+		return 0
 	var thread := Thread.new()
 	active_async_requests[request_id] = {
 		"kind": "reaction",
@@ -368,6 +565,13 @@ func pump_async_requests() -> int:
 	var delivered_count := 0
 	for request_id in active_async_requests.keys():
 		var request: Dictionary = active_async_requests.get(request_id, {})
+		if request.has("native_request_id"):
+			var native_delivery := _poll_native_async_request(int(request_id), request)
+			if native_delivery < 0:
+				continue
+			completed_ids.append(request_id)
+			delivered_count += native_delivery
+			continue
 		var thread: Thread = request.get("thread")
 		if thread == null or thread.is_alive():
 			continue
@@ -599,6 +803,7 @@ func _create_empty_performance_metrics() -> Dictionary:
 			"csharp_required": {"count": 0, "total_ms": 0, "avg_ms": 0.0, "max_ms": 0, "over_budget_count": 0},
 			"csharp_cli": {"count": 0, "total_ms": 0, "avg_ms": 0.0, "max_ms": 0, "over_budget_count": 0},
 			"csharp_native": {"count": 0, "total_ms": 0, "avg_ms": 0.0, "max_ms": 0, "over_budget_count": 0},
+			"csharp_native_async": {"count": 0, "total_ms": 0, "avg_ms": 0.0, "max_ms": 0, "over_budget_count": 0},
 			"hybrid_csharp": {"count": 0, "total_ms": 0, "avg_ms": 0.0, "max_ms": 0, "over_budget_count": 0},
 			"hybrid_csharp_native": {"count": 0, "total_ms": 0, "avg_ms": 0.0, "max_ms": 0, "over_budget_count": 0},
 		},
@@ -663,7 +868,7 @@ func _record_performance_sample(kind: String, backend: String, elapsed_ms: int, 
 func _resolve_budget_ms(kind: String, backend: String) -> int:
 	if kind == "reaction":
 		return REACTION_BUDGET_MS
-	if backend == "hybrid_csharp" or backend == "hybrid_csharp_native":
+	if backend == "hybrid_csharp" or backend == "hybrid_csharp_native" or backend == "csharp_native_async" or backend == "hybrid_csharp_native_async":
 		return TURN_BUDGET_MS
 	return int(TURN_BUDGET_MS * 0.75)
 
@@ -770,29 +975,7 @@ func _compute_reaction_analysis(candidate: Dictionary, player_state: Dictionary,
 		var native_result := _analyze_reaction_via_native_runtime(candidate, player_state, table_state, discard_context, rules_config)
 		var native_error := _validate_native_reaction_result(native_result)
 		if native_error.is_empty():
-			analysis = {
-				"action": str(native_result.get("action", "pass")),
-				"score": int(native_result.get("score", 0)),
-				"reasons": native_result.get("reasons", []).duplicate(true),
-				"reason": str(native_result.get("reason", "")),
-				"shanten_after": int(native_result.get("shantenAfter", 8)),
-				"live_ukeire_after": int(native_result.get("liveUkeireAfter", 0)),
-				"ukeire_after": int(native_result.get("ukeireAfter", 0)),
-				"current_shanten": int(native_result.get("currentShanten", 8)),
-				"current_live_ukeire": int(native_result.get("currentLiveUkeire", 0)),
-				"threat_level": int(native_result.get("threatLevel", 0)),
-				"round_stage": int(native_result.get("roundStage", 0)),
-				"round_stage_label": str(native_result.get("roundStageLabel", "")),
-				"max_ready_posterior": float(native_result.get("maxReadyPosterior", 0.0)),
-				"posterior_summary": native_result.get("posteriorSummary", []).duplicate(true),
-				"future_summary": native_result.get("futureSummary", []).duplicate(true),
-				"search_bonus": float(native_result.get("searchBonus", 0.0)),
-				"search_simulations": int(native_result.get("searchSimulations", 0)),
-				"search_used": bool(native_result.get("searchUsed", false)),
-				"action_scores": native_result.get("actionScores", {}).duplicate(true),
-				"backend_mode": str(native_result.get("backendMode", "hybrid_csharp_native")),
-				"csharp_result": native_result.duplicate(true),
-			}
+			analysis = _build_csharp_reaction_analysis(native_result, "hybrid_csharp_native")
 			active_backend = "hybrid_csharp_native"
 		else:
 			last_native_reaction_error = native_error
@@ -810,29 +993,7 @@ func _compute_reaction_analysis(candidate: Dictionary, player_state: Dictionary,
 	elif _should_use_csharp_backend(rules_config) and csharp_bridge.is_available():
 		var csharp_result := csharp_bridge.analyze_reaction(candidate, player_state, table_state, discard_context, rules_config, "reaction_sync")
 		if not csharp_result.is_empty():
-			analysis = {
-				"action": str(csharp_result.get("action", "pass")),
-				"score": int(csharp_result.get("score", 0)),
-				"reasons": csharp_result.get("reasons", []).duplicate(true),
-				"reason": str(csharp_result.get("reason", "")),
-				"shanten_after": int(csharp_result.get("shantenAfter", 8)),
-				"live_ukeire_after": int(csharp_result.get("liveUkeireAfter", 0)),
-				"ukeire_after": int(csharp_result.get("ukeireAfter", 0)),
-				"current_shanten": int(csharp_result.get("currentShanten", 8)),
-				"current_live_ukeire": int(csharp_result.get("currentLiveUkeire", 0)),
-				"threat_level": int(csharp_result.get("threatLevel", 0)),
-				"round_stage": int(csharp_result.get("roundStage", 0)),
-				"round_stage_label": str(csharp_result.get("roundStageLabel", "")),
-				"max_ready_posterior": float(csharp_result.get("maxReadyPosterior", 0.0)),
-				"posterior_summary": csharp_result.get("posteriorSummary", []).duplicate(true),
-				"future_summary": csharp_result.get("futureSummary", []).duplicate(true),
-				"search_bonus": float(csharp_result.get("searchBonus", 0.0)),
-				"search_simulations": int(csharp_result.get("searchSimulations", 0)),
-				"search_used": bool(csharp_result.get("searchUsed", false)),
-				"action_scores": csharp_result.get("actionScores", {}).duplicate(true),
-				"backend_mode": str(csharp_result.get("backendMode", "hybrid_csharp")),
-				"csharp_result": csharp_result.duplicate(true),
-			}
+			analysis = _build_csharp_reaction_analysis(csharp_result, "hybrid_csharp")
 			active_backend = "hybrid_csharp"
 	if analysis.is_empty() and rules_config != null and bool(rules_config.is_neijiang_mode()) and strict_native_runtime_required:
 		last_native_reaction_error = "strict_csharp_required_no_reaction_analysis" if last_native_reaction_error.is_empty() else last_native_reaction_error

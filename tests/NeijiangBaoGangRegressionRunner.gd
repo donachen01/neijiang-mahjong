@@ -59,6 +59,7 @@ func _run() -> void:
 	_run_test("csharp_self_action_exposes_gang_subtype", _test_csharp_self_action_exposes_gang_subtype, failures)
 	_run_test("game_state_executes_csharp_add_gang_subtype", _test_game_state_executes_csharp_add_gang_subtype, failures)
 	_run_test("opening_bao_jiao_queue_scans_ai_and_human_players", _test_opening_bao_jiao_queue_scans_ai_and_human_players, failures)
+	_run_test("opening_bao_jiao_can_select_triplet_bao_gang", _test_opening_bao_jiao_can_select_triplet_bao_gang, failures)
 	_run_test("bao_jiao_blocks_peng_and_non_whitelist_discard_gang", _test_bao_jiao_blocks_peng_and_non_whitelist_discard_gang, failures)
 	_run_test("bao_jiao_allows_whitelisted_discard_gang", _test_bao_jiao_allows_whitelisted_discard_gang, failures)
 	_run_test("bao_jiao_allows_only_whitelisted_an_gang", _test_bao_jiao_allows_only_whitelisted_an_gang, failures)
@@ -214,6 +215,64 @@ func _test_bao_jiao_allows_whitelisted_discard_gang():
 		return "expected bao jiao to continue blocking peng even when gang is whitelisted"
 	if not bool(options.get("can_gang", false)):
 		return "expected whitelisted bao gang tile to allow discard gang after bao jiao, got options=%s pending=%s" % [options, game_state.pending_reactions]
+	return true
+
+
+func _test_opening_bao_jiao_can_select_triplet_bao_gang():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
+	game_state.current_dealer_seat = 1
+	game_state.current_turn_seat = 1
+	game_state.wall_count = 19
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, [
+			_make_tile(501, "tiao", 1), _make_tile(502, "tiao", 1), _make_tile(503, "tiao", 1),
+			_make_tile(504, "tiao", 2), _make_tile(505, "tiao", 2), _make_tile(506, "tiao", 2),
+			_make_tile(507, "tiao", 3), _make_tile(508, "tiao", 3), _make_tile(509, "tiao", 3),
+			_make_tile(510, "tiao", 8), _make_tile(511, "tiao", 8), _make_tile(512, "tiao", 8),
+			_make_tile(513, "tong", 5),
+		]),
+		_make_player_neijiang(1, []),
+		_make_player_neijiang(2, []),
+		_make_player_neijiang(3, []),
+	])
+	if not bool(game_state.can_human_bao_jiao(0)):
+		return "expected non-dealer opening ready hand to allow bao jiao"
+	var plan: Dictionary = game_state._build_bao_jiao_plan(0)
+	var options: Array = plan.get("bao_gang_options", [])
+	if not Array(plan.get("bao_gang_keys", [])).has("tiao_8"):
+		return "expected triplet 8条 to be selectable as bao gang, got plan=%s" % [plan]
+	var has_8_option := false
+	for option in options:
+		if str(option.get("key", "")) == "tiao_8":
+			has_8_option = true
+	if not has_8_option:
+		return "expected bao gang options to expose 8条, got %s" % [options]
+	if bool(game_state.execute_human_bao_jiao(0, ["tong_5"])):
+		return "expected invalid bao gang selection to be rejected"
+	if bool(game_state.players[0].get("bao_jiao", false)):
+		return "expected invalid selection not to mark bao jiao"
+	if not bool(game_state.execute_human_bao_jiao(0, ["tiao_8"])):
+		return "expected valid selected bao gang to execute"
+	if not Array(game_state.players[0].get("bao_gang_tiles", [])).has("tiao_8"):
+		return "expected selected 8条 to be stored as mandatory bao gang"
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
+	_set_discard_reaction(game_state, 1, _make_tile(514, "tiao", 8))
+	var reaction_options: Dictionary = game_state.get_human_reaction_options(0)
+	if not bool(reaction_options.get("can_gang", false)):
+		return "expected selected bao gang tile to allow gang on discard, got %s" % [reaction_options]
+	if bool(reaction_options.get("can_pass", true)):
+		return "expected mandatory bao gang to hide pass, got %s" % [reaction_options]
+	if bool(game_state.pass_human_reaction(0)):
+		return "expected mandatory bao gang to reject pass"
+	for candidate in game_state.pending_reactions:
+		if int(candidate.get("seat", -1)) == 0:
+			candidate["can_hu"] = true
+	reaction_options = game_state.get_human_reaction_options(0)
+	if bool(reaction_options.get("can_hu", false)):
+		return "expected mandatory bao gang to hide hu even if raw candidate can hu, got %s" % [reaction_options]
+	if bool(game_state.execute_human_hu(0)):
+		return "expected mandatory bao gang to reject hu action"
 	return true
 
 

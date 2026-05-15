@@ -73,7 +73,7 @@ public sealed class NeijiangReactionDecisionEngine
 
         if (canPeng && reactionTileType is >= 0 and < 18 && state.Hand18[reactionTileType] >= 2)
         {
-            var pengResult = EvaluatePeng(state, reactionTileType, currentFollowUp, roundStage, threatLevel, maxReadyPosterior);
+            var pengResult = EvaluatePeng(state, belief, reactionTileType, currentFollowUp, roundStage, threatLevel, maxReadyPosterior);
             if (ShouldForceOldHandPeng(state, reactionTileType, currentFollowUp, pengResult, roundStage, threatLevel, maxReadyPosterior)
                 && pengResult.Action.Score <= best.Action.Score)
             {
@@ -97,7 +97,7 @@ public sealed class NeijiangReactionDecisionEngine
 
         if (canGang && reactionTileType is >= 0 and < 18 && state.Hand18[reactionTileType] >= 3)
         {
-            var gangResult = EvaluateGang(state, reactionTileType, currentFollowUp, roundStage, threatLevel, maxReadyPosterior, reactionType, sourceSeat);
+            var gangResult = EvaluateGang(state, belief, reactionTileType, currentFollowUp, roundStage, threatLevel, maxReadyPosterior, reactionType, sourceSeat);
             if (ShouldForceMeldedGang(state, reactionTileType, currentFollowUp, gangResult, roundStage, threatLevel, maxReadyPosterior, reactionType, sourceSeat)
                 && gangResult.Action.Score <= best.Action.Score)
             {
@@ -185,13 +185,13 @@ public sealed class NeijiangReactionDecisionEngine
 
     private NeijiangReactionDecisionResult EvaluatePeng(
         NeijiangStateView state,
+        NeijiangBeliefSnapshot belief,
         int reactionTileType,
         FollowUpSummary currentFollowUp,
         int roundStage,
         int threatLevel,
         double maxReadyPosterior)
     {
-        var belief = _belief.Build(state);
         var handAfter = RemoveCopies(state.Hand18, reactionTileType, 2);
         var meldCountAfter = state.Melds18[state.SeatIndex].Count / 3 + 1;
         var followUp = EvaluateBestFollowUp(handAfter, state.Remaining18, meldCountAfter);
@@ -316,6 +316,7 @@ public sealed class NeijiangReactionDecisionEngine
 
     private NeijiangReactionDecisionResult EvaluateGang(
         NeijiangStateView state,
+        NeijiangBeliefSnapshot belief,
         int reactionTileType,
         FollowUpSummary currentFollowUp,
         int roundStage,
@@ -324,7 +325,6 @@ public sealed class NeijiangReactionDecisionEngine
         string reactionType,
         int sourceSeat)
     {
-        var belief = _belief.Build(state);
         var handAfter = RemoveCopies(state.Hand18, reactionTileType, 3);
         var meldCountAfter = state.Melds18[state.SeatIndex].Count / 3 + 1;
         var followUp = EvaluateBestFollowUp(handAfter, state.Remaining18, meldCountAfter);
