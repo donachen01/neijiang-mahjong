@@ -21,7 +21,7 @@ public sealed class NeijiangDecisionEngine
         public static readonly NeijiangBigHandRouteAdjustment Empty = new(0.0, Array.Empty<string>());
     }
 
-    public NeijiangDecisionResult DecideDiscard(NeijiangStateView state)
+    public NeijiangDecisionResult DecideDiscard(NeijiangStateView state, bool forceLightweight = false)
     {
         var belief = _belief.Build(state);
         var roundStage = ResolveRoundStage(state);
@@ -56,7 +56,13 @@ public sealed class NeijiangDecisionEngine
             var shapeSummary = _shape.Evaluate(remainingHand, state.Remaining18, meldCount, effectiveShanten);
             var waitCount = exactReadyTiles.Count > 0 ? exactReadyTiles.Count : (effectiveShanten <= 0 ? improvingTiles.Count : 0);
             var waitShapeSummary = _waitShape.Evaluate(remainingHand, waitCount > 0 ? effectiveImprovingTiles : Array.Empty<int>());
-            var limitedLookahead = _limitedLookahead.Evaluate(remainingHand, state.Remaining18, meldCount, effectiveShanten, effectiveLiveUkeire);
+            var limitedLookahead = _limitedLookahead.Evaluate(
+                remainingHand,
+                state.Remaining18,
+                meldCount,
+                effectiveShanten,
+                effectiveLiveUkeire,
+                forceLightweight ? 8 : 18);
             var dangerEval = _danger.EvaluateDetail(tileType, state, belief);
             var danger = dangerEval.Risk;
             var wallDrawPosterior = EstimateWallDrawPosterior(effectiveImprovingTiles, belief);
@@ -185,7 +191,9 @@ public sealed class NeijiangDecisionEngine
             .ThenByDescending(item => item.Score)
             .ToList();
 
-        var searchResult = _search.EvaluateTopCandidates(state, candidates);
+        var searchResult = forceLightweight
+            ? _search.EvaluateTopCandidates(state, candidates, timeoutMs: 70, topK: 2, rolloutDepth: 1)
+            : _search.EvaluateTopCandidates(state, candidates);
         if (searchResult.Used)
         {
             candidates = ApplySearchBonuses(candidates, searchResult, roundStage);

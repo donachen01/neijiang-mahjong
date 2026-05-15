@@ -191,6 +191,8 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 		"dealerSeat": _resolve_dealer_seat(players, table_state, self_seat),
 		"currentSeat": int(table_state.get("current_turn_seat", self_seat)),
 		"wallCount": int(table_state.get("wall_count", 0)),
+		"mobileSpeedMode": OS.has_feature("android") or OS.has_feature("ios"),
+		"compactResult": OS.has_feature("android") or OS.has_feature("ios"),
 		"hand18": hand18,
 		"visible18": visible18,
 		"remaining18": remaining18,

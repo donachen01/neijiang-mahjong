@@ -7,7 +7,7 @@ public sealed class NeijiangLimitedLookaheadEngine
     private readonly NeijiangShantenEngine _shanten = new();
     private readonly NeijiangUkeireEngine _ukeire = new();
 
-    public NeijiangLimitedLookaheadSummary Evaluate(int[] hand18AfterDiscard, int[] remaining18, int meldCount, int currentShanten, int currentLiveUkeire)
+    public NeijiangLimitedLookaheadSummary Evaluate(int[] hand18AfterDiscard, int[] remaining18, int meldCount, int currentShanten, int currentLiveUkeire, int maxDrawTypes = 18)
     {
         var totalRemaining = remaining18.Sum();
         if (totalRemaining <= 0)
@@ -18,11 +18,13 @@ public sealed class NeijiangLimitedLookaheadEngine
         var totalWeight = 0.0;
         var bestNextShanten = 8;
         var bestNextLive = 0;
-        for (var drawTile = 0; drawTile < 18; drawTile++)
+        var drawTiles = Enumerable.Range(0, 18)
+            .Where(tile => remaining18[tile] > 0)
+            .OrderByDescending(tile => EstimateDrawPriority(hand18AfterDiscard, tile, remaining18[tile]))
+            .Take(Math.Clamp(maxDrawTypes, 1, 18));
+        foreach (var drawTile in drawTiles)
         {
             var drawCount = remaining18[drawTile];
-            if (drawCount <= 0)
-                continue;
             var drawnHand = (int[])hand18AfterDiscard.Clone();
             drawnHand[drawTile]++;
             var bestForDraw = EvaluateBestNextDiscard(drawnHand, remaining18, drawTile, meldCount);
@@ -58,6 +60,22 @@ public sealed class NeijiangLimitedLookaheadEngine
             BestNextLiveUkeire = bestNextLive,
             Reasons = reasons.Take(2).ToArray()
         };
+    }
+
+    private static int EstimateDrawPriority(int[] hand18AfterDiscard, int drawTile, int drawCount)
+    {
+        var priority = drawCount * 4;
+        if (hand18AfterDiscard[drawTile] > 0)
+            priority += 8 + hand18AfterDiscard[drawTile] * 3;
+        if (drawTile % 9 > 0 && hand18AfterDiscard[drawTile - 1] > 0)
+            priority += 5;
+        if (drawTile % 9 < 8 && hand18AfterDiscard[drawTile + 1] > 0)
+            priority += 5;
+        if (drawTile % 9 > 1 && hand18AfterDiscard[drawTile - 2] > 0)
+            priority += 3;
+        if (drawTile % 9 < 7 && hand18AfterDiscard[drawTile + 2] > 0)
+            priority += 3;
+        return priority;
     }
 
     private (int Shanten, int LiveUkeire) EvaluateBestNextDiscard(int[] drawnHand, int[] remaining18, int drawTile, int meldCount)

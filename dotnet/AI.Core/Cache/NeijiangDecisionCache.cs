@@ -5,6 +5,7 @@ namespace NeijiangMahjong.AI.Core.Cache;
 
 public sealed class NeijiangDecisionCache
 {
+    private readonly object _lock = new();
     private readonly int _capacity;
     private readonly Dictionary<string, LinkedListNode<CacheEntry>> _entries = new();
     private readonly LinkedList<CacheEntry> _lru = new();
@@ -21,49 +22,61 @@ public sealed class NeijiangDecisionCache
 
     public bool TryGet(string key, out NeijiangDecisionResult result)
     {
-        if (_entries.TryGetValue(key, out var node))
+        lock (_lock)
         {
-            Hits++;
-            _lru.Remove(node);
-            _lru.AddLast(node);
-            result = node.Value.Result;
-            return true;
-        }
+            if (_entries.TryGetValue(key, out var node))
+            {
+                Hits++;
+                _lru.Remove(node);
+                _lru.AddLast(node);
+                result = node.Value.Result;
+                return true;
+            }
 
-        Misses++;
-        result = new NeijiangDecisionResult();
-        return false;
+            Misses++;
+            result = new NeijiangDecisionResult();
+            return false;
+        }
     }
 
     public void Put(string key, NeijiangDecisionResult result)
     {
-        if (_entries.TryGetValue(key, out var existing))
+        lock (_lock)
         {
-            _lru.Remove(existing);
-            existing.Value = new CacheEntry(key, result);
-            _lru.AddLast(existing);
-            return;
-        }
+            if (_entries.TryGetValue(key, out var existing))
+            {
+                _lru.Remove(existing);
+                existing.Value = new CacheEntry(key, result);
+                _lru.AddLast(existing);
+                return;
+            }
 
-        var node = new LinkedListNode<CacheEntry>(new CacheEntry(key, result));
-        _lru.AddLast(node);
-        _entries[key] = node;
+            var node = new LinkedListNode<CacheEntry>(new CacheEntry(key, result));
+            _lru.AddLast(node);
+            _entries[key] = node;
 
-        while (_entries.Count > _capacity && _lru.First is not null)
-        {
-            var oldest = _lru.First;
-            _lru.RemoveFirst();
-            _entries.Remove(oldest!.Value.Key);
+            while (_entries.Count > _capacity && _lru.First is not null)
+            {
+                var oldest = _lru.First;
+                _lru.RemoveFirst();
+                _entries.Remove(oldest!.Value.Key);
+            }
         }
     }
 
-    public CacheSnapshot Snapshot() => new()
+    public CacheSnapshot Snapshot()
     {
-        Count = Count,
-        Capacity = Capacity,
-        Hits = Hits,
-        Misses = Misses
-    };
+        lock (_lock)
+        {
+            return new CacheSnapshot
+            {
+                Count = Count,
+                Capacity = Capacity,
+                Hits = Hits,
+                Misses = Misses
+            };
+        }
+    }
 
     private readonly record struct CacheEntry(string Key, NeijiangDecisionResult Result);
 }

@@ -16,7 +16,6 @@ public partial class NeijiangCSharpRuntime : Node
     private readonly NeijiangAiFacade _facade = new();
     private readonly NeijiangLearningEngine _learningEngine = new();
     private readonly NeijiangHellOracleEngine _hellOracle = new();
-    private readonly object _analysisLock = new();
     private readonly ConcurrentDictionary<int, Task<string>> _asyncRequests = new();
     private int _nextAsyncRequestId;
 
@@ -195,15 +194,16 @@ public partial class NeijiangCSharpRuntime : Node
         var beforeBelief = NeijiangBeliefEngine.GetDiagnostics();
         var state = BuildState(payload);
         NeijiangDecisionResult result;
-        lock (_analysisLock)
-        {
-            result = _facade.DecideDiscardCached(state);
-        }
+        result = _facade.DecideDiscardCached(state, forceLightweight: payload.MobileSpeedMode);
         stopwatch.Stop();
         var beliefMetrics = BuildBeliefMetrics(beforeBelief, NeijiangBeliefEngine.GetDiagnostics());
         var cacheSnapshot = _facade.GetTurnCacheSnapshot();
         var strategyProfile = BuildStrategyProfile(state, result);
         var currentRoutes = EstimateRoutesForCli(state);
+        var candidateSource = payload.CompactResult
+            ? SelectCompactCandidates(result).Select(BuildCompactCandidateObject).ToArray<object>()
+            : result.Candidates.Select(BuildFullCandidateObject).ToArray<object>();
+        var beliefSummary = payload.CompactResult ? BuildCompactBeliefSummaryObject() : BuildBeliefSummaryObject(result);
         return new
         {
             ok = true,
@@ -219,60 +219,7 @@ public partial class NeijiangCSharpRuntime : Node
             searchSimulations = result.SearchSimulations,
             currentRoutes = currentRoutes,
             strategyProfile = strategyProfile,
-            beliefSummary = new
-            {
-                ready_posteriors = result.BeliefSummary.ReadyPosteriors.Select(item => new
-                {
-                    seat = item.Seat,
-                    ready_posterior = item.ReadyPosterior,
-                    threat_score = item.ThreatScore,
-                    is_called = item.IsCalled
-                }).ToArray(),
-                hold_summary = new
-                {
-                    tile_type = result.BeliefSummary.HoldSummary.TileType,
-                    tile_label = TileLabel(result.BeliefSummary.HoldSummary.TileType),
-                    top_holders = result.BeliefSummary.HoldSummary.TopHolders.Select(item => new
-                    {
-                        seat = item.Seat,
-                        hold_posterior = item.HoldPosterior,
-                        tile_danger = item.TileDanger,
-                        suit_demand = item.SuitDemand
-                    }).ToArray()
-                },
-                wall_summary = new
-                {
-                    average_posterior = result.BeliefSummary.WallSummary.AveragePosterior,
-                    top_tiles = result.BeliefSummary.WallSummary.TopTiles.Select(item => new
-                    {
-                        tile_type = item.TileType,
-                        tile_label = TileLabel(item.TileType),
-                        posterior = item.Posterior
-                    }).ToArray()
-                },
-                wait_summary = new
-                {
-                    tile_type = result.BeliefSummary.WaitSummary.TileType,
-                    tile_label = TileLabel(result.BeliefSummary.WaitSummary.TileType),
-                    top_waiters = result.BeliefSummary.WaitSummary.TopWaiters.Select(item => new
-                    {
-                        seat = item.Seat,
-                        wait_posterior = item.WaitPosterior,
-                        no_hu_evidence = item.NoHuEvidence,
-                        ready_posterior = item.ReadyPosterior
-                    }).ToArray()
-                },
-                unknown_summary = new
-                {
-                    total_unknown = result.BeliefSummary.UnknownSummary.TotalUnknown,
-                    top_tiles = result.BeliefSummary.UnknownSummary.TopTiles.Select(item => new
-                    {
-                        tile_type = item.TileType,
-                        tile_label = TileLabel(item.TileType),
-                        count = item.Count
-                    }).ToArray()
-                }
-            },
+            beliefSummary,
             cache = new
             {
                 count = cacheSnapshot.Count,
@@ -282,63 +229,11 @@ public partial class NeijiangCSharpRuntime : Node
             },
             elapsedMs = stopwatch.ElapsedMilliseconds,
             beliefMetrics,
+            mobileSpeedMode = payload.MobileSpeedMode,
+            compactResult = payload.CompactResult,
             reasons = result.Reasons,
             candidateScores = result.CandidateScores,
-            candidates = result.Candidates.Select(item => new
-            {
-                tileType = item.TileType,
-                fastTingDiscardRank = item.FastTingDiscardRank,
-                score = item.Score,
-                shanten = item.Shanten,
-                ukeire = item.Ukeire,
-                liveUkeire = item.LiveUkeire,
-                danger = item.Danger,
-                waitCount = item.WaitCount,
-                waitQualityScore = item.WaitQualityScore,
-                improvingTiles = item.ImprovingTiles,
-                riskLabel = item.RiskLabel,
-                strategyTag = item.StrategyTag,
-                strategyMode = item.StrategyMode,
-                explanationHint = item.ExplanationHint,
-                routesAfter = item.RoutesAfter,
-                routeLoss = item.RouteLoss,
-                tenpaiProbability = item.TenpaiProbability,
-                selfDrawProbability = item.SelfDrawProbability,
-                winProbability = item.WinProbability,
-                dealInProbability = item.DealInProbability,
-                expectedValue = item.ExpectedValue,
-                expectedNetScore = item.ExpectedNetScore,
-                expectedWinGain = item.ExpectedWinGain,
-                expectedDealInLoss = item.ExpectedDealInLoss,
-                expectedDrawRiskLoss = item.ExpectedDrawRiskLoss,
-                expectedReadyValue = item.ExpectedReadyValue,
-                posteriorAdjustment = item.PosteriorAdjustment,
-                defenseAdjustment = item.DefenseAdjustment,
-                goodShapeCount = item.GoodShapeCount,
-                badShapeCount = item.BadShapeCount,
-                pairPressure = item.PairPressure,
-                taatsuOverflow = item.TaatsuOverflow,
-                sameShantenImprovementCount = item.SameShantenImprovementCount,
-                middleTileFlexibility = item.MiddleTileFlexibility,
-                shapeScore = item.ShapeScore,
-                waitShapeLabel = item.WaitShapeLabel,
-                waitShapeScore = item.WaitShapeScore,
-                ryanmenWaitCount = item.RyanmenWaitCount,
-                kanchanWaitCount = item.KanchanWaitCount,
-                penchanWaitCount = item.PenchanWaitCount,
-                tankiWaitCount = item.TankiWaitCount,
-                shanponWaitCount = item.ShanponWaitCount,
-                limitedLookaheadScore = item.LimitedLookaheadScore,
-                limitedLookaheadSamples = item.LimitedLookaheadSamples,
-                limitedLookaheadBestShanten = item.LimitedLookaheadBestShanten,
-                limitedLookaheadBestLiveUkeire = item.LimitedLookaheadBestLiveUkeire,
-                posteriorReasons = item.PosteriorReasons,
-                searchBonus = item.SearchBonus,
-                searchSimulations = item.SearchSimulations,
-                searchUsed = item.SearchUsed,
-                riskReasons = item.RiskReasons,
-                reasons = item.Reasons
-            }).ToArray()
+            candidates = candidateSource
         };
     }
 
@@ -348,17 +243,14 @@ public partial class NeijiangCSharpRuntime : Node
         var beforeBelief = NeijiangBeliefEngine.GetDiagnostics();
         var state = BuildState(payload);
         NeijiangReactionDecisionResult result;
-        lock (_analysisLock)
-        {
-            result = _facade.DecideReaction(
-                state,
-                payload.ReactionTileType,
-                payload.CanHu,
-                payload.CanPeng,
-                payload.CanGang,
-                payload.SourceSeat,
-                payload.ReactionType);
-        }
+        result = _facade.DecideReaction(
+            state,
+            payload.ReactionTileType,
+            payload.CanHu,
+            payload.CanPeng,
+            payload.CanGang,
+            payload.SourceSeat,
+            payload.ReactionType);
         stopwatch.Stop();
         var beliefMetrics = BuildBeliefMetrics(beforeBelief, NeijiangBeliefEngine.GetDiagnostics());
 
@@ -397,15 +289,12 @@ public partial class NeijiangCSharpRuntime : Node
         var beforeBelief = NeijiangBeliefEngine.GetDiagnostics();
         var state = BuildState(payload);
         NeijiangSelfActionDecisionResult result;
-        lock (_analysisLock)
-        {
-            result = _facade.DecideSelfAction(
-                state,
-                payload.CanSelfHu,
-                payload.AnGangTileTypes,
-                payload.AddGangTileTypes,
-                payload.AddGangQiangGangCounts);
-        }
+        result = _facade.DecideSelfAction(
+            state,
+            payload.CanSelfHu,
+            payload.AnGangTileTypes,
+            payload.AddGangTileTypes,
+            payload.AddGangQiangGangCounts);
         stopwatch.Stop();
         var beliefMetrics = BuildBeliefMetrics(beforeBelief, NeijiangBeliefEngine.GetDiagnostics());
 
@@ -444,6 +333,215 @@ public partial class NeijiangCSharpRuntime : Node
             builds = after.BuildCount - before.BuildCount,
             buildMs = after.TotalBuildMs - before.TotalBuildMs,
             cacheSize = after.CacheSize
+        };
+    }
+
+    private static IReadOnlyList<NeijiangCandidateDetail> SelectCompactCandidates(NeijiangDecisionResult result)
+    {
+        if (result.Candidates.Count <= 4)
+            return result.Candidates;
+
+        var selected = new List<NeijiangCandidateDetail>(4);
+        var actionTileType = result.Action.TileType;
+        var actionCandidate = result.Candidates.FirstOrDefault(item => item.TileType == actionTileType);
+        if (actionCandidate is not null)
+            selected.Add(actionCandidate);
+
+        foreach (var candidate in result.Candidates)
+        {
+            if (selected.Any(item => item.TileType == candidate.TileType))
+                continue;
+            selected.Add(candidate);
+            if (selected.Count >= 4)
+                break;
+        }
+
+        return selected;
+    }
+
+    private static object BuildCompactBeliefSummaryObject()
+    {
+        return new
+        {
+            compact = true,
+            ready_posteriors = Array.Empty<object>(),
+            hold_summary = new { top_holders = Array.Empty<object>() },
+            wall_summary = new { top_tiles = Array.Empty<object>() },
+            wait_summary = new { top_waiters = Array.Empty<object>() },
+            unknown_summary = new { top_tiles = Array.Empty<object>() }
+        };
+    }
+
+    private static object BuildBeliefSummaryObject(NeijiangDecisionResult result)
+    {
+        return new
+        {
+            ready_posteriors = result.BeliefSummary.ReadyPosteriors.Select(item => new
+            {
+                seat = item.Seat,
+                ready_posterior = item.ReadyPosterior,
+                threat_score = item.ThreatScore,
+                is_called = item.IsCalled
+            }).ToArray(),
+            hold_summary = new
+            {
+                tile_type = result.BeliefSummary.HoldSummary.TileType,
+                tile_label = TileLabel(result.BeliefSummary.HoldSummary.TileType),
+                top_holders = result.BeliefSummary.HoldSummary.TopHolders.Select(item => new
+                {
+                    seat = item.Seat,
+                    hold_posterior = item.HoldPosterior,
+                    tile_danger = item.TileDanger,
+                    suit_demand = item.SuitDemand
+                }).ToArray()
+            },
+            wall_summary = new
+            {
+                average_posterior = result.BeliefSummary.WallSummary.AveragePosterior,
+                top_tiles = result.BeliefSummary.WallSummary.TopTiles.Select(item => new
+                {
+                    tile_type = item.TileType,
+                    tile_label = TileLabel(item.TileType),
+                    posterior = item.Posterior
+                }).ToArray()
+            },
+            wait_summary = new
+            {
+                tile_type = result.BeliefSummary.WaitSummary.TileType,
+                tile_label = TileLabel(result.BeliefSummary.WaitSummary.TileType),
+                top_waiters = result.BeliefSummary.WaitSummary.TopWaiters.Select(item => new
+                {
+                    seat = item.Seat,
+                    wait_posterior = item.WaitPosterior,
+                    no_hu_evidence = item.NoHuEvidence,
+                    ready_posterior = item.ReadyPosterior
+                }).ToArray()
+            },
+            unknown_summary = new
+            {
+                total_unknown = result.BeliefSummary.UnknownSummary.TotalUnknown,
+                top_tiles = result.BeliefSummary.UnknownSummary.TopTiles.Select(item => new
+                {
+                    tile_type = item.TileType,
+                    tile_label = TileLabel(item.TileType),
+                    count = item.Count
+                }).ToArray()
+            }
+        };
+    }
+
+    private static object BuildCompactCandidateObject(NeijiangCandidateDetail item)
+    {
+        return new
+        {
+            tileType = item.TileType,
+            fastTingDiscardRank = item.FastTingDiscardRank,
+            score = item.Score,
+            shanten = item.Shanten,
+            ukeire = item.Ukeire,
+            liveUkeire = item.LiveUkeire,
+            danger = item.Danger,
+            waitCount = item.WaitCount,
+            waitQualityScore = item.WaitQualityScore,
+            riskLabel = item.RiskLabel,
+            strategyTag = item.StrategyTag,
+            strategyMode = item.StrategyMode,
+            explanationHint = item.ExplanationHint,
+            tenpaiProbability = item.TenpaiProbability,
+            selfDrawProbability = item.SelfDrawProbability,
+            winProbability = item.WinProbability,
+            dealInProbability = item.DealInProbability,
+            expectedValue = item.ExpectedValue,
+            expectedNetScore = item.ExpectedNetScore,
+            expectedWinGain = item.ExpectedWinGain,
+            expectedDealInLoss = item.ExpectedDealInLoss,
+            expectedDrawRiskLoss = item.ExpectedDrawRiskLoss,
+            expectedReadyValue = item.ExpectedReadyValue,
+            posteriorAdjustment = item.PosteriorAdjustment,
+            defenseAdjustment = item.DefenseAdjustment,
+            goodShapeCount = item.GoodShapeCount,
+            badShapeCount = item.BadShapeCount,
+            pairPressure = item.PairPressure,
+            taatsuOverflow = item.TaatsuOverflow,
+            sameShantenImprovementCount = item.SameShantenImprovementCount,
+            middleTileFlexibility = item.MiddleTileFlexibility,
+            shapeScore = item.ShapeScore,
+            waitShapeLabel = item.WaitShapeLabel,
+            waitShapeScore = item.WaitShapeScore,
+            ryanmenWaitCount = item.RyanmenWaitCount,
+            kanchanWaitCount = item.KanchanWaitCount,
+            penchanWaitCount = item.PenchanWaitCount,
+            tankiWaitCount = item.TankiWaitCount,
+            shanponWaitCount = item.ShanponWaitCount,
+            limitedLookaheadScore = item.LimitedLookaheadScore,
+            limitedLookaheadSamples = item.LimitedLookaheadSamples,
+            limitedLookaheadBestShanten = item.LimitedLookaheadBestShanten,
+            limitedLookaheadBestLiveUkeire = item.LimitedLookaheadBestLiveUkeire,
+            searchBonus = item.SearchBonus,
+            searchSimulations = item.SearchSimulations,
+            searchUsed = item.SearchUsed,
+            posteriorReasons = item.PosteriorReasons,
+            riskReasons = item.RiskReasons,
+            reasons = item.Reasons
+        };
+    }
+
+    private static object BuildFullCandidateObject(NeijiangCandidateDetail item)
+    {
+        return new
+        {
+            tileType = item.TileType,
+            fastTingDiscardRank = item.FastTingDiscardRank,
+            score = item.Score,
+            shanten = item.Shanten,
+            ukeire = item.Ukeire,
+            liveUkeire = item.LiveUkeire,
+            danger = item.Danger,
+            waitCount = item.WaitCount,
+            waitQualityScore = item.WaitQualityScore,
+            improvingTiles = item.ImprovingTiles,
+            riskLabel = item.RiskLabel,
+            strategyTag = item.StrategyTag,
+            strategyMode = item.StrategyMode,
+            explanationHint = item.ExplanationHint,
+            routesAfter = item.RoutesAfter,
+            routeLoss = item.RouteLoss,
+            tenpaiProbability = item.TenpaiProbability,
+            selfDrawProbability = item.SelfDrawProbability,
+            winProbability = item.WinProbability,
+            dealInProbability = item.DealInProbability,
+            expectedValue = item.ExpectedValue,
+            expectedNetScore = item.ExpectedNetScore,
+            expectedWinGain = item.ExpectedWinGain,
+            expectedDealInLoss = item.ExpectedDealInLoss,
+            expectedDrawRiskLoss = item.ExpectedDrawRiskLoss,
+            expectedReadyValue = item.ExpectedReadyValue,
+            posteriorAdjustment = item.PosteriorAdjustment,
+            defenseAdjustment = item.DefenseAdjustment,
+            goodShapeCount = item.GoodShapeCount,
+            badShapeCount = item.BadShapeCount,
+            pairPressure = item.PairPressure,
+            taatsuOverflow = item.TaatsuOverflow,
+            sameShantenImprovementCount = item.SameShantenImprovementCount,
+            middleTileFlexibility = item.MiddleTileFlexibility,
+            shapeScore = item.ShapeScore,
+            waitShapeLabel = item.WaitShapeLabel,
+            waitShapeScore = item.WaitShapeScore,
+            ryanmenWaitCount = item.RyanmenWaitCount,
+            kanchanWaitCount = item.KanchanWaitCount,
+            penchanWaitCount = item.PenchanWaitCount,
+            tankiWaitCount = item.TankiWaitCount,
+            shanponWaitCount = item.ShanponWaitCount,
+            limitedLookaheadScore = item.LimitedLookaheadScore,
+            limitedLookaheadSamples = item.LimitedLookaheadSamples,
+            limitedLookaheadBestShanten = item.LimitedLookaheadBestShanten,
+            limitedLookaheadBestLiveUkeire = item.LimitedLookaheadBestLiveUkeire,
+            posteriorReasons = item.PosteriorReasons,
+            searchBonus = item.SearchBonus,
+            searchSimulations = item.SearchSimulations,
+            searchUsed = item.SearchUsed,
+            riskReasons = item.RiskReasons,
+            reasons = item.Reasons
         };
     }
 
@@ -642,6 +740,8 @@ public partial class NeijiangCSharpRuntime : Node
         public bool[] IsCalled { get; set; } = Array.Empty<bool>();
         public bool[] IsReady { get; set; } = Array.Empty<bool>();
         public bool[] HasHu { get; set; } = Array.Empty<bool>();
+        public bool MobileSpeedMode { get; set; }
+        public bool CompactResult { get; set; }
     }
 
     private sealed class ReactionPayload : DiscardPayload

@@ -14,6 +14,7 @@ func _run() -> void:
 	_run_test("csharp_candidate_reasons_survive_godot_mapping", _test_csharp_candidate_reasons_survive_godot_mapping, failures)
 	_run_test("self_action_gang_subtype_survives_godot_mapping", _test_self_action_gang_subtype_survives_godot_mapping, failures)
 	_run_test("native_runtime_async_reaction_returns_result", _test_native_runtime_async_reaction_returns_result, failures)
+	_run_test("native_runtime_mobile_compact_discard_returns_action_candidate", _test_native_runtime_mobile_compact_discard_returns_action_candidate, failures)
 	_run_test("ai_manager_uses_native_async_reaction_path", _test_ai_manager_uses_native_async_reaction_path, failures)
 	if failures.is_empty():
 		print("NEIJIANG CSHARP CONTRACT OK")
@@ -169,6 +170,71 @@ func _test_native_runtime_async_reaction_returns_result():
 	return "timed out waiting for native async result"
 
 
+func _test_native_runtime_mobile_compact_discard_returns_action_candidate():
+	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null:
+		return "expected native C# runtime autoload"
+	if not runtime.has_method("StartAnalyzeDiscardJson") or not runtime.has_method("PollAiResultJson"):
+		return "expected native runtime async discard methods"
+	var hand18 := _empty18()
+	for tile_type in [0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 13, 15, 16, 17]:
+		hand18[tile_type] += 1
+	var remaining18 := []
+	for tile_type in range(18):
+		remaining18.append(maxi(0, 4 - int(hand18[tile_type])))
+	var payload := {
+		"seatIndex": 1,
+		"dealerSeat": 0,
+		"currentSeat": 1,
+		"wallCount": 12,
+		"mobileSpeedMode": true,
+		"compactResult": true,
+		"hand18": hand18,
+		"visible18": hand18.duplicate(),
+		"remaining18": remaining18,
+		"discards18": _empty_matrix(),
+		"melds18": _empty_matrix(),
+		"passedHu18": _empty_pass_matrix(),
+		"passedPeng18": _empty_pass_matrix(),
+		"passedGang18": _empty_pass_matrix(),
+		"isCalled": [false, false, false, false],
+		"isReady": [false, false, false, false],
+		"hasHu": [false, false, false, false],
+	}
+	var request_id := int(runtime.call("StartAnalyzeDiscardJson", JSON.stringify(payload)))
+	if request_id <= 0:
+		return "expected positive async discard request id"
+	for _attempt in range(400):
+		var parsed = JSON.parse_string(str(runtime.call("PollAiResultJson", request_id)))
+		var result: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+		if bool(result.get("pending", false)):
+			OS.delay_msec(10)
+			continue
+		if not bool(result.get("ok", false)):
+			return "expected ok mobile compact discard result, got %s" % [result]
+		if not bool(result.get("mobileSpeedMode", false)):
+			return "expected mobileSpeedMode=true, got %s" % [result]
+		if not bool(result.get("compactResult", false)):
+			return "expected compactResult=true, got %s" % [result]
+		var candidates: Array = result.get("candidates", [])
+		if candidates.is_empty() or candidates.size() > 4:
+			return "expected 1-4 compact candidates, got %s" % [candidates]
+		var action_tile := int(result.get("tileType", -1))
+		var has_action_candidate := false
+		for candidate in candidates:
+			var candidate_dict: Dictionary = candidate
+			if int(candidate_dict.get("tileType", -1)) == action_tile:
+				has_action_candidate = true
+				break
+		if not has_action_candidate:
+			return "expected compact candidates to include final action tile %d, got %s" % [action_tile, candidates]
+		var belief_summary: Dictionary = result.get("beliefSummary", {})
+		if not bool(belief_summary.get("compact", false)):
+			return "expected compact belief summary marker, got %s" % [belief_summary]
+		return true
+	return "timed out waiting for native compact discard result"
+
+
 func _test_ai_manager_uses_native_async_reaction_path():
 	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
 	if runtime == null:
@@ -224,3 +290,24 @@ func _make_tile(id: int, suit: String, rank: int) -> Dictionary:
 		"rank": rank,
 		"display_name": "%d%s" % [rank, "条" if suit == "tiao" else "筒"],
 	}
+
+
+func _empty18() -> Array:
+	var values := []
+	for _i in range(18):
+		values.append(0)
+	return values
+
+
+func _empty_matrix() -> Array:
+	var matrix := []
+	for _seat in range(4):
+		matrix.append([])
+	return matrix
+
+
+func _empty_pass_matrix() -> Array:
+	var matrix := []
+	for _seat in range(4):
+		matrix.append(_empty18())
+	return matrix

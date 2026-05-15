@@ -22,7 +22,7 @@ public sealed class NeijiangAiFacade
             return cached;
         }
 
-        var result = _decisionEngine.DecideDiscard(state);
+        var result = _decisionEngine.DecideDiscard(state, forceLightweight);
         _turnCache.Put(key, result);
         return result;
     }
