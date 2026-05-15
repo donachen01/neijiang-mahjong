@@ -26,6 +26,30 @@ class FakeSelfActionAIManager:
 		return {}
 
 
+class FakeNativeReactionAIManager:
+	extends RefCounted
+
+	var reaction_call_count: int = 0
+
+	func has_native_csharp_runtime() -> bool:
+		return true
+
+	func analyze_reaction(_candidate: Dictionary, _player_state: Dictionary, _table_state: Dictionary, _discard_context: Dictionary, _rules_config, _ai_config, _hu_checker, _allow_cheat: bool = false) -> Dictionary:
+		reaction_call_count += 1
+		return {
+			"action": "pass",
+			"score": 0,
+			"reasons": ["fake native reaction"],
+			"backend_mode": "fake_native",
+		}
+
+	func pump_async_requests() -> int:
+		return 0
+
+	func get_debug_snapshot() -> Dictionary:
+		return {}
+
+
 func _init() -> void:
 	call_deferred("_run")
 
@@ -41,6 +65,7 @@ func _run() -> void:
 	_run_test("ai_reaction_honors_backend_peng_when_gang_available", _test_ai_reaction_honors_backend_peng_when_gang_available, failures)
 	_run_test("add_gang_requires_matching_last_draw_after_peng", _test_add_gang_requires_matching_last_draw_after_peng, failures)
 	_run_test("peng_does_not_reask_self_action_for_immediate_add_gang", _test_peng_does_not_reask_self_action_for_immediate_add_gang, failures)
+	_run_test("reaction_context_defers_native_ai_until_timer", _test_reaction_context_defers_native_ai_until_timer, failures)
 	if failures.is_empty():
 		print("NEIJIANG BAO GANG REGRESSION OK")
 		quit(0)
@@ -296,6 +321,31 @@ func _test_peng_does_not_reask_self_action_for_immediate_add_gang():
 		return "expected no immediate self-action after peng, got %s" % [decision]
 	if fake_ai.self_action_call_count != 0:
 		return "expected frontend not to ask C# self-action immediately after peng, call_count=%d" % fake_ai.self_action_call_count
+	return true
+
+
+func _test_reaction_context_defers_native_ai_until_timer():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
+	game_state.current_turn_seat = 0
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, []),
+		_make_player_neijiang(1, [
+			_make_tile(781, "tiao", 5), _make_tile(782, "tiao", 5),
+			_make_tile(783, "tong", 1), _make_tile(784, "tong", 2),
+		]),
+		_make_player_neijiang(2, []),
+		_make_player_neijiang(3, []),
+	])
+	var fake_ai := FakeNativeReactionAIManager.new()
+	game_state.ai_manager = fake_ai
+	game_state._prepare_reaction_context(0, _make_tile(780, "tiao", 5))
+	if game_state.pending_reactions.is_empty():
+		return "expected AI reaction candidates after human discard"
+	if fake_ai.reaction_call_count != 0:
+		return "expected discard path to defer native AI reaction calculation, call_count=%d" % fake_ai.reaction_call_count
+	if not game_state.pending_ai_reaction_decision.is_empty():
+		return "expected no prepared native AI decision during discard path, got %s" % [game_state.pending_ai_reaction_decision]
 	return true
 
 

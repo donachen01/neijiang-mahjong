@@ -51,6 +51,10 @@ var side_lane_row: HBoxContainer
 var last_current_turn_seat: int = -1
 var last_current_dealer_seat: int = -1
 var last_show_ding_que_badges: bool = true
+var hand_render_signature: String = ""
+var meld_render_signature: String = ""
+var opponent_band_render_signature: String = ""
+var discard_render_signature: String = ""
 
 
 func _ready() -> void:
@@ -323,6 +327,10 @@ func _rebuild_side_lane_row() -> void:
 
 
 func _render_hand(player: Dictionary, show_back: bool) -> void:
+	var signature := _build_hand_render_signature(player, show_back)
+	if signature == hand_render_signature:
+		return
+	hand_render_signature = signature
 	_clear_children(hand_lane)
 	if not hand_lane.visible:
 		return
@@ -346,6 +354,10 @@ func _render_hand(player: Dictionary, show_back: bool) -> void:
 
 
 func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
+	var signature := _build_opponent_band_render_signature(player, show_back)
+	if signature == opponent_band_render_signature:
+		return
+	opponent_band_render_signature = signature
 	_clear_children(opponent_band)
 	if seat_dock == SeatDock.SELF or not opponent_band.visible:
 		return
@@ -512,6 +524,10 @@ func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
 
 
 func _render_discards(discards: Array) -> void:
+	var signature := _build_discards_render_signature(discards)
+	if signature == discard_render_signature:
+		return
+	discard_render_signature = signature
 	_clear_children(discard_lane)
 	if not discard_lane.visible:
 		return
@@ -531,6 +547,10 @@ func _render_discards(discards: Array) -> void:
 
 
 func _render_melds(player: Dictionary) -> void:
+	var signature := _build_melds_render_signature(player)
+	if signature == meld_render_signature:
+		return
+	meld_render_signature = signature
 	_clear_children(meld_lane)
 	var melds: Array = player.get("melds", [])
 	var exposed_melds: Array = []
@@ -840,6 +860,85 @@ func _clear_children(node: Node) -> void:
 	for child in node.get_children():
 		node.remove_child(child)
 		child.free()
+
+
+func _build_hand_render_signature(player: Dictionary, show_back: bool) -> String:
+	return JSON.stringify({
+		"seat": int(player.get("seat", -1)),
+		"dock": int(seat_dock),
+		"visible": hand_lane.visible,
+		"show_back": show_back,
+		"hand_count": int(player.get("hand_count", 0)),
+		"tiles": _tile_signature_list(player.get("hand_tiles", []), not show_back),
+	})
+
+
+func _build_opponent_band_render_signature(player: Dictionary, show_back: bool) -> String:
+	return JSON.stringify({
+		"seat": int(player.get("seat", -1)),
+		"dock": int(seat_dock),
+		"visible": opponent_band.visible,
+		"show_back": show_back,
+		"size": [int(round(size.x)), int(round(size.y))],
+		"hand_count": int(player.get("hand_count", 0)),
+		"tiles": _tile_signature_list(player.get("hand_tiles", []), not show_back),
+		"melds": _meld_signature_list(player.get("melds", [])),
+		"has_won": bool(player.get("has_won", false)),
+		"winning_tile": _single_tile_signature(player.get("winning_tile", {})),
+		"winning_source_seat": int(player.get("winning_source_seat", -1)),
+		"win_type": str(player.get("win_type", "")),
+	})
+
+
+func _build_discards_render_signature(discards: Array) -> String:
+	return JSON.stringify({
+		"dock": int(seat_dock),
+		"visible": discard_lane.visible,
+		"tiles": _tile_signature_list(discards, true),
+	})
+
+
+func _build_melds_render_signature(player: Dictionary) -> String:
+	return JSON.stringify({
+		"seat": int(player.get("seat", -1)),
+		"dock": int(seat_dock),
+		"melds": _meld_signature_list(player.get("melds", [])),
+		"has_won": bool(player.get("has_won", false)),
+		"winning_tile": _single_tile_signature(player.get("winning_tile", {})),
+	})
+
+
+func _tile_signature_list(tiles: Array, include_faces: bool) -> Array:
+	if not include_faces:
+		return []
+	var result: Array = []
+	for tile in tiles:
+		var tile_data: Dictionary = tile
+		result.append(_single_tile_signature(tile_data))
+	return result
+
+
+func _single_tile_signature(tile: Dictionary) -> String:
+	if tile.is_empty():
+		return ""
+	var tile_id := int(tile.get("id", -1))
+	if tile_id >= 0:
+		return str(tile_id)
+	return "%s:%d" % [str(tile.get("suit", "")), int(tile.get("rank", 0))]
+
+
+func _meld_signature_list(melds: Array) -> Array:
+	var result: Array = []
+	for meld in melds:
+		var meld_data: Dictionary = meld
+		result.append({
+			"type": str(meld_data.get("type", "")),
+			"seat": int(meld_data.get("seat", -1)),
+			"from": int(meld_data.get("from_seat", -1)),
+			"source": int(meld_data.get("source_seat", -1)),
+			"tiles": _tile_signature_list(meld_data.get("tiles", []), true),
+		})
+	return result
 
 
 func _create_plain_meld_tile(tile_data: Dictionary, scale: float, rotation: float, show_back: bool = false, highlight_winning: bool = false) -> Control:
@@ -1390,35 +1489,35 @@ func _apply_identity_dealer_badge_style() -> void:
 	if identity_dealer_badge == null:
 		return
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.93, 0.61, 0.15, 0.96)
-	style.border_color = Color(0.57, 0.39, 0.16, 0.92)
-	style.set_border_width_all(2)
-	style.corner_radius_top_left = 10
-	style.corner_radius_top_right = 10
-	style.corner_radius_bottom_left = 10
-	style.corner_radius_bottom_right = 10
-	style.content_margin_left = 8
-	style.content_margin_right = 8
-	style.content_margin_top = 3
-	style.content_margin_bottom = 3
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.30)
-	style.shadow_size = 5
+	style.bg_color = Color(0.20, 0.07, 0.03, 0.97)
+	style.border_color = Color(1.0, 0.78, 0.22, 0.98)
+	style.set_border_width_all(3)
+	style.corner_radius_top_left = 14
+	style.corner_radius_top_right = 14
+	style.corner_radius_bottom_left = 14
+	style.corner_radius_bottom_right = 14
+	style.content_margin_left = 12
+	style.content_margin_right = 12
+	style.content_margin_top = 5
+	style.content_margin_bottom = 5
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.34)
+	style.shadow_size = 6
 	style.shadow_offset = Vector2(0, 2)
 	identity_dealer_badge.add_theme_stylebox_override("normal", style)
-	identity_dealer_badge.add_theme_font_size_override("font_size", 28)
-	identity_dealer_badge.add_theme_color_override("font_color", Color(0.24, 0.14, 0.06, 1.0))
-	identity_dealer_badge.add_theme_color_override("font_outline_color", Color(1.0, 0.96, 0.84, 0.32))
-	identity_dealer_badge.add_theme_constant_override("outline_size", 2)
+	identity_dealer_badge.add_theme_font_size_override("font_size", 36)
+	identity_dealer_badge.add_theme_color_override("font_color", Color(1.0, 0.92, 0.42, 1.0))
+	identity_dealer_badge.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.95))
+	identity_dealer_badge.add_theme_constant_override("outline_size", 4)
 	identity_dealer_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	identity_dealer_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	identity_dealer_badge.custom_minimum_size = Vector2(62, 46)
+	identity_dealer_badge.custom_minimum_size = Vector2(76, 56)
 
 
 func _position_identity_dealer_badge() -> void:
 	if identity_dealer_badge == null:
 		return
 	var label_width := maxf(identity_name_label.size.x, identity_name_label.custom_minimum_size.x)
-	identity_dealer_badge.position = Vector2(label_width - identity_dealer_badge.custom_minimum_size.x + 4.0, -16.0)
+	identity_dealer_badge.position = Vector2(label_width - identity_dealer_badge.custom_minimum_size.x + 8.0, -22.0)
 
 
 func _apply_identity_ding_que_style(suit: String) -> void:
@@ -1508,12 +1607,14 @@ func _create_top_inline_identity_card(player: Dictionary) -> Control:
 		dealer_badge.text = "庄"
 		dealer_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		dealer_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		dealer_badge.custom_minimum_size = Vector2(60, 42)
+		dealer_badge.custom_minimum_size = Vector2(76, 56)
 		style_config.apply_label(dealer_badge, false, false)
 		dealer_badge.add_theme_stylebox_override("normal", _build_top_identity_dealer_style())
-		dealer_badge.add_theme_font_size_override("font_size", 26)
-		dealer_badge.add_theme_constant_override("outline_size", 2)
-		dealer_badge.position = Vector2(116, -16)
+		dealer_badge.add_theme_font_size_override("font_size", 36)
+		dealer_badge.add_theme_color_override("font_color", Color(1.0, 0.92, 0.42, 1.0))
+		dealer_badge.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.95))
+		dealer_badge.add_theme_constant_override("outline_size", 4)
+		dealer_badge.position = Vector2(108, -24)
 		name_label.add_child(dealer_badge)
 
 	if bool(player.get("has_won", false)):
@@ -1586,17 +1687,20 @@ func _build_top_identity_name_style() -> StyleBoxFlat:
 
 func _build_top_identity_dealer_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.93, 0.61, 0.15, 0.96)
-	style.border_color = Color(0.57, 0.39, 0.16, 0.92)
-	style.set_border_width_all(2)
-	style.corner_radius_top_left = 10
-	style.corner_radius_top_right = 10
-	style.corner_radius_bottom_left = 10
-	style.corner_radius_bottom_right = 10
-	style.content_margin_left = 6
-	style.content_margin_right = 6
-	style.content_margin_top = 3
-	style.content_margin_bottom = 3
+	style.bg_color = Color(0.20, 0.07, 0.03, 0.97)
+	style.border_color = Color(1.0, 0.78, 0.22, 0.98)
+	style.set_border_width_all(3)
+	style.corner_radius_top_left = 14
+	style.corner_radius_top_right = 14
+	style.corner_radius_bottom_left = 14
+	style.corner_radius_bottom_right = 14
+	style.content_margin_left = 12
+	style.content_margin_right = 12
+	style.content_margin_top = 5
+	style.content_margin_bottom = 5
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.34)
+	style.shadow_size = 6
+	style.shadow_offset = Vector2(0, 2)
 	return style
 
 

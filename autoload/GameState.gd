@@ -2498,8 +2498,6 @@ func _prepare_reaction_context(source_seat: int, discarded_tile: Dictionary) -> 
 	}
 	pending_reactions = mahjong_judge.build_reaction_candidates(_build_table_state(), current_discard_context, rules)
 	_apply_shun_he_lock_filter()
-	if is_ai_reaction_pending():
-		_start_ai_reaction_background_request()
 
 
 func _clear_reaction_context() -> void:

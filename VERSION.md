@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.27`
+Current app version: `1.0.29`
 
-`1.0.27` continues from the `1.0.26` AI tuning base and disables default test-data recording while improving table responsiveness.
+`1.0.29` keeps deliberate AI action pacing and separates human input from AI response calculation for smoother discard/action buttons.
 
 ## Versioning Workflow
 

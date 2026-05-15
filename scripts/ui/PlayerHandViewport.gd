@@ -28,7 +28,7 @@ var embedded_right_gap: float = 0.0
 
 
 func _ready() -> void:
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	viewport.transparent_bg = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	_style_tray()

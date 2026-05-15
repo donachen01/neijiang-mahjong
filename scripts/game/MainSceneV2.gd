@@ -14,8 +14,8 @@ const SYSTEM_DRAW_AUDIO_PATH := "res://res/audio/sfx/system_draw.mp3"
 const SYSTEM_DRAW_AUDIO_SECONDS := 1.0
 const HUMAN_DRAW_ACTION_DELAY := 1.0
 const SYSTEM_DRAW_ACTION_DELAY := 0.96
-const AI_TURN_DELAY := 0.12
-const AI_REACTION_DELAY := 0.10
+const AI_TURN_DELAY := 0.52
+const AI_REACTION_DELAY := 0.52
 const AI_READY_POLL_SEC := 0.03
 const AI_WATCHDOG_POLL_SEC := 0.12
 const OPENING_ROLL_TICK := 0.04
@@ -444,6 +444,7 @@ func _ensure_action_panel_root() -> void:
 		root_ui.add_child(action_panel)
 	action_panel.top_level = true
 	action_panel.z_index = 220
+	action_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 
 func _bind_action_panel_layout() -> void:
@@ -1941,24 +1942,30 @@ func _setup_v17_player_info_panels() -> void:
 		dealer_badge.anchor_right = 1.0
 		dealer_badge.anchor_top = 0.0
 		dealer_badge.anchor_bottom = 0.0
-		dealer_badge.offset_left = -42.0
-		dealer_badge.offset_top = 8.0
+		dealer_badge.offset_left = -58.0
+		dealer_badge.offset_top = 6.0
 		dealer_badge.offset_right = -8.0
-		dealer_badge.offset_bottom = 52.0
+		dealer_badge.offset_bottom = 62.0
 		STYLE_CONFIG.apply_label(dealer_badge, false, false)
-		dealer_badge.add_theme_font_size_override("font_size", 24)
+		dealer_badge.add_theme_font_size_override("font_size", 34)
+		dealer_badge.add_theme_color_override("font_color", Color(1.0, 0.92, 0.42, 1.0))
+		dealer_badge.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.95))
+		dealer_badge.add_theme_constant_override("outline_size", 4)
 		var dealer_style := StyleBoxFlat.new()
-		dealer_style.bg_color = Color(0.98, 0.64, 0.18, 0.96)
-		dealer_style.border_color = Color(1.0, 0.95, 0.78, 0.72)
-		dealer_style.set_border_width_all(2)
-		dealer_style.corner_radius_top_left = 12
-		dealer_style.corner_radius_top_right = 12
-		dealer_style.corner_radius_bottom_left = 12
-		dealer_style.corner_radius_bottom_right = 12
-		dealer_style.content_margin_left = 10
-		dealer_style.content_margin_right = 10
-		dealer_style.content_margin_top = 5
-		dealer_style.content_margin_bottom = 5
+		dealer_style.bg_color = Color(0.20, 0.07, 0.03, 0.97)
+		dealer_style.border_color = Color(1.0, 0.78, 0.22, 0.98)
+		dealer_style.set_border_width_all(3)
+		dealer_style.corner_radius_top_left = 14
+		dealer_style.corner_radius_top_right = 14
+		dealer_style.corner_radius_bottom_left = 14
+		dealer_style.corner_radius_bottom_right = 14
+		dealer_style.content_margin_left = 12
+		dealer_style.content_margin_right = 12
+		dealer_style.content_margin_top = 6
+		dealer_style.content_margin_bottom = 6
+		dealer_style.shadow_color = Color(0.0, 0.0, 0.0, 0.34)
+		dealer_style.shadow_size = 6
+		dealer_style.shadow_offset = Vector2(0, 2)
 		dealer_badge.add_theme_stylebox_override("normal", dealer_style)
 		panel.add_child(dealer_badge)
 		v17_player_info_dealer_badges[seat] = dealer_badge
@@ -2392,7 +2399,8 @@ func _begin_draw_transition(draw_seat: int, snapshot: Dictionary) -> void:
 	draw_transition_active = true
 	var is_ai_draw := _is_ai_seat(snapshot, draw_seat)
 	if is_ai_draw:
-		game_manager.prepare_ai_turn_decision()
+		ai_turn_timer.stop()
+		ai_reaction_timer.stop()
 	else:
 		ai_turn_timer.stop()
 		ai_reaction_timer.stop()
@@ -3830,27 +3838,28 @@ func _setup_self_dealer_badge() -> void:
 	self_score_label.add_child(self_dealer_badge)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.56, 0.20, 0.08, 0.96)
-	style.border_color = Color(1.0, 0.82, 0.36, 0.98)
-	style.set_border_width_all(2)
-	style.corner_radius_top_left = 10
-	style.corner_radius_top_right = 10
-	style.corner_radius_bottom_left = 10
-	style.corner_radius_bottom_right = 10
-	style.content_margin_left = 8
-	style.content_margin_right = 8
-	style.content_margin_top = 3
-	style.content_margin_bottom = 3
+	style.bg_color = Color(0.20, 0.07, 0.03, 0.97)
+	style.border_color = Color(1.0, 0.78, 0.22, 0.98)
+	style.set_border_width_all(3)
+	style.corner_radius_top_left = 14
+	style.corner_radius_top_right = 14
+	style.corner_radius_bottom_left = 14
+	style.corner_radius_bottom_right = 14
+	style.content_margin_left = 12
+	style.content_margin_right = 12
+	style.content_margin_top = 5
+	style.content_margin_bottom = 5
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.30)
-	style.shadow_size = 5
+	style.shadow_size = 6
 	style.shadow_offset = Vector2(0, 2)
 	self_dealer_badge.add_theme_stylebox_override("normal", style)
-	self_dealer_badge.add_theme_font_size_override("font_size", 28)
-	self_dealer_badge.add_theme_color_override("font_color", Color(1.0, 0.95, 0.76, 1.0))
-	self_dealer_badge.add_theme_color_override("font_outline_color", Color(0.30, 0.08, 0.02, 0.92))
-	self_dealer_badge.add_theme_constant_override("outline_size", 2)
+	self_dealer_badge.add_theme_font_size_override("font_size", 36)
+	self_dealer_badge.add_theme_color_override("font_color", Color(1.0, 0.92, 0.42, 1.0))
+	self_dealer_badge.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.95))
+	self_dealer_badge.add_theme_constant_override("outline_size", 4)
 	self_dealer_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	self_dealer_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	self_dealer_badge.custom_minimum_size = Vector2(62, 46)
+	self_dealer_badge.custom_minimum_size = Vector2(76, 56)
 	_position_self_dealer_badge()
 
 
@@ -4102,7 +4111,6 @@ func _schedule_ai_progress_if_needed(snapshot: Dictionary) -> void:
 		if draw_transition_active:
 			ai_turn_timer.stop()
 		elif ai_turn_timer.is_stopped():
-			game_manager.prepare_ai_turn_decision()
 			ai_turn_timer.wait_time = AI_TURN_DELAY
 			ai_turn_timer_started_at_ms = Time.get_ticks_msec()
 			ai_turn_timer.start()
@@ -4112,7 +4120,7 @@ func _schedule_ai_progress_if_needed(snapshot: Dictionary) -> void:
 
 	if game_manager.is_ai_reaction_pending():
 		if ai_reaction_timer.is_stopped():
-			game_manager.prepare_ai_reaction_decision()
+			ai_reaction_timer.wait_time = AI_REACTION_DELAY
 			ai_reaction_timer_started_at_ms = Time.get_ticks_msec()
 			ai_reaction_timer.start()
 	else:
@@ -6993,11 +7001,32 @@ func _on_hand_tile_pressed(tile_id: int) -> void:
 	if draw_transition_active:
 		return
 	if selected_tile_id == tile_id:
+		_preview_human_discard(tile_id)
 		if game_manager.discard_tile(tile_id):
 			selected_tile_id = -1
 			return
+		selected_tile_id = tile_id
+		_refresh_after_failed_human_action()
+		return
 	selected_tile_id = tile_id
 	_refresh_self_selection_only()
+
+
+func _preview_human_discard(tile_id: int) -> void:
+	if last_snapshot.is_empty():
+		return
+	var players: Array = last_snapshot.get("players", [])
+	var self_player := _player_by_seat(players, 0)
+	if self_player.is_empty():
+		return
+	var preview_tiles: Array = game_manager.game_state.call("get_player_hand_tiles", 0)
+	for index in range(preview_tiles.size()):
+		var tile: Dictionary = preview_tiles[index]
+		if int(tile.get("id", -1)) == tile_id:
+			preview_tiles.remove_at(index)
+			selected_tile_id = -1
+			_update_self_area(last_snapshot, preview_tiles)
+			return
 
 
 func _refresh_self_selection_only() -> void:
@@ -7171,51 +7200,83 @@ func _on_top_next_round_pressed() -> void:
 
 
 func _on_hu_pressed() -> void:
-	if game_manager.execute_action("self_hu"):
+	var snapshot := game_manager.get_snapshot()
+	var reaction_options: Dictionary = snapshot.get("human_reaction_options", {})
+	var actions: Array = []
+	if bool(reaction_options.get("can_hu", false)):
+		actions.append("hu")
+	if bool(snapshot.get("human_can_self_hu", false)):
+		actions.append("self_hu")
+	var executed_action := _execute_human_action_sequence(actions)
+	if executed_action == "self_hu":
 		_speak_action("自摸", 0)
-		return
-	if game_manager.execute_action("hu"):
+	elif executed_action == "hu":
 		_speak_action("胡", 0)
 
 
 func _on_gang_pressed() -> void:
-	if game_manager.can_human_add_gang():
-		if game_manager.execute_action("add_gang"):
-			_speak_action("杠", 0)
-	elif game_manager.can_human_an_gang():
-		if game_manager.execute_action("an_gang"):
-			_speak_action("杠", 0)
-	else:
-		if game_manager.execute_action("gang"):
-			_speak_action("杠", 0)
+	var snapshot := game_manager.get_snapshot()
+	var reaction_options: Dictionary = snapshot.get("human_reaction_options", {})
+	var actions: Array = []
+	if bool(reaction_options.get("can_gang", false)):
+		actions.append("gang")
+	if bool(snapshot.get("human_can_add_gang", false)):
+		actions.append("add_gang")
+	if bool(snapshot.get("human_can_an_gang", false)):
+		actions.append("an_gang")
+	if not _execute_human_action_sequence(actions).is_empty():
+		_speak_action("杠", 0)
 
 
 func _on_peng_pressed() -> void:
-	if game_manager.execute_action("peng"):
+	if not _execute_human_action_sequence(["peng"]).is_empty():
 		_speak_action("碰", 0)
 
 
 func _on_an_gang_pressed() -> void:
-	if game_manager.execute_action("an_gang"):
+	if not _execute_human_action_sequence(["an_gang"]).is_empty():
 		_speak_action("杠", 0)
 
 
 func _on_bao_jiao_pressed() -> void:
-	if game_manager.execute_action("bao_jiao"):
+	if not _execute_human_action_sequence(["bao_jiao"]).is_empty():
 		return
 
 
 func _on_pass_pressed() -> void:
 	var snapshot := game_manager.get_snapshot()
 	if bool(snapshot.get("human_can_pass_opening_bao_jiao", false)):
-		if game_manager.execute_action("pass_opening_bao_jiao"):
+		if not _execute_human_action_sequence(["pass_opening_bao_jiao"]).is_empty():
 			_speak_action("过", 0)
 			return
 	if bool(snapshot.get("human_can_self_hu", false)) and not bool(snapshot.get("human_reaction_options", {}).get("can_pass", false)):
-		if game_manager.execute_action("pass_self_hu"):
+		if not _execute_human_action_sequence(["pass_self_hu"]).is_empty():
 			return
-	if game_manager.execute_action("pass"):
+	if not _execute_human_action_sequence(["pass"]).is_empty():
 		_speak_action("过", 0)
+
+
+func _execute_human_action_sequence(actions: Array) -> String:
+	if game_manager == null:
+		return ""
+	for action in actions:
+		var action_name := str(action)
+		if action_name.is_empty():
+			continue
+		if game_manager.execute_action(action_name):
+			return action_name
+	_refresh_after_failed_human_action()
+	return ""
+
+
+func _refresh_after_failed_human_action() -> void:
+	if game_manager == null:
+		return
+	var snapshot := game_manager.get_snapshot()
+	if snapshot.is_empty():
+		return
+	_recover_stale_draw_transition(snapshot)
+	_on_snapshot_changed(snapshot)
 
 
 func _ensure_bao_jiao_button() -> void:
@@ -7323,8 +7384,7 @@ func _on_ai_watchdog_timer_timeout() -> void:
 	if draw_transition_active:
 		return
 	if game_manager.is_ai_turn_ready() and ai_turn_timer != null and ai_turn_timer.is_stopped():
-		game_manager.prepare_ai_turn_decision()
-		ai_turn_timer.wait_time = AI_READY_POLL_SEC
+		ai_turn_timer.wait_time = AI_TURN_DELAY
 		ai_turn_timer_started_at_ms = Time.get_ticks_msec()
 		ai_turn_timer.start()
 		return
@@ -7341,8 +7401,7 @@ func _on_ai_watchdog_timer_timeout() -> void:
 				ai_turn_timer.start()
 			return
 	if game_manager.is_ai_reaction_pending() and ai_reaction_timer != null and ai_reaction_timer.is_stopped():
-		game_manager.prepare_ai_reaction_decision()
-		ai_reaction_timer.wait_time = AI_READY_POLL_SEC
+		ai_reaction_timer.wait_time = AI_REACTION_DELAY
 		ai_reaction_timer_started_at_ms = Time.get_ticks_msec()
 		ai_reaction_timer.start()
 		return

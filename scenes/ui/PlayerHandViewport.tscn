@@ -6,6 +6,7 @@
 [node name="PlayerHandViewport" type="Control"]
 clip_contents = true
 custom_minimum_size = Vector2(640, 240)
+mouse_filter = 1
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
