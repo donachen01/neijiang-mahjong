@@ -250,7 +250,8 @@ public partial class NeijiangCSharpRuntime : Node
             payload.CanPeng,
             payload.CanGang,
             payload.SourceSeat,
-            payload.ReactionType);
+            payload.ReactionType,
+            payload.MobileSpeedMode);
         stopwatch.Stop();
         var beliefMetrics = BuildBeliefMetrics(beforeBelief, NeijiangBeliefEngine.GetDiagnostics());
 
@@ -279,6 +280,7 @@ public partial class NeijiangCSharpRuntime : Node
             actionScores = result.ActionScores,
             elapsedMs = stopwatch.ElapsedMilliseconds,
             beliefMetrics,
+            mobileSpeedMode = payload.MobileSpeedMode,
             backendMode = "hybrid_csharp_native"
         };
     }

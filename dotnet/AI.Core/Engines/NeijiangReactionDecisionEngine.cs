@@ -18,7 +18,8 @@ public sealed class NeijiangReactionDecisionEngine
         bool canPeng,
         bool canGang,
         int sourceSeat = -1,
-        string reactionType = "discard")
+        string reactionType = "discard",
+        bool forceLightweight = false)
     {
         if (canHu)
         {
@@ -119,7 +120,7 @@ public sealed class NeijiangReactionDecisionEngine
             }
         }
 
-        if (ShouldSearchReaction(candidates))
+        if (!forceLightweight && ShouldSearchReaction(candidates))
         {
             var simulations = 0;
             var bonusMap = EvaluateReactionSearchBonuses(state, candidates, ref simulations);

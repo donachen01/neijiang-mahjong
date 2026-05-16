@@ -16,6 +16,7 @@ func _run() -> void:
 	_run_test("native_runtime_async_reaction_returns_result", _test_native_runtime_async_reaction_returns_result, failures)
 	_run_test("native_runtime_mobile_compact_discard_returns_action_candidate", _test_native_runtime_mobile_compact_discard_returns_action_candidate, failures)
 	_run_test("ai_manager_uses_native_async_reaction_path", _test_ai_manager_uses_native_async_reaction_path, failures)
+	_run_test("ai_manager_reuses_duplicate_native_reaction_request", _test_ai_manager_reuses_duplicate_native_reaction_request, failures)
 	if failures.is_empty():
 		print("NEIJIANG CSHARP CONTRACT OK")
 		quit(0)
@@ -281,6 +282,67 @@ func _test_ai_manager_uses_native_async_reaction_path():
 			return true
 		OS.delay_msec(10)
 	return "timed out waiting for AIManager native async reaction"
+
+
+func _test_ai_manager_reuses_duplicate_native_reaction_request():
+	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null:
+		return "expected native C# runtime autoload"
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	ai_manager.set_native_csharp_runtime(runtime)
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var tile := _make_tile(61, "tong", 9)
+	var players := []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"hand_tiles": [],
+			"discards": [],
+			"melds": [],
+			"bao_jiao": false,
+			"has_won": false,
+		})
+	var candidate := {
+		"seat": 3,
+		"can_hu": false,
+		"can_peng": true,
+		"can_gang": false,
+	}
+	var player_state := {
+		"seat": 3,
+		"hand_tiles": [_make_tile(62, "tong", 9), _make_tile(63, "tong", 9)],
+	}
+	var table_state := {
+		"players": players,
+		"current_turn_seat": 2,
+		"wall_count": 14,
+		"dealer_seat": 0,
+		"reaction_pass_evidence": [],
+	}
+	var discard_context := {"source_seat": 2, "tile": tile, "reaction_type": "discard"}
+	var first_id := ai_manager.start_reaction_analysis_background(candidate, player_state, table_state, discard_context, rules, null, null, false)
+	var second_id := ai_manager.start_reaction_analysis_background(candidate, player_state, table_state, discard_context, rules, null, null, false)
+	if first_id <= 0:
+		return "expected first async request id"
+	if second_id != first_id:
+		return "expected duplicate request to reuse id %d, got %d" % [first_id, second_id]
+	var request_state: Dictionary = ai_manager.request_state
+	if int(request_state.get("inflight_count", -1)) != 1:
+		return "expected one inflight request after duplicate reuse, got %s" % [request_state]
+	if int(request_state.get("active_key_count", -1)) != 1:
+		return "expected one active request key after duplicate reuse, got %s" % [request_state]
+	if int(request_state.get("duplicate_reuse_count", 0)) < 1:
+		return "expected duplicate reuse metric, got %s" % [request_state]
+	for _attempt in range(400):
+		if ai_manager.pump_async_requests() > 0:
+			var after_state: Dictionary = ai_manager.request_state
+			if int(after_state.get("inflight_count", -1)) != 0:
+				return "expected no inflight requests after delivery, got %s" % [after_state]
+			if int(after_state.get("active_key_count", -1)) != 0:
+				return "expected active request key cleanup after delivery, got %s" % [after_state]
+			return true
+		OS.delay_msec(10)
+	return "timed out waiting for reused native reaction request"
 
 
 func _make_tile(id: int, suit: String, rank: int) -> Dictionary:

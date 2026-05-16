@@ -64,16 +64,16 @@ func _test_hell_manual_mark_writes_workspace_file():
 		return "expected hell session id"
 	if int(hell.get("marked_count", 0)) != 1:
 		return "expected duplicate mark to keep marked_count at 1, got %s" % [hell]
-	var path := "res://测试数据统计/hell_marked_cases/%s_mark_0001.json" % session_id
+	var path := "user://测试数据统计/hell_marked_cases/%s_mark_0001.json" % session_id
 	if not FileAccess.file_exists(path):
 		return "expected marked file at %s" % path
-	var duplicate_path := "res://测试数据统计/hell_marked_cases/%s_mark_0002.json" % session_id
+	var duplicate_path := "user://测试数据统计/hell_marked_cases/%s_mark_0002.json" % session_id
 	if FileAccess.file_exists(duplicate_path):
 		return "expected no duplicate marked file at %s" % duplicate_path
-	var summary_path := "res://测试数据统计/hell_training/%s_summary.json" % session_id
+	var summary_path := "user://测试数据统计/hell_training/%s_summary.json" % session_id
 	if not FileAccess.file_exists(summary_path):
 		return "expected summary file at %s" % summary_path
-	var replay_path := "res://测试数据统计/hell_replay/%s_replay_manifest.json" % session_id
+	var replay_path := "user://测试数据统计/hell_replay/%s_replay_manifest.json" % session_id
 	if not FileAccess.file_exists(replay_path):
 		return "expected replay manifest at %s" % replay_path
 	return true
@@ -98,7 +98,7 @@ func _test_hell_decision_snapshot_writes_training_file():
 	)
 	var hell: Dictionary = game_state.get_debug_snapshot().get("hell_training", {})
 	var session_id := str(hell.get("session_id", ""))
-	var path := "res://测试数据统计/hell_training/%s_decision_000001.json" % session_id
+	var path := "user://测试数据统计/hell_training/%s_decision_000001.json" % session_id
 	if not FileAccess.file_exists(path):
 		return "expected decision snapshot at %s" % path
 	if int(hell.get("decision_count", 0)) != 1:

@@ -44,10 +44,23 @@ const COPIES_PER_TILE := 4
 const STARTING_SCORE := 0
 const AI_LEVEL_LABELS := ["初级", "中级", "骨灰级", "作弊级"]
 const AI_ASYNC_TIMEOUT_MS := 1000
+const AI_TURN_SOFT_TIMEOUT_MS := 2200
+const AI_REACTION_SOFT_TIMEOUT_MS := 2200
 const AI_REACTION_REVIEW_LIMIT := 24
-const HELL_TRAINING_DIR := "res://测试数据统计/hell_training"
-const HELL_MARKED_CASE_DIR := "res://测试数据统计/hell_marked_cases"
-const HELL_REPLAY_DIR := "res://测试数据统计/hell_replay"
+const HELL_TRAINING_DIR := "user://测试数据统计/hell_training"
+const HELL_MARKED_CASE_DIR := "user://测试数据统计/hell_marked_cases"
+const HELL_REPLAY_DIR := "user://测试数据统计/hell_replay"
+const AI_ANALYSIS_RECORDING_ENABLED := false
+const AI_CHAIN_DEBUG_ENABLED := false
+const DIAGNOSTIC_EXPORT_ENABLED := false
+const AI_ANALYSIS_DIR := "user://ai_analysis"
+const DIAGNOSTIC_EXPORT_DIR := "user://diagnostic_exports"
+const DIAGNOSTIC_DOWNLOAD_SUBDIR := "NeijiangMahjongLogs"
+const DIAGNOSTIC_MAX_DEPTH := 5
+const DIAGNOSTIC_MAX_ARRAY_ITEMS := 80
+const DIAGNOSTIC_MAX_DICT_KEYS := 120
+const DIAGNOSTIC_MAX_STRING_LENGTH := 4000
+const DIAGNOSTIC_MAX_TEXT_FILE_CHARS := 120000
 
 var current_phase: RoundPhase = RoundPhase.BOOT
 var current_dealer_seat: int = 0
@@ -114,6 +127,9 @@ var hell_training_category_counts: Dictionary = {}
 var hell_training_severity_counts: Dictionary = {}
 var latest_hell_decision_snapshot: Dictionary = {}
 var hell_last_marked_signature: String = ""
+var ai_analysis_session_id: String = ""
+var ai_analysis_event_count: int = 0
+var latest_ai_analysis_event: Dictionary = {}
 
 var _rng := RandomNumberGenerator.new()
 var deterministic_seed_enabled: bool = false
@@ -136,6 +152,7 @@ func _ready() -> void:
 	gang_advisor = GangAdvisorScript.new()
 	ai_tuning_config = AITuningConfigScript.new()
 	ai_tuning_config.apply_preset(AITuningConfigScript.PRESET_HELL)
+	ai_tuning_config.set_diagnostics_recording_enabled(AI_ANALYSIS_RECORDING_ENABLED)
 	ai_level = AILevel.CHEATING
 	ai_learning_engine = AILearningEngineScript.new()
 	ai_learning_engine.load_profile()
@@ -147,6 +164,10 @@ func _ready() -> void:
 	_bind_native_csharp_runtime_if_available()
 	ai_manager.ai_turn_analysis_ready.connect(_on_ai_turn_analysis_ready)
 	ai_manager.ai_reaction_analysis_ready.connect(_on_ai_reaction_analysis_ready)
+	if AI_ANALYSIS_RECORDING_ENABLED:
+		_ensure_ai_analysis_session()
+		if _is_hell_training_mode():
+			_ensure_hell_training_session()
 	start_new_round()
 
 
@@ -203,6 +224,11 @@ func start_new_round(preserve_dealer: bool = false) -> void:
 	wall_count = wall.size()
 	_resolve_opening_roll()
 	current_phase = RoundPhase.TABLE_SETUP
+	_record_ai_analysis_event("round_start", {
+		"dealer_seat": current_dealer_seat,
+		"opening_roll": opening_roll_data.duplicate(true),
+		"initial_wall_count": wall_count,
+	})
 	debug_last_message = "Round %d ready. Dealer seat=%d is rolling dice." % [
 		round_index,
 		current_dealer_seat,
@@ -271,6 +297,7 @@ func get_debug_snapshot() -> Dictionary:
 		"opening_bao_jiao_current_seat": opening_bao_jiao_current_seat,
 		"opening_bao_jiao_queue": opening_bao_jiao_queue.duplicate(),
 		"hell_training": _build_hell_training_debug_snapshot(),
+		"ai_analysis_recording": _build_ai_analysis_recording_debug_snapshot(),
 		"players": players.duplicate(true),
 	}
 
@@ -395,7 +422,7 @@ func _apply_ai_runtime_tuning() -> void:
 	_apply_ai_learning_adjustment()
 	_apply_ai_manual_tuning()
 	if ai_manager != null:
-		ai_manager.set_compact_runtime_snapshots(not human_trainer_hint_enabled and not _is_hell_training_mode())
+		ai_manager.set_compact_runtime_snapshots(not human_trainer_hint_enabled and not _is_hell_training_mode() and not AI_ANALYSIS_RECORDING_ENABLED)
 
 
 func set_ai_tuning_value(key: String, value: int) -> bool:
@@ -1046,11 +1073,30 @@ func _is_pending_ai_turn_request_valid() -> bool:
 	var state_signature := str(pending_ai_turn_request_meta.get("state_signature", ""))
 	if state_signature != "" and state_signature != _ai_turn_state_signature(seat):
 		return false
-	return int(pending_ai_turn_request_meta.get("round_index", -1)) == round_index \
+	var state_matches := int(pending_ai_turn_request_meta.get("round_index", -1)) == round_index \
 		and int(pending_ai_turn_request_meta.get("seat", -1)) == current_turn_seat \
 		and int(pending_ai_turn_request_meta.get("phase", -1)) == int(current_phase) \
 		and int(pending_ai_turn_request_meta.get("wall_count", -1)) == wall_count \
 		and int(pending_ai_turn_request_meta.get("hand_count", -1)) == int(players[current_turn_seat].get("hand_count", -1))
+	if not state_matches:
+		return false
+	if _pending_ai_turn_request_elapsed_ms() > AI_TURN_SOFT_TIMEOUT_MS:
+		debug_last_message = "C# AI 出牌计算较慢，继续等待当前后台结果。"
+		if not bool(pending_ai_turn_request_meta.get("soft_timeout_logged", false)):
+			_record_ai_chain_debug("turn_request_slow_wait id=%d elapsed=%d meta=%s" % [
+				pending_ai_turn_request_id,
+				_pending_ai_turn_request_elapsed_ms(),
+				JSON.stringify(pending_ai_turn_request_meta).left(500),
+			])
+			pending_ai_turn_request_meta["soft_timeout_logged"] = true
+	return true
+
+
+func _pending_ai_turn_request_elapsed_ms() -> int:
+	var started_at_ms := int(pending_ai_turn_request_meta.get("started_at_ms", 0))
+	if started_at_ms <= 0:
+		return 0
+	return maxi(0, Time.get_ticks_msec() - started_at_ms)
 
 
 func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
@@ -1079,6 +1125,13 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 	if not self_action.is_empty():
 		for key in self_action.keys():
 			base[key] = self_action[key]
+		_record_ai_analysis_event("turn_decision_built", {
+			"seat": seat,
+			"decision": base.duplicate(true),
+			"decision_path": "self_action",
+			"player_state": player_state.duplicate(true),
+			"table_state": table_state.duplicate(true),
+		})
 		return base
 	var analysis: Dictionary = {}
 	if ai_manager != null:
@@ -1117,6 +1170,14 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 			"tile_type": _neijiang_tile_type(selected_tile),
 			"source": "hell_oracle" if bool(ai_tuning_config.hell_execute_oracle_action) else "fair_ai",
 		}
+	_record_ai_analysis_event("turn_decision_built", {
+		"seat": seat,
+		"decision": base.duplicate(true),
+		"decision_path": "discard",
+		"selected_tile": selected_tile.duplicate(true),
+		"player_state": player_state.duplicate(true),
+		"table_state": table_state.duplicate(true),
+	})
 	return base
 
 
@@ -1206,19 +1267,51 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 		"self_hu":
 			_record_ai_metric("self_hu_actions")
 			_record_hell_decision_snapshot(decision, "self_hu")
-			return _execute_self_draw_hu(seat)
+			var self_hu_ok := _execute_self_draw_hu(seat)
+			_record_ai_analysis_event("turn_action_executed", {
+				"seat": seat,
+				"action": "self_hu",
+				"executed": self_hu_ok,
+				"decision": decision.duplicate(true),
+				"debug_last_message": debug_last_message,
+			})
+			return self_hu_ok
 		"bao_jiao":
 			_record_ai_metric("bao_jiao_actions")
 			_record_hell_decision_snapshot(decision, "bao_jiao")
-			return execute_human_bao_jiao(seat)
+			var bao_jiao_ok := execute_human_bao_jiao(seat)
+			_record_ai_analysis_event("turn_action_executed", {
+				"seat": seat,
+				"action": "bao_jiao",
+				"executed": bao_jiao_ok,
+				"decision": decision.duplicate(true),
+				"debug_last_message": debug_last_message,
+			})
+			return bao_jiao_ok
 		"an_gang":
 			_record_ai_metric("an_gang_attempts")
 			_record_hell_decision_snapshot(decision, "an_gang")
-			return _execute_an_gang(seat, decision.get("gang_option", {}))
+			var an_gang_ok := _execute_an_gang(seat, decision.get("gang_option", {}))
+			_record_ai_analysis_event("turn_action_executed", {
+				"seat": seat,
+				"action": "an_gang",
+				"executed": an_gang_ok,
+				"decision": decision.duplicate(true),
+				"debug_last_message": debug_last_message,
+			})
+			return an_gang_ok
 		"add_gang":
 			_record_ai_metric("add_gang_attempts")
 			_record_hell_decision_snapshot(decision, "add_gang")
-			return _start_add_gang(seat, decision.get("gang_option", {}))
+			var add_gang_ok := _start_add_gang(seat, decision.get("gang_option", {}))
+			_record_ai_analysis_event("turn_action_executed", {
+				"seat": seat,
+				"action": "add_gang",
+				"executed": add_gang_ok,
+				"decision": decision.duplicate(true),
+				"debug_last_message": debug_last_message,
+			})
+			return add_gang_ok
 		"discard":
 			var tile_id := int(decision.get("tile_id", -1))
 			var tile_type := _neijiang_tile_type(_tile_by_id_in_hand(seat, tile_id))
@@ -1230,8 +1323,24 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 				str(ok),
 				debug_last_message,
 			])
+			_record_ai_analysis_event("turn_action_executed", {
+				"seat": seat,
+				"action": "discard",
+				"tile_id": tile_id,
+				"tile_type": tile_type,
+				"executed": ok,
+				"decision": decision.duplicate(true),
+				"debug_last_message": debug_last_message,
+			})
 			return ok
 	_record_ai_chain_debug("turn_execute_unknown_action decision=%s" % JSON.stringify(decision).left(500))
+	_record_ai_analysis_event("turn_action_executed", {
+		"seat": seat,
+		"action": str(decision.get("action", "")),
+		"executed": false,
+		"decision": decision.duplicate(true),
+		"debug_last_message": "unknown_action",
+	})
 	return false
 
 
@@ -1266,14 +1375,45 @@ func run_ai_reaction() -> bool:
 	elif resolved_action == "peng":
 		executed = _execute_peng(seat)
 	else:
-		return _pass_ai_reaction(seat)
+		var pass_executed := _pass_ai_reaction(seat)
+		_record_ai_analysis_event("reaction_action_executed", {
+			"seat": seat,
+			"candidate": candidate.duplicate(true),
+			"decision": decision.duplicate(true),
+			"requested_action": requested_action,
+			"resolved_action": resolved_action,
+			"executed": pass_executed,
+			"discard_context": current_discard_context.duplicate(true),
+		})
+		return pass_executed
 	if executed:
+		_record_ai_analysis_event("reaction_action_executed", {
+			"seat": seat,
+			"candidate": candidate.duplicate(true),
+			"decision": decision.duplicate(true),
+			"requested_action": requested_action,
+			"resolved_action": resolved_action,
+			"executed": true,
+			"discard_context": current_discard_context.duplicate(true),
+		})
 		return true
 	debug_last_message = "AI %s 响应 %s 执行失败，已自动过牌以继续牌局。" % [
 		_seat_display_name(seat),
 		{"hu": "胡", "gang": "杠", "peng": "碰"}.get(resolved_action, resolved_action),
 	]
-	return _pass_ai_reaction(seat)
+	var pass_ok := _pass_ai_reaction(seat)
+	_record_ai_analysis_event("reaction_action_executed", {
+		"seat": seat,
+		"candidate": candidate.duplicate(true),
+		"decision": decision.duplicate(true),
+		"requested_action": requested_action,
+		"resolved_action": resolved_action,
+		"executed": false,
+		"fallback_pass_executed": pass_ok,
+		"discard_context": current_discard_context.duplicate(true),
+		"debug_last_message": debug_last_message,
+	})
+	return pass_ok
 
 
 func _get_or_prepare_ai_reaction_decision() -> Dictionary:
@@ -1310,10 +1450,6 @@ func _is_pending_ai_reaction_decision_valid() -> bool:
 func _is_pending_ai_reaction_request_valid() -> bool:
 	if pending_ai_reaction_request_id <= 0 or pending_ai_reaction_request_meta.is_empty():
 		return false
-	if _is_pending_ai_reaction_request_stale():
-		debug_last_message = "C# AI 响应计算超时，已重新请求。"
-		_clear_pending_ai_reaction_request()
-		return false
 	var tile: Dictionary = current_discard_context.get("tile", {})
 	var seat := int(pending_ai_reaction_request_meta.get("seat", -1))
 	if seat < 0 or seat >= players.size():
@@ -1321,18 +1457,34 @@ func _is_pending_ai_reaction_request_valid() -> bool:
 	var state_signature := str(pending_ai_reaction_request_meta.get("state_signature", ""))
 	if state_signature != "" and state_signature != _ai_reaction_state_signature(seat):
 		return false
-	return int(pending_ai_reaction_request_meta.get("round_index", -1)) == round_index \
+	var state_matches := int(pending_ai_reaction_request_meta.get("round_index", -1)) == round_index \
 		and int(pending_ai_reaction_request_meta.get("phase", -1)) == int(current_phase) \
 		and int(pending_ai_reaction_request_meta.get("source_seat", -1)) == int(current_discard_context.get("source_seat", -1)) \
 		and int(pending_ai_reaction_request_meta.get("tile_id", -1)) == int(tile.get("id", -1)) \
 		and int(pending_ai_reaction_request_meta.get("pending_count", -1)) == pending_reactions.size()
+	if not state_matches:
+		return false
+	if _is_pending_ai_reaction_request_stale():
+		debug_last_message = "C# AI 响应计算较慢，继续等待当前后台结果。"
+		if not bool(pending_ai_reaction_request_meta.get("soft_timeout_logged", false)):
+			_record_ai_chain_debug("reaction_request_slow_wait id=%d elapsed=%d meta=%s" % [
+				pending_ai_reaction_request_id,
+				_pending_ai_reaction_request_elapsed_ms(),
+				JSON.stringify(pending_ai_reaction_request_meta).left(500),
+			])
+			pending_ai_reaction_request_meta["soft_timeout_logged"] = true
+	return true
 
 
 func _is_pending_ai_reaction_request_stale() -> bool:
+	return _pending_ai_reaction_request_elapsed_ms() > AI_REACTION_SOFT_TIMEOUT_MS
+
+
+func _pending_ai_reaction_request_elapsed_ms() -> int:
 	var started_at_ms := int(pending_ai_reaction_request_meta.get("started_at_ms", 0))
 	if started_at_ms <= 0:
-		return false
-	return maxi(0, Time.get_ticks_msec() - started_at_ms) > 2200
+		return 0
+	return maxi(0, Time.get_ticks_msec() - started_at_ms)
 
 
 func _build_ai_reaction_decision(force_lightweight: bool = false) -> Dictionary:
@@ -1387,6 +1539,10 @@ func _start_ai_turn_background_request() -> bool:
 			for key in self_action.keys():
 				base[key] = self_action[key]
 			pending_ai_turn_decision = base
+			_record_ai_chain_debug("turn_self_action_ready seat=%d action=%s" % [
+				native_seat,
+				str(self_action.get("action", "")),
+			])
 			_clear_pending_ai_turn_request()
 			return true
 	if _is_pending_ai_turn_request_valid():
@@ -1395,6 +1551,12 @@ func _start_ai_turn_background_request() -> bool:
 	var player_state := _build_player_state(seat)
 	var table_state := _build_table_state()
 	var allow_cheat: bool = int(players[seat].get("ai_level", int(ai_level))) == int(AILevel.CHEATING)
+	_record_ai_chain_debug("turn_async_request_start seat=%d hand=%d wall=%d native=%s" % [
+		seat,
+		int(players[seat].get("hand_count", 0)),
+		wall_count,
+		str(_has_native_csharp_runtime()),
+	])
 	var request_id: int = 0 if ai_manager == null else ai_manager.start_turn_analysis_background(
 		player_state,
 		table_state,
@@ -1405,6 +1567,7 @@ func _start_ai_turn_background_request() -> bool:
 		allow_cheat
 	)
 	if request_id <= 0:
+		_record_ai_chain_debug("turn_async_request_failed seat=%d" % seat)
 		return false
 	pending_ai_turn_request_id = request_id
 	pending_ai_turn_request_meta = {
@@ -1416,6 +1579,11 @@ func _start_ai_turn_background_request() -> bool:
 		"state_signature": _ai_turn_state_signature(seat),
 		"started_at_ms": Time.get_ticks_msec(),
 	}
+	_record_ai_chain_debug("turn_async_request_queued id=%d seat=%d wall=%d" % [
+		request_id,
+		seat,
+		wall_count,
+	])
 	return true
 
 
@@ -1433,6 +1601,14 @@ func _start_ai_reaction_background_request() -> bool:
 	var allow_cheat: bool = int(players[seat].get("ai_level", int(ai_level))) == int(AILevel.CHEATING)
 	var player_state := _build_player_state(seat)
 	var table_state := _build_table_state()
+	var tile: Dictionary = current_discard_context.get("tile", {})
+	_record_ai_chain_debug("reaction_async_request_start seat=%d source=%d tile=%s pending=%d native=%s" % [
+		seat,
+		int(current_discard_context.get("source_seat", -1)),
+		str(tile.get("display_name", tile.get("id", ""))),
+		pending_reactions.size(),
+		str(_has_native_csharp_runtime()),
+	])
 	var request_id: int = 0 if ai_manager == null else ai_manager.start_reaction_analysis_background(
 		candidate,
 		player_state,
@@ -1444,8 +1620,8 @@ func _start_ai_reaction_background_request() -> bool:
 		allow_cheat
 	)
 	if request_id <= 0:
+		_record_ai_chain_debug("reaction_async_request_failed seat=%d" % seat)
 		return false
-	var tile: Dictionary = current_discard_context.get("tile", {})
 	pending_ai_reaction_request_id = request_id
 	pending_ai_reaction_request_meta = {
 		"round_index": round_index,
@@ -1458,6 +1634,12 @@ func _start_ai_reaction_background_request() -> bool:
 		"candidate": candidate.duplicate(true),
 		"started_at_ms": Time.get_ticks_msec(),
 	}
+	_record_ai_chain_debug("reaction_async_request_queued id=%d seat=%d tile_id=%d pending=%d" % [
+		request_id,
+		seat,
+		int(tile.get("id", -1)),
+		pending_reactions.size(),
+	])
 	return true
 
 
@@ -2518,6 +2700,8 @@ func _emit_state_changed() -> void:
 
 
 func _record_ai_chain_debug(message: String) -> void:
+	if not AI_CHAIN_DEBUG_ENABLED:
+		return
 	var line := "%d R%d P%s T%s %s" % [
 		Time.get_ticks_msec(),
 		round_index,
@@ -2537,8 +2721,204 @@ func _record_ai_chain_debug(message: String) -> void:
 	file.close()
 
 
+func export_diagnostic_package(copy_to_downloads: bool = true) -> Dictionary:
+	if not DIAGNOSTIC_EXPORT_ENABLED:
+		return {
+			"ok": false,
+			"error": "diagnostic_export_disabled",
+		}
+	_record_ai_chain_debug("diagnostic_export_requested")
+	var file_name := "neijiang_diagnostic_%s_r%03d.json" % [_hell_timestamp_slug(), round_index]
+	var internal_path := "%s/%s" % [DIAGNOSTIC_EXPORT_DIR, file_name]
+	var package := _build_diagnostic_export_package(internal_path, file_name)
+	if not _write_json_file(internal_path, package):
+		var write_error := FileAccess.get_open_error()
+		debug_last_message = "诊断包导出失败：内部文件写入失败（%s）。" % str(write_error)
+		_record_ai_chain_debug("diagnostic_export_failed path=%s err=%s" % [internal_path, str(write_error)])
+		return {
+			"ok": false,
+			"error": "internal_write_failed",
+			"error_code": write_error,
+			"path": internal_path,
+			"path_absolute": ProjectSettings.globalize_path(internal_path),
+		}
+	var download_copy := _copy_diagnostic_package_to_downloads(internal_path, file_name) if copy_to_downloads else {
+		"ok": false,
+		"error": "downloads_copy_disabled",
+	}
+	var result := {
+		"ok": true,
+		"path": internal_path,
+		"path_absolute": ProjectSettings.globalize_path(internal_path),
+		"file_name": file_name,
+		"download_copy": download_copy,
+	}
+	if bool(download_copy.get("ok", false)):
+		debug_last_message = "诊断包已导出：%s" % str(download_copy.get("path", internal_path))
+	else:
+		debug_last_message = "诊断包已导出到内部目录：%s；复制到下载目录失败：%s" % [
+			ProjectSettings.globalize_path(internal_path),
+			str(download_copy.get("error", "unknown")),
+		]
+	_record_ai_chain_debug("diagnostic_export_done internal=%s external_ok=%s" % [
+		internal_path,
+		str(download_copy.get("ok", false)),
+	])
+	return result
+
+
+func _build_diagnostic_export_package(internal_path: String, file_name: String) -> Dictionary:
+	return {
+		"kind": "neijiang_diagnostic_export",
+		"schema_version": 1,
+		"created_at": Time.get_datetime_string_from_system(),
+		"ticks_msec": Time.get_ticks_msec(),
+		"app": {
+			"name": str(ProjectSettings.get_setting("application/config/name", "")),
+			"version": str(ProjectSettings.get_setting("application/config/version", "")),
+			"package": str(ProjectSettings.get_setting("application/config/package_name", "")),
+		},
+		"runtime": {
+			"os_name": OS.get_name(),
+			"locale": OS.get_locale(),
+			"model": OS.get_model_name(),
+			"processor_count": OS.get_processor_count(),
+			"is_android": OS.has_feature("android"),
+			"is_debug_build": OS.is_debug_build(),
+		},
+		"export": {
+			"file_name": file_name,
+			"internal_path": internal_path,
+			"internal_path_absolute": ProjectSettings.globalize_path(internal_path),
+			"downloads_subdir": DIAGNOSTIC_DOWNLOAD_SUBDIR,
+		},
+		"snapshot": _compact_diagnostic_value(get_debug_snapshot()),
+		"ai_chain_debug_history": ai_chain_debug_history.duplicate(),
+		"text_files": _collect_diagnostic_text_files([
+			"user://ai_chain_debug.log",
+			"user://ui_prefs.cfg",
+		]),
+	}
+
+
+func _copy_diagnostic_package_to_downloads(internal_path: String, file_name: String) -> Dictionary:
+	var downloads_dir := OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS, true)
+	if downloads_dir.is_empty():
+		return {"ok": false, "error": "downloads_dir_unavailable"}
+	var export_dir := downloads_dir.path_join(DIAGNOSTIC_DOWNLOAD_SUBDIR)
+	var dir_err := DirAccess.make_dir_recursive_absolute(export_dir)
+	if dir_err != OK:
+		return {
+			"ok": false,
+			"error": "downloads_dir_create_failed",
+			"error_code": dir_err,
+			"path": export_dir,
+		}
+	var text := FileAccess.get_file_as_string(internal_path)
+	if text.is_empty():
+		return {"ok": false, "error": "internal_package_empty", "path": internal_path}
+	var external_path := export_dir.path_join(file_name)
+	var file := FileAccess.open(external_path, FileAccess.WRITE)
+	if file == null:
+		return {
+			"ok": false,
+			"error": "downloads_write_failed",
+			"error_code": FileAccess.get_open_error(),
+			"path": external_path,
+		}
+	file.store_string(text)
+	file.close()
+	return {
+		"ok": true,
+		"path": external_path,
+		"downloads_dir": export_dir,
+	}
+
+
+func _collect_diagnostic_text_files(paths: Array) -> Dictionary:
+	var result := {}
+	for item in paths:
+		var path := str(item)
+		result[path] = _read_diagnostic_text_file(path)
+	return result
+
+
+func _read_diagnostic_text_file(path: String) -> Dictionary:
+	if path.is_empty() or not FileAccess.file_exists(path):
+		return {
+			"exists": false,
+			"path": path,
+			"path_absolute": ProjectSettings.globalize_path(path),
+		}
+	var text := FileAccess.get_file_as_string(path)
+	var truncated := text.length() > DIAGNOSTIC_MAX_TEXT_FILE_CHARS
+	if truncated:
+		text = text.right(DIAGNOSTIC_MAX_TEXT_FILE_CHARS)
+	return {
+		"exists": true,
+		"path": path,
+		"path_absolute": ProjectSettings.globalize_path(path),
+		"char_count": text.length(),
+		"truncated_from_start": truncated,
+		"content": text,
+	}
+
+
+func _compact_diagnostic_value(value, depth: int = 0):
+	if depth >= DIAGNOSTIC_MAX_DEPTH:
+		return _compact_diagnostic_leaf(value)
+	match typeof(value):
+		TYPE_DICTIONARY:
+			var source: Dictionary = value
+			var output := {}
+			var count := 0
+			for key in source.keys():
+				if count >= DIAGNOSTIC_MAX_DICT_KEYS:
+					output["_truncated_keys"] = maxi(0, source.size() - count)
+					break
+				output[str(key)] = _compact_diagnostic_value(source[key], depth + 1)
+				count += 1
+			return output
+		TYPE_ARRAY:
+			var source_array: Array = value
+			var output_array := []
+			var limit := mini(source_array.size(), DIAGNOSTIC_MAX_ARRAY_ITEMS)
+			for index in range(limit):
+				output_array.append(_compact_diagnostic_value(source_array[index], depth + 1))
+			if source_array.size() > limit:
+				output_array.append({"_truncated_items": source_array.size() - limit})
+			return output_array
+		TYPE_STRING:
+			var text := str(value)
+			if text.length() > DIAGNOSTIC_MAX_STRING_LENGTH:
+				return text.left(DIAGNOSTIC_MAX_STRING_LENGTH) + "...<truncated>"
+			return text
+		_:
+			return value
+
+
+func _compact_diagnostic_leaf(value):
+	match typeof(value):
+		TYPE_DICTIONARY:
+			var dictionary: Dictionary = value
+			return {"_truncated_dictionary_keys": dictionary.size()}
+		TYPE_ARRAY:
+			var array: Array = value
+			return {"_truncated_array_items": array.size()}
+		TYPE_STRING:
+			var text := str(value)
+			if text.length() > DIAGNOSTIC_MAX_STRING_LENGTH:
+				return text.left(DIAGNOSTIC_MAX_STRING_LENGTH) + "...<truncated>"
+			return text
+		_:
+			return value
+
+
 func _pump_ai_background_requests() -> int:
-	return 0 if ai_manager == null else int(ai_manager.pump_async_requests())
+	var delivered := 0 if ai_manager == null else int(ai_manager.pump_async_requests())
+	if delivered > 0:
+		_record_ai_chain_debug("ai_pump_delivered count=%d" % delivered)
+	return delivered
 
 
 func pump_ai_background_requests() -> int:
@@ -2586,13 +2966,24 @@ func _bind_native_csharp_runtime_if_available() -> bool:
 
 func _on_ai_turn_analysis_ready(request_id: int, seat_index: int, analysis: Dictionary) -> void:
 	if request_id != pending_ai_turn_request_id:
+		_record_ai_chain_debug("turn_async_ready_ignored id=%d pending=%d seat=%d" % [
+			request_id,
+			pending_ai_turn_request_id,
+			seat_index,
+		])
 		return
 	if not _is_pending_ai_turn_request_valid():
+		_record_ai_chain_debug("turn_async_ready_invalid id=%d seat=%d" % [request_id, seat_index])
 		_clear_pending_ai_turn_request()
 		return
 	var selected_tile: Dictionary = _resolve_analysis_recommended_tile(seat_index, analysis)
 	if selected_tile.is_empty():
 		debug_last_message = "后台 C# AI 已返回，但推荐牌未成功映射到手牌，等待下一次计算。"
+		_record_ai_chain_debug("turn_async_ready_unmapped id=%d seat=%d backend=%s" % [
+			request_id,
+			seat_index,
+			str(analysis.get("backend", "")),
+		])
 		_clear_pending_ai_turn_request()
 		_emit_state_changed()
 		return
@@ -2607,6 +2998,18 @@ func _on_ai_turn_analysis_ready(request_id: int, seat_index: int, analysis: Dict
 		"tile_id": int(selected_tile.get("id", -1)),
 		"analysis": analysis.duplicate(true),
 	}
+	_record_ai_chain_debug("turn_async_ready id=%d seat=%d backend=%s tile=%s" % [
+		request_id,
+		seat_index,
+		str(analysis.get("backend", "")),
+		str(selected_tile.get("display_name", selected_tile.get("id", ""))),
+	])
+	_record_ai_analysis_event("turn_analysis_ready", {
+		"request_id": request_id,
+		"seat": seat_index,
+		"decision": pending_ai_turn_decision.duplicate(true),
+		"request_meta": pending_ai_turn_request_meta.duplicate(true),
+	})
 	_clear_pending_ai_turn_request()
 	_emit_state_changed()
 
@@ -2633,8 +3036,19 @@ func _resolve_analysis_recommended_tile(seat: int, analysis: Dictionary) -> Dict
 
 func _on_ai_reaction_analysis_ready(request_id: int, seat_index: int, analysis: Dictionary) -> void:
 	if request_id != pending_ai_reaction_request_id:
+		_record_ai_chain_debug("reaction_async_ready_ignored id=%d pending=%d seat=%d action=%s" % [
+			request_id,
+			pending_ai_reaction_request_id,
+			seat_index,
+			str(analysis.get("action", "")),
+		])
 		return
 	if not _is_pending_ai_reaction_request_valid():
+		_record_ai_chain_debug("reaction_async_ready_invalid id=%d seat=%d action=%s" % [
+			request_id,
+			seat_index,
+			str(analysis.get("action", "")),
+		])
 		_clear_pending_ai_reaction_request()
 		return
 	var candidate: Dictionary = pending_ai_reaction_request_meta.get("candidate", {}).duplicate(true)
@@ -2650,6 +3064,18 @@ func _on_ai_reaction_analysis_ready(request_id: int, seat_index: int, analysis: 
 		"candidate": candidate,
 		"decision": analysis.duplicate(true),
 	}
+	_record_ai_chain_debug("reaction_async_ready id=%d seat=%d action=%s backend=%s" % [
+		request_id,
+		seat_index,
+		str(analysis.get("action", "")),
+		str(analysis.get("backend", "")),
+	])
+	_record_ai_analysis_event("reaction_analysis_ready", {
+		"request_id": request_id,
+		"seat": seat_index,
+		"decision": pending_ai_reaction_decision.duplicate(true),
+		"request_meta": pending_ai_reaction_request_meta.duplicate(true),
+	})
 	_clear_pending_ai_reaction_request()
 	_emit_state_changed()
 
@@ -4397,6 +4823,13 @@ func _apply_settlement_scores_once() -> void:
 		var seat: int = int(player.get("seat", -1))
 		player["score"] = int(player.get("score", STARTING_SCORE)) + int(score_changes.get(seat, 0))
 	settlement_data["scores_applied"] = true
+	_record_ai_analysis_event("round_end", {
+		"score_changes": score_changes.duplicate(true),
+		"settlement_data": settlement_data.duplicate(true),
+		"ai_decision_metrics": ai_decision_metrics.duplicate(true),
+		"latest_ai_reaction_review": latest_ai_reaction_review.duplicate(true),
+		"ai_reaction_review_history": ai_reaction_review_history.duplicate(true),
+	})
 	_update_ai_learning_after_round(score_changes)
 	_write_hell_training_report()
 
@@ -4500,6 +4933,119 @@ func _build_hell_training_debug_snapshot() -> Dictionary:
 			"replay": HELL_REPLAY_DIR,
 		},
 	}
+
+
+func _ensure_ai_analysis_session() -> void:
+	if not AI_ANALYSIS_RECORDING_ENABLED:
+		return
+	if not ai_analysis_session_id.is_empty():
+		_ensure_ai_analysis_output_dirs()
+		return
+	ai_analysis_session_id = "%s_seed%s" % [_hell_timestamp_slug(), str(deterministic_seed if deterministic_seed_enabled else "live")]
+	ai_analysis_event_count = 0
+	latest_ai_analysis_event.clear()
+	_ensure_ai_analysis_output_dirs()
+	_write_json_file(_ai_analysis_session_path(), {
+		"schema_version": 1,
+		"session_id": ai_analysis_session_id,
+		"created_at": Time.get_datetime_string_from_system(),
+		"app_version": str(ProjectSettings.get_setting("application/config/version", "")),
+		"recording_dir": AI_ANALYSIS_DIR,
+		"recording_dir_absolute": ProjectSettings.globalize_path(AI_ANALYSIS_DIR),
+		"events_path": _ai_analysis_events_path(),
+		"events_path_absolute": ProjectSettings.globalize_path(_ai_analysis_events_path()),
+		"hell_training_dir": HELL_TRAINING_DIR,
+		"hell_training_dir_absolute": ProjectSettings.globalize_path(HELL_TRAINING_DIR),
+		"preset": "" if ai_tuning_config == null else str(ai_tuning_config.preset_name),
+		"tuning": {} if ai_tuning_config == null else ai_tuning_config.to_debug_dict(),
+		"note": "Analysis package: copy this whole ai_analysis folder and the hell_training folder after enough rounds.",
+	})
+
+
+func _ensure_ai_analysis_output_dirs() -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_ai_analysis_session_dir()))
+
+
+func _ai_analysis_session_dir() -> String:
+	return "%s/%s" % [AI_ANALYSIS_DIR, ai_analysis_session_id if not ai_analysis_session_id.is_empty() else "pending"]
+
+
+func _ai_analysis_session_path() -> String:
+	return "%s/session.json" % _ai_analysis_session_dir()
+
+
+func _ai_analysis_events_path() -> String:
+	return "%s/events.jsonl" % _ai_analysis_session_dir()
+
+
+func _build_ai_analysis_recording_debug_snapshot() -> Dictionary:
+	return {
+		"enabled": AI_ANALYSIS_RECORDING_ENABLED,
+		"session_id": ai_analysis_session_id,
+		"event_count": ai_analysis_event_count,
+		"latest_event": latest_ai_analysis_event.duplicate(true),
+		"output_dir": _ai_analysis_session_dir(),
+		"output_dir_absolute": ProjectSettings.globalize_path(_ai_analysis_session_dir()),
+		"events_path": _ai_analysis_events_path(),
+		"events_path_absolute": ProjectSettings.globalize_path(_ai_analysis_events_path()),
+	}
+
+
+func _record_ai_analysis_event(event_type: String, payload: Dictionary) -> void:
+	if not AI_ANALYSIS_RECORDING_ENABLED:
+		return
+	_ensure_ai_analysis_session()
+	ai_analysis_event_count += 1
+	var event := {
+		"schema_version": 1,
+		"session_id": ai_analysis_session_id,
+		"event_index": ai_analysis_event_count,
+		"event_type": event_type,
+		"created_at": Time.get_datetime_string_from_system(),
+		"ticks_msec": Time.get_ticks_msec(),
+		"round_index": round_index,
+		"phase": int(current_phase),
+		"phase_name": _phase_debug_name(current_phase),
+		"current_turn_seat": current_turn_seat,
+		"dealer_seat": current_dealer_seat,
+		"wall_count": wall_count,
+		"discard_count": discard_pile.size(),
+		"preset": "" if ai_tuning_config == null else str(ai_tuning_config.preset_name),
+		"tuning": {} if ai_tuning_config == null else ai_tuning_config.to_debug_dict(),
+		"ai_metrics": ai_decision_metrics.duplicate(true),
+		"backend": _build_ai_core_debug_snapshot(),
+		"visible_state": _build_hell_visible_state_snapshot(),
+		"hidden_state": _build_hell_hidden_state_snapshot(),
+		"payload": payload.duplicate(true),
+	}
+	latest_ai_analysis_event = {
+		"event_index": ai_analysis_event_count,
+		"event_type": event_type,
+		"created_at": str(event.get("created_at", "")),
+		"round_index": round_index,
+		"phase_name": str(event.get("phase_name", "")),
+	}
+	_append_jsonl_file(_ai_analysis_events_path(), event)
+	if ai_analysis_event_count % 20 == 0 or event_type == "round_end":
+		_write_ai_analysis_summary()
+
+
+func _write_ai_analysis_summary() -> void:
+	if ai_analysis_session_id.is_empty():
+		return
+	_write_json_file("%s/summary.json" % _ai_analysis_session_dir(), {
+		"schema_version": 1,
+		"session_id": ai_analysis_session_id,
+		"updated_at": Time.get_datetime_string_from_system(),
+		"event_count": ai_analysis_event_count,
+		"round_index": round_index,
+		"current_scores": _hell_score_snapshot(),
+		"ai_decision_metrics": ai_decision_metrics.duplicate(true),
+		"latest_event": latest_ai_analysis_event.duplicate(true),
+		"events_path": _ai_analysis_events_path(),
+		"events_path_absolute": ProjectSettings.globalize_path(_ai_analysis_events_path()),
+		"hell_training_session_id": hell_training_session_id,
+	})
 
 
 func _record_hell_decision_snapshot(decision: Dictionary, decision_type: String, actual_tile_type: int = -1) -> void:
@@ -4934,6 +5480,17 @@ func _build_hell_replay_manifest(summary: Dictionary) -> Dictionary:
 
 func _write_json_file(path: String, data: Dictionary) -> bool:
 	return _write_text_file(path, JSON.stringify(data, "\t"))
+
+
+func _append_jsonl_file(path: String, data: Dictionary) -> bool:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir()))
+	var file := FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)
+	if file == null:
+		return false
+	file.seek_end()
+	file.store_line(JSON.stringify(data))
+	file.close()
+	return true
 
 
 func _write_text_file(path: String, text: String) -> bool:

@@ -34,8 +34,9 @@ public sealed class NeijiangAiFacade
         bool canPeng,
         bool canGang,
         int sourceSeat = -1,
-        string reactionType = "discard")
-        => _reactionDecisionEngine.DecideReaction(state, reactionTileType, canHu, canPeng, canGang, sourceSeat, reactionType);
+        string reactionType = "discard",
+        bool forceLightweight = false)
+        => _reactionDecisionEngine.DecideReaction(state, reactionTileType, canHu, canPeng, canGang, sourceSeat, reactionType, forceLightweight);
 
     public NeijiangSelfActionDecisionResult DecideSelfAction(
         NeijiangStateView state,

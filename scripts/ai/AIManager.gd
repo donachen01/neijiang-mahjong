@@ -25,6 +25,7 @@ var latest_reaction_snapshot: Dictionary = {}
 var performance_metrics: Dictionary = _create_empty_performance_metrics()
 var request_state: Dictionary = _create_empty_request_state()
 var active_async_requests: Dictionary = {}
+var active_async_request_keys: Dictionary = {}
 var turn_analysis_cache: Dictionary = {}
 var turn_cache_order: Array[String] = []
 var native_csharp_runtime: Object = null
@@ -166,6 +167,7 @@ func get_debug_snapshot() -> Dictionary:
 		"backend_status": get_backend_status(),
 		"performance_metrics": performance_metrics.duplicate(true),
 		"request_state": request_state.duplicate(true),
+		"active_async_requests": _build_active_async_requests_snapshot(),
 		"cache_stats": _build_cache_stats_snapshot(),
 	}
 
@@ -269,7 +271,7 @@ func _analyze_reaction_via_native_runtime(candidate: Dictionary, player_state: D
 	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
 
 
-func _start_native_turn_analysis_background(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config) -> bool:
+func _start_native_turn_analysis_background(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config, request_key: String = "") -> bool:
 	var payload_started_at := Time.get_ticks_msec()
 	var payload: Dictionary = csharp_bridge.build_discard_transport_payload(player_state, table_state, rules_config)
 	var payload_ms := maxi(0, Time.get_ticks_msec() - payload_started_at)
@@ -292,11 +294,13 @@ func _start_native_turn_analysis_background(request_id: int, player_state: Dicti
 		"rules_config": rules_config,
 		"payload_ms": payload_ms,
 		"started_at_ms": Time.get_ticks_msec(),
+		"request_key": request_key,
 	}
+	_remember_active_async_request(request_id, request_key)
 	return true
 
 
-func _start_native_reaction_analysis_background(request_id: int, candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config) -> bool:
+func _start_native_reaction_analysis_background(request_id: int, candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, request_key: String = "") -> bool:
 	var payload_started_at := Time.get_ticks_msec()
 	var payload: Dictionary = csharp_bridge.build_reaction_transport_payload(candidate, player_state, table_state, discard_context, rules_config)
 	var payload_ms := maxi(0, Time.get_ticks_msec() - payload_started_at)
@@ -322,7 +326,9 @@ func _start_native_reaction_analysis_background(request_id: int, candidate: Dict
 		"rules_config": rules_config,
 		"payload_ms": payload_ms,
 		"started_at_ms": Time.get_ticks_msec(),
+		"request_key": request_key,
 	}
+	_remember_active_async_request(request_id, request_key)
 	return true
 
 
@@ -494,9 +500,14 @@ func _build_csharp_discard_analysis(player_state: Dictionary, csharp_result: Dic
 
 func start_turn_analysis_background(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false) -> int:
 	var seat := int(player_state.get("seat", -1))
+	var request_key := _build_active_turn_request_key(player_state, table_state, rules_config, allow_cheat)
+	var existing_request_id := _find_active_async_request(request_key)
+	if existing_request_id > 0:
+		_record_duplicate_async_request("turn", seat, existing_request_id, request_key)
+		return existing_request_id
 	var request_id := _begin_request("turn", seat)
 	if has_native_csharp_async_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
-		if _start_native_turn_analysis_background(request_id, player_state, table_state, rules_config):
+		if _start_native_turn_analysis_background(request_id, player_state, table_state, rules_config, request_key):
 			return request_id
 		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
 		return 0
@@ -505,7 +516,9 @@ func start_turn_analysis_background(player_state: Dictionary, table_state: Dicti
 		"kind": "turn",
 		"seat": seat,
 		"thread": thread,
+		"request_key": request_key,
 	}
+	_remember_active_async_request(request_id, request_key)
 	var started := thread.start(Callable(self, "_thread_compute_turn").bind(
 		request_id,
 		player_state.duplicate(true),
@@ -517,7 +530,7 @@ func start_turn_analysis_background(player_state: Dictionary, table_state: Dicti
 		allow_cheat
 	))
 	if started != OK:
-		active_async_requests.erase(request_id)
+		_forget_active_async_request(request_id, active_async_requests.get(request_id, {}))
 		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
 		return 0
 	return request_id
@@ -525,9 +538,14 @@ func start_turn_analysis_background(player_state: Dictionary, table_state: Dicti
 
 func start_reaction_analysis_background(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, ai_config, hu_checker, allow_cheat: bool = false) -> int:
 	var seat := int(player_state.get("seat", -1))
+	var request_key := _build_active_reaction_request_key(candidate, player_state, table_state, discard_context, rules_config, allow_cheat)
+	var existing_request_id := _find_active_async_request(request_key)
+	if existing_request_id > 0:
+		_record_duplicate_async_request("reaction", seat, existing_request_id, request_key)
+		return existing_request_id
 	var request_id := _begin_request("reaction", seat)
 	if has_native_csharp_async_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
-		if _start_native_reaction_analysis_background(request_id, candidate, player_state, table_state, discard_context, rules_config):
+		if _start_native_reaction_analysis_background(request_id, candidate, player_state, table_state, discard_context, rules_config, request_key):
 			return request_id
 		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
 		return 0
@@ -536,7 +554,9 @@ func start_reaction_analysis_background(candidate: Dictionary, player_state: Dic
 		"kind": "reaction",
 		"seat": seat,
 		"thread": thread,
+		"request_key": request_key,
 	}
+	_remember_active_async_request(request_id, request_key)
 	var started := thread.start(Callable(self, "_thread_compute_reaction").bind(
 		request_id,
 		candidate.duplicate(true),
@@ -549,7 +569,7 @@ func start_reaction_analysis_background(candidate: Dictionary, player_state: Dic
 		allow_cheat
 	))
 	if started != OK:
-		active_async_requests.erase(request_id)
+		_forget_active_async_request(request_id, active_async_requests.get(request_id, {}))
 		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
 		return 0
 	return request_id
@@ -579,7 +599,7 @@ func pump_async_requests() -> int:
 		completed_ids.append(request_id)
 		delivered_count += _deliver_async_payload(payload if typeof(payload) == TYPE_DICTIONARY else {})
 	for request_id in completed_ids:
-		active_async_requests.erase(request_id)
+		_forget_active_async_request(int(request_id), active_async_requests.get(request_id, {}))
 	is_pumping_async_requests = false
 	return delivered_count
 
@@ -814,12 +834,62 @@ func _create_empty_request_state() -> Dictionary:
 	return {
 		"next_request_id": 1,
 		"inflight_count": 0,
+		"active_key_count": 0,
+		"duplicate_reuse_count": 0,
 		"last_turn_request_id": 0,
 		"last_reaction_request_id": 0,
 		"last_completed_kind": "",
 		"last_completed_request": {},
 		"last_background_request_id": 0,
+		"last_duplicate_request": {},
 	}
+
+
+func _find_active_async_request(request_key: String) -> int:
+	if request_key.is_empty():
+		return 0
+	var request_id := int(active_async_request_keys.get(request_key, 0))
+	if request_id > 0 and active_async_requests.has(request_id):
+		return request_id
+	active_async_request_keys.erase(request_key)
+	request_state["active_key_count"] = active_async_request_keys.size()
+	return 0
+
+
+func _remember_active_async_request(request_id: int, request_key: String) -> void:
+	if request_id <= 0 or request_key.is_empty():
+		return
+	active_async_request_keys[request_key] = request_id
+	request_state["active_key_count"] = active_async_request_keys.size()
+
+
+func _forget_active_async_request(request_id: int, request: Dictionary) -> void:
+	var request_key := str(request.get("request_key", ""))
+	if not request_key.is_empty() and int(active_async_request_keys.get(request_key, 0)) == request_id:
+		active_async_request_keys.erase(request_key)
+	active_async_requests.erase(request_id)
+	request_state["active_key_count"] = active_async_request_keys.size()
+
+
+func _record_duplicate_async_request(kind: String, seat: int, request_id: int, request_key: String) -> void:
+	request_state["duplicate_reuse_count"] = int(request_state.get("duplicate_reuse_count", 0)) + 1
+	request_state["last_duplicate_request"] = {
+		"kind": kind,
+		"seat": seat,
+		"request_id": request_id,
+		"key_prefix": request_key.left(160),
+		"ticks_msec": Time.get_ticks_msec(),
+	}
+
+
+func _build_active_turn_request_key(player_state: Dictionary, table_state: Dictionary, rules_config, allow_cheat: bool) -> String:
+	return "turn|%s" % _build_turn_cache_key(player_state, table_state, rules_config, allow_cheat, false)
+
+
+func _build_active_reaction_request_key(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, allow_cheat: bool) -> String:
+	var payload: Dictionary = csharp_bridge.build_reaction_transport_payload(candidate, player_state, table_state, discard_context, rules_config)
+	payload["allowCheat"] = allow_cheat
+	return "reaction|%s" % JSON.stringify(payload)
 
 
 func _build_cache_stats_snapshot() -> Dictionary:
@@ -828,6 +898,26 @@ func _build_cache_stats_snapshot() -> Dictionary:
 		"turn_cache_limit": TURN_CACHE_LIMIT,
 		"turn_cache_hits": int(performance_metrics.get("turn_cache_hits", 0)),
 		"turn_cache_misses": int(performance_metrics.get("turn_cache_misses", 0)),
+	}
+
+
+func _build_active_async_requests_snapshot() -> Dictionary:
+	var items: Array = []
+	for request_id in active_async_requests.keys():
+		var request: Dictionary = active_async_requests.get(request_id, {})
+		items.append({
+			"request_id": int(request_id),
+			"kind": str(request.get("kind", "")),
+			"seat": int(request.get("seat", -1)),
+			"native_request_id": int(request.get("native_request_id", 0)),
+			"age_ms": maxi(0, Time.get_ticks_msec() - int(request.get("started_at_ms", Time.get_ticks_msec()))),
+			"has_thread": request.has("thread"),
+			"key_prefix": str(request.get("request_key", "")).left(160),
+		})
+	return {
+		"count": active_async_requests.size(),
+		"key_count": active_async_request_keys.size(),
+		"items": items.slice(0, mini(16, items.size())),
 	}
 
 

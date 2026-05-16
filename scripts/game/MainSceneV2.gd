@@ -18,6 +18,7 @@ const AI_TURN_DELAY := 0.52
 const AI_REACTION_DELAY := 0.52
 const AI_READY_POLL_SEC := 0.03
 const AI_WATCHDOG_POLL_SEC := 0.12
+const DIAGNOSTIC_EXPORT_UI_ENABLED := false
 const OPENING_ROLL_TICK := 0.04
 const OPENING_ROLL_TICKS := 10
 const BOARD_TARGET_RATIO := 1065.0 / 772.0
@@ -317,6 +318,7 @@ var floating_ai_tuning_button: Button
 var floating_ai_helper_button: Button
 var floating_opponent_hand_button: Button
 var floating_hell_mark_button: Button
+var floating_diagnostic_export_button: Button
 var floating_left_button_bar: VBoxContainer
 var floating_left_toggle_button: Button
 var floating_preset_button: Button
@@ -1649,6 +1651,8 @@ func _apply_floating_action_button_styles() -> void:
 	_apply_floating_action_button_style(floating_opponent_hand_button, Color(0.10, 0.36, 0.27, 0.90) if opponent_hands_enabled else Color(0.09, 0.28, 0.22, 0.82), "明牌模式")
 	if floating_hell_mark_button != null:
 		_apply_floating_action_button_style(floating_hell_mark_button, Color(0.56, 0.25, 0.10, 0.92), "标记这手")
+	if floating_diagnostic_export_button != null:
+		_apply_floating_action_button_style(floating_diagnostic_export_button, Color(0.16, 0.33, 0.48, 0.90), "导出诊断")
 	if floating_preset_button != null:
 		_apply_floating_action_button_style(floating_preset_button, Color(0.10, 0.34, 0.25, 0.88), "AI预设")
 	if floating_exit_button != null:
@@ -1755,6 +1759,9 @@ func _update_floating_button_texts() -> void:
 		var snapshot := game_manager.get_snapshot()
 		floating_hell_mark_button.text = "标记"
 		floating_hell_mark_button.visible = not floating_left_buttons_collapsed and bool(snapshot.get("hell_training", {}).get("enabled", false))
+	if floating_diagnostic_export_button != null:
+		floating_diagnostic_export_button.text = "导出"
+		floating_diagnostic_export_button.visible = DIAGNOSTIC_EXPORT_UI_ENABLED and not floating_left_buttons_collapsed
 	if floating_exit_button != null:
 		floating_exit_button.visible = false
 	_apply_floating_action_button_styles()
@@ -2143,15 +2150,21 @@ func _setup_left_floating_buttons() -> void:
 	floating_ai_helper_button = _create_floating_circle_button("辅")
 	floating_opponent_hand_button = _create_floating_circle_button("明")
 	floating_hell_mark_button = _create_floating_circle_button("标")
+	floating_diagnostic_export_button = null
 	floating_exit_button = null
 	floating_preset_button.pressed.connect(_on_top_bar_button_pressed)
 	floating_ai_tuning_button.pressed.connect(_on_top_ai_tuning_button_pressed)
 	floating_ai_helper_button.pressed.connect(_on_top_ai_helper_button_pressed)
 	floating_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
 	floating_hell_mark_button.pressed.connect(_on_hell_mark_button_pressed)
+	if DIAGNOSTIC_EXPORT_UI_ENABLED:
+		floating_diagnostic_export_button = _create_floating_circle_button("导")
+		floating_diagnostic_export_button.pressed.connect(_on_diagnostic_export_button_pressed)
 	floating_left_button_bar.add_child(floating_ai_helper_button)
 	floating_left_button_bar.add_child(floating_opponent_hand_button)
 	floating_left_button_bar.add_child(floating_hell_mark_button)
+	if floating_diagnostic_export_button != null:
+		floating_left_button_bar.add_child(floating_diagnostic_export_button)
 	floating_left_button_bar.add_child(floating_preset_button)
 	floating_left_button_bar.add_child(floating_ai_tuning_button)
 
@@ -2228,6 +2241,8 @@ func _handle_left_floating_action_click(global_pos: Vector2) -> bool:
 		{"button": floating_preset_button, "action": Callable(self, "_on_top_bar_button_pressed")},
 		{"button": floating_ai_tuning_button, "action": Callable(self, "_on_top_ai_tuning_button_pressed")},
 	]
+	if DIAGNOSTIC_EXPORT_UI_ENABLED and floating_diagnostic_export_button != null:
+		targets.insert(3, {"button": floating_diagnostic_export_button, "action": Callable(self, "_on_diagnostic_export_button_pressed")})
 	for entry in targets:
 		var button: Button = entry.get("button", null)
 		var action: Callable = entry.get("action", Callable())
@@ -7089,6 +7104,46 @@ func _on_hell_mark_button_pressed() -> void:
 	game_manager.mark_current_hell_training_case("manual_mark_from_ui")
 	_update_top_bar(game_manager.get_snapshot())
 	_on_snapshot_changed(game_manager.get_snapshot())
+
+
+func _on_diagnostic_export_button_pressed() -> void:
+	if OS.has_feature("android"):
+		OS.request_permissions()
+	var result := game_manager.export_diagnostic_package()
+	var message := _build_diagnostic_export_message(result)
+	var path_to_copy := str(result.get("path_absolute", result.get("path", "")))
+	var download_copy: Dictionary = result.get("download_copy", {})
+	if bool(download_copy.get("ok", false)):
+		path_to_copy = str(download_copy.get("path", path_to_copy))
+	if bool(download_copy.get("ok", false)) and not path_to_copy.is_empty():
+		DisplayServer.clipboard_set(path_to_copy)
+	else:
+		var internal_path := str(result.get("path", ""))
+		var diagnostic_text := FileAccess.get_file_as_string(internal_path) if not internal_path.is_empty() else ""
+		if not diagnostic_text.is_empty():
+			DisplayServer.clipboard_set(diagnostic_text.left(180000))
+		elif not path_to_copy.is_empty():
+			DisplayServer.clipboard_set(path_to_copy)
+	print("[DiagnosticExport] ", JSON.stringify(result))
+	OS.alert(message, "诊断导出")
+	_update_top_bar(game_manager.get_snapshot())
+	_on_snapshot_changed(game_manager.get_snapshot())
+
+
+func _build_diagnostic_export_message(result: Dictionary) -> String:
+	if not bool(result.get("ok", false)):
+		return "诊断包导出失败。\n错误：%s\n内部路径：%s" % [
+			str(result.get("error", "unknown")),
+			str(result.get("path_absolute", result.get("path", ""))),
+		]
+	var download_copy: Dictionary = result.get("download_copy", {})
+	if bool(download_copy.get("ok", false)):
+		return "诊断包已导出到下载目录，并已复制文件路径。\n\n%s" % str(download_copy.get("path", ""))
+	var internal_path := str(result.get("path_absolute", result.get("path", "")))
+	return "诊断包已生成，但安卓拒绝写入下载目录。\n\n我已把诊断内容复制到剪贴板；也可以用 ADB 读取内部文件。\n\n内部路径：%s\n\n下载目录错误：%s" % [
+		internal_path,
+		str(download_copy.get("error", "unknown")),
+	]
 
 
 func _on_top_exit_pressed() -> void:

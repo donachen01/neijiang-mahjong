@@ -159,22 +159,28 @@ if (!SmokeBeliefReuseWithinReaction(facade))
     return 21;
 }
 
+if (!SmokeMobileReactionSkipsShortSearch(facade))
+{
+    Console.Error.WriteLine("mobile_reaction_short_search_smoke_failed");
+    return 22;
+}
+
 if (!SmokeBeliefReuseWithinSelfAction(facade))
 {
     Console.Error.WriteLine("belief_reuse_self_action_smoke_failed");
-    return 22;
+    return 23;
 }
 
 if (!SmokeBeliefCacheExactStateHit())
 {
     Console.Error.WriteLine("belief_cache_exact_state_smoke_failed");
-    return 23;
+    return 24;
 }
 
 if (!SmokeEarlyBigPairRouteKeepsPair(facade))
 {
     Console.Error.WriteLine("early_big_pair_route_smoke_failed");
-    return 24;
+    return 25;
 }
 
 return 0;
@@ -279,6 +285,28 @@ static bool SmokeBeliefReuseWithinSelfAction(NeijiangAiFacade facade)
     var diagnostics = NeijiangBeliefEngine.GetDiagnostics();
     Console.WriteLine($"belief_self_action={result.Action.ActionType} calls={diagnostics.CallCount} builds={diagnostics.BuildCount} hits={diagnostics.CacheHits}");
     return diagnostics.CallCount <= 1 && diagnostics.BuildCount <= 1;
+}
+
+static bool SmokeMobileReactionSkipsShortSearch(NeijiangAiFacade facade)
+{
+    var tile = NeijiangTileCodec.EncodeTileType(1, 9);
+    var hand18 = new int[18];
+    hand18[0] = 1;
+    hand18[1] = 1;
+    hand18[2] = 1;
+    hand18[3] = 1;
+    hand18[4] = 1;
+    hand18[5] = 1;
+    hand18[11] = 1;
+    hand18[12] = 1;
+    hand18[13] = 1;
+    hand18[14] = 1;
+    hand18[15] = 1;
+    hand18[tile] = 2;
+    var state = NeijiangStateCodec.FromRaw(3, 3, 2, 14, hand18, new int[18]);
+    var result = facade.DecideReaction(state, tile, false, true, false, 2, "discard", forceLightweight: true);
+    Console.WriteLine($"mobile_reaction_action={result.Action.ActionType} search_used={result.SearchUsed} simulations={result.SearchSimulations}");
+    return !result.SearchUsed && result.SearchSimulations == 0;
 }
 
 static bool SmokeBeliefCacheExactStateHit()

@@ -525,7 +525,8 @@ static object BuildReactionObject(NeijiangAiFacade facade, ReactionPayload paylo
         payload.CanPeng,
         payload.CanGang,
         payload.SourceSeat,
-        payload.ReactionType);
+        payload.ReactionType,
+        payload.MobileSpeedMode);
     return new
     {
         action = result.Action.ActionType.ToString().ToLowerInvariant(),
@@ -831,6 +832,8 @@ internal class DiscardPayload
     public bool[]? IsCalled { get; init; }
     public bool[]? IsReady { get; init; }
     public bool[]? HasHu { get; init; }
+    public bool MobileSpeedMode { get; init; }
+    public bool CompactResult { get; init; }
 }
 
 internal sealed class ReactionPayload : DiscardPayload

@@ -9,7 +9,8 @@ func _init() -> void:
 
 func _run() -> void:
 	var failures: Array[String] = []
-	_run_test("startup_defaults_to_hell_ai_without_training_recording", _test_startup_defaults_to_hell_ai_without_training_recording, failures)
+	_run_test("startup_defaults_to_formal_release", _test_startup_defaults_to_formal_release, failures)
+	_run_test("formal_release_disables_background_logging", _test_formal_release_disables_background_logging, failures)
 	_run_test("neijiang_uses_two_suits_without_ding_que", _test_neijiang_uses_two_suits_without_ding_que, failures)
 	_run_test("neijiang_initial_deal_uses_72_tiles", _test_neijiang_initial_deal_uses_72_tiles, failures)
 	_run_test("ai_async_decisions_reject_changed_hand_signature", _test_ai_async_decisions_reject_changed_hand_signature, failures)
@@ -44,7 +45,7 @@ func _test_neijiang_uses_two_suits_without_ding_que():
 	return true
 
 
-func _test_startup_defaults_to_hell_ai_without_training_recording():
+func _test_startup_defaults_to_formal_release():
 	var game_state = _build_game_state()
 	var snapshot: Dictionary = game_state.get_debug_snapshot()
 	var config: Dictionary = snapshot.get("ai_tuning_config", {})
@@ -52,11 +53,25 @@ func _test_startup_defaults_to_hell_ai_without_training_recording():
 		return "expected startup preset hell, got %s" % [config]
 	if int(snapshot.get("ai_level_index", -1)) != int(GAME_STATE_SCRIPT.AILevel.CHEATING):
 		return "expected startup ai level cheating in hell mode, got %s" % [snapshot.get("ai_level_index", -1)]
+	if bool(config.get("diagnostics_recording_enabled", false)):
+		return "expected diagnostics recording disabled in formal release, got %s" % [config]
 	var hell: Dictionary = snapshot.get("hell_training", {})
 	if bool(hell.get("enabled", false)):
 		return "expected hell diagnostics disabled at startup, got %s" % [hell]
-	if not str(hell.get("session_id", "")).is_empty():
-		return "expected no startup hell session id, got %s" % [hell]
+	var recording: Dictionary = snapshot.get("ai_analysis_recording", {})
+	if bool(recording.get("enabled", true)):
+		return "expected ai analysis recording disabled, got %s" % [recording]
+	return true
+
+
+func _test_formal_release_disables_background_logging():
+	var game_state = _build_game_state()
+	game_state._record_ai_chain_debug("diagnostic_export_test_probe")
+	if not game_state.ai_chain_debug_history.is_empty():
+		return "expected chain debug history to remain empty in formal release, got %s" % [game_state.ai_chain_debug_history]
+	var result: Dictionary = game_state.export_diagnostic_package(false)
+	if bool(result.get("ok", false)) or str(result.get("error", "")) != "diagnostic_export_disabled":
+		return "expected diagnostic export disabled in formal release, got %s" % [result]
 	return true
 
 

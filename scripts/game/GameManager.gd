@@ -44,6 +44,12 @@ func set_hell_diagnostics_recording_enabled(enabled: bool) -> bool:
 	return false if game_state == null else bool(game_state.call("set_hell_diagnostics_recording_enabled", enabled))
 
 
+func export_diagnostic_package() -> Dictionary:
+	if game_state == null or not game_state.has_method("export_diagnostic_package"):
+		return {"ok": false, "error": "game_state_export_unavailable"}
+	return game_state.call("export_diagnostic_package")
+
+
 func set_ai_tuning_value(key: String, value: int) -> bool:
 	return false if game_state == null else bool(game_state.call("set_ai_tuning_value", key, value))
 

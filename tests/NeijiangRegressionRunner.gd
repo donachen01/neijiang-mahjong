@@ -87,7 +87,7 @@ func _ready() -> void:
 	_run_test("neijiang_run_ai_turn_executes_after_background_analysis", _test_neijiang_run_ai_turn_executes_after_background_analysis, failures)
 	_run_test("neijiang_turn_background_timeout_keeps_waiting_main_chain", _test_neijiang_turn_background_timeout_keeps_waiting_main_chain, failures)
 	_run_test("neijiang_reaction_background_timeout_keeps_waiting_main_chain", _test_neijiang_reaction_background_timeout_keeps_waiting_main_chain, failures)
-	_run_test("neijiang_stale_reaction_request_restarts_csharp_chain", _test_neijiang_stale_reaction_request_restarts_csharp_chain, failures)
+	_run_test("neijiang_slow_reaction_request_keeps_single_csharp_chain", _test_neijiang_slow_reaction_request_keeps_single_csharp_chain, failures)
 
 	if failures.is_empty():
 		print("NEIJIANG REGRESSION OK")
@@ -3571,7 +3571,7 @@ func _test_neijiang_reaction_background_timeout_keeps_waiting_main_chain():
 	return true
 
 
-func _test_neijiang_stale_reaction_request_restarts_csharp_chain():
+func _test_neijiang_slow_reaction_request_keeps_single_csharp_chain():
 	var game_state = _build_neijiang_test_game_state()
 	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
 	game_state.current_turn_seat = 0
@@ -3614,15 +3614,13 @@ func _test_neijiang_stale_reaction_request_restarts_csharp_chain():
 	}
 	var prepared: bool = bool(game_state.prepare_ai_reaction_decision())
 	if not prepared:
-		return "expected stale reaction request to restart and keep waiting on C# chain"
-	if game_state.pending_ai_reaction_request_id == 1001:
-		return "expected stale reaction request id to be replaced"
-	if game_state.pending_ai_reaction_request_id <= 0:
-		return "expected restarted reaction request id"
+		return "expected slow reaction request to keep waiting on C# chain"
+	if game_state.pending_ai_reaction_request_id != 1001:
+		return "expected slow reaction request id to remain active"
 	if not game_state.pending_ai_reaction_decision.is_empty():
-		return "expected no GDScript fallback decision after stale restart"
-	if game_state.debug_last_message.find("重新请求") == -1:
-		return "expected stale restart debug message, got %s" % [game_state.debug_last_message]
+		return "expected no GDScript fallback decision while waiting for C# chain"
+	if game_state.debug_last_message.find("较慢") == -1:
+		return "expected slow wait debug message, got %s" % [game_state.debug_last_message]
 	return true
 
 
