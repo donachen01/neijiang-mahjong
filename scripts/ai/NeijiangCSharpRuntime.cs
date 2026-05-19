@@ -132,7 +132,8 @@ public partial class NeijiangCSharpRuntime : Node
                 payload.AllHands18.Select(item => (IReadOnlyList<int>)item).ToArray(),
                 payload.ExactWall18,
                 payload.FairTileType,
-                payload.ActualTileType);
+                payload.ActualTileType,
+                payload.CurrentScores);
             return JsonSerializer.Serialize(new
             {
                 ok = true,
@@ -144,8 +145,15 @@ public partial class NeijiangCSharpRuntime : Node
                 severity = result.Severity,
                 exactDealIn = result.ExactDealIn,
                 fairExactDealIn = result.FairExactDealIn,
+                fairFeedsHumanHu = result.FairFeedsHumanHu,
+                fairFeedsHumanPeng = result.FairFeedsHumanPeng,
+                fairFeedsHumanGang = result.FairFeedsHumanGang,
                 fairDealInTargetSeats = result.FairDealInTargetSeats,
                 oracleExactDealIn = result.OracleExactDealIn,
+                oracleFeedsHumanHu = result.OracleFeedsHumanHu,
+                oracleFeedsHumanPeng = result.OracleFeedsHumanPeng,
+                oracleFeedsHumanGang = result.OracleFeedsHumanGang,
+                humanPressureLevel = result.HumanPressureLevel,
                 oracleDealInTargetSeats = result.OracleDealInTargetSeats,
                 exactKeepsReady = result.ExactKeepsReady,
                 exactWallRemaining = result.ExactWallRemaining,
@@ -468,6 +476,9 @@ public partial class NeijiangCSharpRuntime : Node
             sameShantenImprovementCount = item.SameShantenImprovementCount,
             middleTileFlexibility = item.MiddleTileFlexibility,
             shapeScore = item.ShapeScore,
+            breaksPair = item.BreaksPair,
+            breaksTriplet = item.BreaksTriplet,
+            setPreservationScore = item.SetPreservationScore,
             waitShapeLabel = item.WaitShapeLabel,
             waitShapeScore = item.WaitShapeScore,
             ryanmenWaitCount = item.RyanmenWaitCount,
@@ -527,6 +538,9 @@ public partial class NeijiangCSharpRuntime : Node
             sameShantenImprovementCount = item.SameShantenImprovementCount,
             middleTileFlexibility = item.MiddleTileFlexibility,
             shapeScore = item.ShapeScore,
+            breaksPair = item.BreaksPair,
+            breaksTriplet = item.BreaksTriplet,
+            setPreservationScore = item.SetPreservationScore,
             waitShapeLabel = item.WaitShapeLabel,
             waitShapeScore = item.WaitShapeScore,
             ryanmenWaitCount = item.RyanmenWaitCount,
@@ -566,6 +580,8 @@ public partial class NeijiangCSharpRuntime : Node
         if (payload.IsCalled is { Length: 4 }) Array.Copy(payload.IsCalled, state.IsCalled, 4);
         if (payload.IsReady is { Length: 4 }) Array.Copy(payload.IsReady, state.IsReady, 4);
         if (payload.HasHu is { Length: 4 }) Array.Copy(payload.HasHu, state.HasHu, 4);
+        state.IsBaoJiao = payload.IsBaoJiao;
+        state.LastDrawTileType = payload.LastDrawTileType;
         return state;
     }
 
@@ -742,6 +758,8 @@ public partial class NeijiangCSharpRuntime : Node
         public bool[] IsCalled { get; set; } = Array.Empty<bool>();
         public bool[] IsReady { get; set; } = Array.Empty<bool>();
         public bool[] HasHu { get; set; } = Array.Empty<bool>();
+        public bool IsBaoJiao { get; set; }
+        public int LastDrawTileType { get; set; } = -1;
         public bool MobileSpeedMode { get; set; }
         public bool CompactResult { get; set; }
     }
@@ -768,6 +786,7 @@ public partial class NeijiangCSharpRuntime : Node
     {
         public List<List<int>> AllHands18 { get; set; } = new();
         public List<int> ExactWall18 { get; set; } = new();
+        public List<int> CurrentScores { get; set; } = new();
         public int FairTileType { get; set; } = -1;
         public int ActualTileType { get; set; } = -1;
     }

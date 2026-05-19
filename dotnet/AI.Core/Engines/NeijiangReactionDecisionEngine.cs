@@ -261,6 +261,8 @@ public sealed class NeijiangReactionDecisionEngine
             score -= 180;
         if (roundStage <= 0 && followUp.Shanten == 0 && currentFollowUp.Shanten > 0 && followUp.LiveUkeire <= 3 && currentFollowUp.LiveUkeire >= 14)
             score -= 1080;
+        if (ShouldPassWideNoSpeedPeng(currentFollowUp, followUp, roundStage, maxReadyPosterior))
+            score -= 1180;
         if (reDiscardsClaimedTile)
             score -= 640;
         if (reDiscardsClaimedTile && state.Hand18[reactionTileType] >= 3)
@@ -297,6 +299,8 @@ public sealed class NeijiangReactionDecisionEngine
             reasons.Add("后期高后验且首打高危，碰牌未降向听，C# 强制降权");
         if (roundStage <= 0 && followUp.Shanten == 0 && currentFollowUp.Shanten > 0 && followUp.LiveUkeire <= 3 && currentFollowUp.LiveUkeire >= 14)
             reasons.Add("早期碰后虽成叫但听口过窄，放弃低价值碰牌");
+        if (ShouldPassWideNoSpeedPeng(currentFollowUp, followUp, roundStage, maxReadyPosterior))
+            reasons.Add("当前不碰也有宽进张，碰牌不降向听，优先保留门前弹性");
 
         return new NeijiangReactionDecisionResult
         {
@@ -691,6 +695,13 @@ public sealed class NeijiangReactionDecisionEngine
             return false;
         if (threatLevel >= 4 && maxReadyPosterior >= 0.70 && pengResult.ShantenAfter > 0 && pengResult.ShantenAfter >= currentFollowUp.Shanten)
             return false;
+        if (roundStage >= 2
+            && pengResult.ShantenAfter >= currentFollowUp.Shanten
+            && pengResult.LiveUkeireAfter + 4 < currentFollowUp.LiveUkeire
+            && (state.WallCount <= 5 || threatLevel >= 4 || maxReadyPosterior >= 0.56))
+        {
+            return false;
+        }
         var meldCount = state.Melds18[state.SeatIndex].Count / 3;
         if (IsSevenPairsTenpai(state.Hand18, meldCount))
             return false;
@@ -700,6 +711,8 @@ public sealed class NeijiangReactionDecisionEngine
         var handAfter = RemoveCopies(state.Hand18, reactionTileType, 2);
         var followUp = EvaluateBestFollowUp(handAfter, state.Remaining18, meldCount + 1);
         if (followUp.BestDiscardTile == reactionTileType && followUp.BestDiscardTile >= 0)
+            return false;
+        if (ShouldPassWideNoSpeedPeng(currentFollowUp, followUp, roundStage, maxReadyPosterior))
             return false;
         var pairCount = CountPairs(state.Hand18);
         if (pengResult.ShantenAfter <= 0)
@@ -711,6 +724,21 @@ public sealed class NeijiangReactionDecisionEngine
         if (pairCount >= 4 && roundStage <= 1)
             return true;
         return roundStage <= 1 && pengResult.LiveUkeireAfter + 4 >= currentFollowUp.LiveUkeire;
+    }
+
+    private static bool ShouldPassWideNoSpeedPeng(
+        FollowUpSummary currentFollowUp,
+        FollowUpSummary followUp,
+        int roundStage,
+        double maxReadyPosterior)
+    {
+        return roundStage <= 1
+            && maxReadyPosterior < 0.56
+            && currentFollowUp.Shanten >= 2
+            && followUp.Shanten >= currentFollowUp.Shanten
+            && currentFollowUp.LiveUkeire >= 12
+            && followUp.LiveUkeire >= currentFollowUp.LiveUkeire
+            && followUp.Shanten > 1;
     }
 
     private static bool ShouldForceMeldedGang(

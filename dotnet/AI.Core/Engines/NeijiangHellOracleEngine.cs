@@ -12,15 +12,23 @@ public sealed class NeijiangHellOracleEngine
         IReadOnlyList<IReadOnlyList<int>> allHands18,
         IReadOnlyList<int> exactWall18,
         int fairTileType = -1,
-        int actualTileType = -1)
+        int actualTileType = -1,
+        IReadOnlyList<int>? currentScores = null)
     {
         var hand = state.Hand18;
         var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var humanPressureLevel = ResolveHumanPressureLevel(state, currentScores);
+        var humanHuPenalty = 30000 + (humanPressureLevel * 7000);
+        var humanGangPenalty = 9000 + (humanPressureLevel * 2500);
+        var humanPengPenalty = 4500 + (humanPressureLevel * 1500);
         var bestTile = -1;
         var bestScore = int.MinValue;
         var bestReasons = new List<string>();
         var bestExactDealIn = false;
         var bestDealInTargetSeats = Array.Empty<int>();
+        var bestFeedsHumanHu = false;
+        var bestFeedsHumanPeng = false;
+        var bestFeedsHumanGang = false;
         var bestKeepsReady = false;
         var bestWallRemaining = 0;
 
@@ -31,6 +39,9 @@ public sealed class NeijiangHellOracleEngine
             var remainingHand = RemoveOne(hand, tileType);
             var dealInTargetSeats = ResolveDealInTargetSeats(state, allHands18, tileType);
             var exactDealIn = dealInTargetSeats.Count > 0;
+            var feedsHumanHu = dealInTargetSeats.Contains(0);
+            var feedsHumanGang = CanHumanGang(state, allHands18, tileType);
+            var feedsHumanPeng = !feedsHumanGang && CanHumanPeng(state, allHands18, tileType);
             var shanten = _shanten.CalcShantenAfterDiscard(hand, tileType, meldCount);
             var (_, liveUkeire, improvingTiles) = _ukeire.CalcUkeire(hand, exactWall18.ToArray(), tileType, meldCount);
             var exactReadyTiles = GetExactReadyTiles(remainingHand, meldCount);
@@ -45,7 +56,10 @@ public sealed class NeijiangHellOracleEngine
                 + exactWallRemaining * 120
                 + waitCount * 220
                 + (keepsReady ? 500 : 0)
-                - (exactDealIn ? 12000 : 0);
+                - (exactDealIn ? 12000 : 0)
+                - (feedsHumanHu ? humanHuPenalty : 0)
+                - (feedsHumanGang ? humanGangPenalty : 0)
+                - (feedsHumanPeng ? humanPengPenalty : 0);
             var reasons = new List<string>
             {
                 $"透视向听 {shanten}",
@@ -53,6 +67,12 @@ public sealed class NeijiangHellOracleEngine
             };
             if (exactDealIn)
                 reasons.Add("透视：此张会点炮");
+            if (feedsHumanHu)
+                reasons.Add($"围剿：避开本家胡牌 P{humanPressureLevel}");
+            if (feedsHumanGang)
+                reasons.Add($"围剿：避开本家明杠加速 P{humanPressureLevel}");
+            else if (feedsHumanPeng)
+                reasons.Add($"围剿：避开本家碰牌加速 P{humanPressureLevel}");
             if (keepsReady)
                 reasons.Add("透视：保听/成叫");
             if (score > bestScore)
@@ -62,6 +82,9 @@ public sealed class NeijiangHellOracleEngine
                 bestReasons = reasons;
                 bestExactDealIn = exactDealIn;
                 bestDealInTargetSeats = dealInTargetSeats.ToArray();
+                bestFeedsHumanHu = feedsHumanHu;
+                bestFeedsHumanPeng = feedsHumanPeng;
+                bestFeedsHumanGang = feedsHumanGang;
                 bestKeepsReady = keepsReady;
                 bestWallRemaining = exactWallRemaining;
             }
@@ -71,6 +94,9 @@ public sealed class NeijiangHellOracleEngine
             ? ResolveDealInTargetSeats(state, allHands18, fairTileType)
             : Array.Empty<int>();
         var fairExactDealIn = fairDealInTargetSeats.Count > 0;
+        var fairFeedsHumanHu = fairDealInTargetSeats.Contains(0);
+        var fairFeedsHumanGang = fairTileType >= 0 && CanHumanGang(state, allHands18, fairTileType);
+        var fairFeedsHumanPeng = fairTileType >= 0 && !fairFeedsHumanGang && CanHumanPeng(state, allHands18, fairTileType);
         var fairHand = fairTileType >= 0 && fairTileType < hand.Length && hand[fairTileType] > 0
             ? RemoveOne(hand, fairTileType)
             : Array.Empty<int>();
@@ -83,11 +109,17 @@ public sealed class NeijiangHellOracleEngine
             fairTileType,
             bestTile,
             fairExactDealIn,
+            fairFeedsHumanHu,
+            bestFeedsHumanHu,
+            fairFeedsHumanPeng,
+            bestFeedsHumanPeng,
+            fairFeedsHumanGang,
+            bestFeedsHumanGang,
             bestKeepsReady,
             fairReadyTiles.Count > 0,
             bestWallRemaining,
             fairExactWallRemaining);
-        var severity = ResolveSeverity(category, fairTileType, bestTile, state, allHands18);
+        var severity = ResolveSeverity(category, fairTileType, bestTile, state, allHands18, fairFeedsHumanHu, fairFeedsHumanGang);
         return new NeijiangHellOracleResult
         {
             DecisionType = "discard",
@@ -97,6 +129,13 @@ public sealed class NeijiangHellOracleEngine
             ExactDealIn = bestExactDealIn,
             FairExactDealIn = fairExactDealIn,
             OracleExactDealIn = bestExactDealIn,
+            FairFeedsHumanHu = fairFeedsHumanHu,
+            OracleFeedsHumanHu = bestFeedsHumanHu,
+            FairFeedsHumanPeng = fairFeedsHumanPeng,
+            OracleFeedsHumanPeng = bestFeedsHumanPeng,
+            FairFeedsHumanGang = fairFeedsHumanGang,
+            OracleFeedsHumanGang = bestFeedsHumanGang,
+            HumanPressureLevel = humanPressureLevel,
             FairDealInTargetSeats = fairDealInTargetSeats,
             OracleDealInTargetSeats = bestDealInTargetSeats,
             ExactKeepsReady = bestKeepsReady,
@@ -112,6 +151,12 @@ public sealed class NeijiangHellOracleEngine
         int fairTileType,
         int oracleTileType,
         bool fairExactDealIn,
+        bool fairFeedsHumanHu,
+        bool oracleFeedsHumanHu,
+        bool fairFeedsHumanPeng,
+        bool oracleFeedsHumanPeng,
+        bool fairFeedsHumanGang,
+        bool oracleFeedsHumanGang,
         bool oracleKeepsReady,
         bool fairKeepsReady,
         int oracleWallRemaining,
@@ -121,6 +166,12 @@ public sealed class NeijiangHellOracleEngine
             return "missing_result";
         if (fairTileType == oracleTileType)
             return "same_action";
+        if (fairFeedsHumanHu && !oracleFeedsHumanHu)
+            return "human_hu_suppression";
+        if (fairFeedsHumanGang && !oracleFeedsHumanGang)
+            return "human_gang_suppression";
+        if (fairFeedsHumanPeng && !oracleFeedsHumanPeng)
+            return "human_peng_suppression";
         if (fairExactDealIn)
             return "risk_underestimated";
         if (state.WallCount <= 6 && oracleKeepsReady && !fairKeepsReady)
@@ -137,12 +188,16 @@ public sealed class NeijiangHellOracleEngine
         int fairTileType,
         int oracleTileType,
         NeijiangStateView state,
-        IReadOnlyList<IReadOnlyList<int>> allHands18)
+        IReadOnlyList<IReadOnlyList<int>> allHands18,
+        bool fairFeedsHumanHu,
+        bool fairFeedsHumanGang)
     {
         if (category == "same_action")
             return "none";
         if (category == "missing_result")
             return "medium";
+        if (fairFeedsHumanHu || fairFeedsHumanGang)
+            return "high";
         if (fairTileType >= 0 && AnyOpponentCanHu(state, allHands18, fairTileType))
             return "high";
         return category == "risk_underestimated" ? "high" : "medium";
@@ -150,6 +205,44 @@ public sealed class NeijiangHellOracleEngine
 
     private static bool AnyOpponentCanHu(NeijiangStateView state, IReadOnlyList<IReadOnlyList<int>> allHands18, int discardTileType)
         => ResolveDealInTargetSeats(state, allHands18, discardTileType).Count > 0;
+
+    private static int ResolveHumanPressureLevel(NeijiangStateView state, IReadOnlyList<int>? currentScores)
+    {
+        if (currentScores is null || currentScores.Count < 4 || state.SeatIndex == 0)
+            return 1;
+        var humanScore = currentScores[0];
+        var aiScore = currentScores[state.SeatIndex];
+        var bestAiScore = currentScores
+            .Take(4)
+            .Where((_, seat) => seat != 0)
+            .DefaultIfEmpty(aiScore)
+            .Max();
+        if (humanScore >= bestAiScore)
+            return 4;
+        if (humanScore >= aiScore)
+            return 3;
+        if (humanScore + 8 >= bestAiScore)
+            return 2;
+        return 1;
+    }
+
+    private static bool CanHumanPeng(NeijiangStateView state, IReadOnlyList<IReadOnlyList<int>> allHands18, int discardTileType)
+        => CanHumanCall(state, allHands18, discardTileType, 2);
+
+    private static bool CanHumanGang(NeijiangStateView state, IReadOnlyList<IReadOnlyList<int>> allHands18, int discardTileType)
+        => CanHumanCall(state, allHands18, discardTileType, 3);
+
+    private static bool CanHumanCall(
+        NeijiangStateView state,
+        IReadOnlyList<IReadOnlyList<int>> allHands18,
+        int discardTileType,
+        int requiredCount)
+    {
+        if (state.SeatIndex == 0 || discardTileType is < 0 or >= 18 || state.HasHu[0] || allHands18.Count <= 0)
+            return false;
+        var humanHand = allHands18[0];
+        return discardTileType < humanHand.Count && humanHand[discardTileType] >= requiredCount;
+    }
 
     private static IReadOnlyList<int> ResolveDealInTargetSeats(NeijiangStateView state, IReadOnlyList<IReadOnlyList<int>> allHands18, int discardTileType)
     {

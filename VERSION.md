@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.30`
+Current app version: `1.0.38`
 
-`1.0.30` keeps the smoother async AI/input path, tightens bao-gang declaration rules, and adds player-selected bao-gang options during bao-jiao.
+`1.0.38` fixes the hell-challenge async discard oracle path, improves bao-gang dialog readability, and strengthens bao-jiao/risk regression coverage.
 
 ## Versioning Workflow
 

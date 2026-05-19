@@ -44,6 +44,7 @@ func _ready() -> void:
 	_run_test("neijiang_hu_jiao_zhuan_yi_excludes_winner_self_from_payers", _test_neijiang_hu_jiao_zhuan_yi_excludes_winner_self_from_payers, failures)
 	_run_test("neijiang_qing_yi_se_gui_gang_pao_with_transfer_scores_twenty", _test_neijiang_qing_yi_se_gui_gang_pao_with_transfer_scores_twenty, failures)
 	_run_test("neijiang_auto_marks_tian_he_on_opening_self_hu", _test_neijiang_auto_marks_tian_he_on_opening_self_hu, failures)
+	_run_test("neijiang_opening_dealer_self_hu_without_last_draw_is_available", _test_neijiang_opening_dealer_self_hu_without_last_draw_is_available, failures)
 	_run_test("neijiang_auto_marks_di_hu_on_dealer_first_discard", _test_neijiang_auto_marks_di_hu_on_dealer_first_discard, failures)
 	_run_test("neijiang_auto_marks_hai_di_on_last_tile_win", _test_neijiang_auto_marks_hai_di_on_last_tile_win, failures)
 	_run_test("neijiang_draw_assessment_marks_bao_jiao_wei_cheng", _test_neijiang_draw_assessment_marks_bao_jiao_wei_cheng, failures)
@@ -1556,6 +1557,36 @@ func _test_neijiang_auto_marks_tian_he_on_opening_self_hu():
 	var marks: Array = game_state.players[0].get("rule_marks", [])
 	if not marks.has("天和"):
 		return "expected 天和 to be auto-marked, got %s" % [marks]
+	return true
+
+
+func _test_neijiang_opening_dealer_self_hu_without_last_draw_is_available():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
+	game_state.current_turn_seat = 0
+	game_state.current_dealer_seat = 0
+	game_state.last_draw_tile = {}
+	game_state.last_turn_context = {
+		"seat": 0,
+		"draw_reason": "opening_discard",
+	}
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, [
+			_make_tile(801, "tiao", 1), _make_tile(802, "tiao", 1), _make_tile(803, "tiao", 1),
+			_make_tile(804, "tiao", 2), _make_tile(805, "tiao", 3), _make_tile(806, "tiao", 4),
+			_make_tile(807, "tiao", 5), _make_tile(808, "tiao", 6), _make_tile(809, "tiao", 7),
+			_make_tile(810, "tong", 2), _make_tile(811, "tong", 3), _make_tile(812, "tong", 4),
+			_make_tile(813, "tong", 9), _make_tile(814, "tong", 9),
+		]),
+		_make_player_neijiang(1, []),
+		_make_player_neijiang(2, []),
+		_make_player_neijiang(3, []),
+	])
+	if not bool(game_state.can_human_self_hu(0)):
+		return "expected opening dealer 14-tile hu to be available without last_draw_tile"
+	var decision: Dictionary = game_state._build_ai_self_action_decision(0, game_state._build_player_state(0), game_state._build_table_state())
+	if str(decision.get("action", "")) != "self_hu":
+		return "expected opening dealer self action to choose self_hu before discard, got %s" % [decision]
 	return true
 
 

@@ -37,6 +37,9 @@ public sealed class NeijiangCandidateDetail
     public int SameShantenImprovementCount { get; init; }
     public int MiddleTileFlexibility { get; init; }
     public double ShapeScore { get; init; }
+    public bool BreaksPair { get; init; }
+    public bool BreaksTriplet { get; init; }
+    public double SetPreservationScore { get; init; }
     public string WaitShapeLabel { get; init; } = string.Empty;
     public double WaitShapeScore { get; init; }
     public int RyanmenWaitCount { get; init; }

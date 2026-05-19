@@ -123,6 +123,24 @@ if (!SmokeHellOracleRejectsExactDealIn())
     return 15;
 }
 
+if (!SmokeHellOracleAvoidsFeedingHumanCalls())
+{
+    Console.Error.WriteLine("hell_oracle_human_call_suppression_smoke_failed");
+    return 36;
+}
+
+if (!SmokeHellOracleAvoidsFeedingHumanGang())
+{
+    Console.Error.WriteLine("hell_oracle_human_gang_suppression_smoke_failed");
+    return 37;
+}
+
+if (!SmokeHellOracleRaisesPressureWhenHumanLeads())
+{
+    Console.Error.WriteLine("hell_oracle_human_pressure_smoke_failed");
+    return 38;
+}
+
 if (!SmokeLateWallRiskRegression(facade))
 {
     Console.Error.WriteLine("late_wall_risk_regression_smoke_failed");
@@ -141,46 +159,106 @@ if (!SmokeReactionPrefersGangWhenPengWouldRediscard(facade))
     return 18;
 }
 
+if (!SmokeReactionPassesWideNoSpeedPengFromSeedLive(facade))
+{
+    Console.Error.WriteLine("reaction_pass_wide_no_speed_peng_seedlive_smoke_failed");
+    return 19;
+}
+
+if (!SmokeLateWallPassesNarrowNoSpeedPeng(facade))
+{
+    Console.Error.WriteLine("late_wall_pass_narrow_no_speed_peng_smoke_failed");
+    return 20;
+}
+
 if (!SmokeLateWallKeepsReadyOverSafeFold(facade))
 {
     Console.Error.WriteLine("late_wall_keep_ready_smoke_failed");
-    return 19;
+    return 21;
 }
 
 if (!SmokeLateWallKeepsReadyAgainstAbandonedSuitThreat(facade))
 {
     Console.Error.WriteLine("late_wall_abandoned_suit_ready_smoke_failed");
-    return 20;
+    return 22;
+}
+
+if (!SmokeLateWallKeepsReadyFromMarkedCases(facade))
+{
+    Console.Error.WriteLine("late_wall_marked_cases_ready_smoke_failed");
+    return 23;
 }
 
 if (!SmokeBeliefReuseWithinReaction(facade))
 {
     Console.Error.WriteLine("belief_reuse_reaction_smoke_failed");
-    return 21;
+    return 24;
 }
 
 if (!SmokeMobileReactionSkipsShortSearch(facade))
 {
     Console.Error.WriteLine("mobile_reaction_short_search_smoke_failed");
-    return 22;
+    return 25;
 }
 
 if (!SmokeBeliefReuseWithinSelfAction(facade))
 {
     Console.Error.WriteLine("belief_reuse_self_action_smoke_failed");
-    return 23;
+    return 26;
 }
 
 if (!SmokeBeliefCacheExactStateHit())
 {
     Console.Error.WriteLine("belief_cache_exact_state_smoke_failed");
-    return 24;
+    return 27;
 }
 
 if (!SmokeEarlyBigPairRouteKeepsPair(facade))
 {
     Console.Error.WriteLine("early_big_pair_route_smoke_failed");
-    return 25;
+    return 28;
+}
+
+if (!SmokeAvoidsUnnecessaryTripletBreak(facade))
+{
+    Console.Error.WriteLine("avoid_unnecessary_triplet_break_smoke_failed");
+    return 29;
+}
+
+if (!SmokePrefersOrphanTerminalFromMarkedCases(facade))
+{
+    Console.Error.WriteLine("orphan_terminal_marked_cases_smoke_failed");
+    return 30;
+}
+
+if (!SmokePrefersIsolatedTerminalOverBreakingRuns(facade))
+{
+    Console.Error.WriteLine("isolated_terminal_over_run_smoke_failed");
+    return 31;
+}
+
+if (!SmokeHaidiPreservesPairWaitOverFutureShape(facade))
+{
+    Console.Error.WriteLine("haidi_pair_wait_smoke_failed");
+    return 32;
+}
+
+if (!SmokeBaoJiaoRecommendationLocksToLastDraw(facade))
+{
+    Console.Error.WriteLine("bao_jiao_recommendation_lock_smoke_failed");
+    return 33;
+}
+
+if (!SmokeReadyPreservesCentralBoneFromSeedLive(facade))
+{
+    Console.Error.WriteLine("ready_central_bone_seedlive_smoke_failed");
+    return 34;
+}
+
+if (!SmokeExtremeDangerSameSpeedOverrideFromSeedLive(facade))
+{
+    Console.Error.WriteLine("extreme_danger_same_speed_seedlive_smoke_failed");
+    return 35;
 }
 
 return 0;
@@ -365,11 +443,46 @@ static bool SmokeEarlyBigPairRouteKeepsPair(NeijiangAiFacade facade)
     var threeTong = result.Candidates.First(candidate => candidate.TileType == 11);
     var fiveTong = result.Candidates.First(candidate => candidate.TileType == 13);
     var eightTong = result.Candidates.First(candidate => candidate.TileType == 16);
-    Console.WriteLine($"early_big_pair_tile={result.Action.TileType} nine_score={nineTiao.Score} eight_tong={eightTong.Score} three_tong={threeTong.Score} five_tong={fiveTong.Score} nine_routes={string.Join('/', nineTiao.RoutesAfter)}");
-    return (result.Action.TileType == 11 || result.Action.TileType == 13)
+    var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
+    Console.WriteLine($"early_big_pair_tile={result.Action.TileType} selected_routes={string.Join('/', selected.RoutesAfter)} nine_score={nineTiao.Score} eight_tong={eightTong.Score} three_tong={threeTong.Score} five_tong={fiveTong.Score} nine_routes={string.Join('/', nineTiao.RoutesAfter)}");
+    return result.Action.TileType != 8
+        && result.Action.TileType != 15
+        && result.Action.TileType != 16
+        && selected.RoutesAfter.Contains("对对胡")
         && nineTiao.Score < Math.Max(threeTong.Score, fiveTong.Score)
         && eightTong.Score < Math.Max(threeTong.Score, fiveTong.Score)
         && (threeTong.RoutesAfter.Contains("对对胡") || fiveTong.RoutesAfter.Contains("对对胡"));
+}
+
+static bool SmokeAvoidsUnnecessaryTripletBreak(NeijiangAiFacade facade)
+{
+    var hand18 = new[] { 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 2, 1, 1, 3 };
+    var visible18 = new[] { 2, 1, 1, 0, 1, 0, 1, 0, 2, 2, 1, 0, 1, 4, 2, 1, 2, 3 };
+    var remaining18 = new[] { 2, 3, 3, 4, 3, 4, 3, 4, 2, 2, 3, 4, 3, 0, 2, 3, 2, 1 };
+    var discards = new[]
+    {
+        new[] { 16 },
+        new[] { 9, 0 },
+        new[] { 9, 8 },
+        new[] { 10, 8 },
+    };
+    var melds = new[]
+    {
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+        new[] { 13, 13, 13 },
+    };
+
+    var state = NeijiangStateCodec.FromRaw(2, 2, 2, 12, hand18, visible18, remaining18, discards, melds);
+    var result = facade.DecideDiscard(state);
+    var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
+    var nineTong = result.Candidates.First(candidate => candidate.TileType == 17);
+    Console.WriteLine($"triplet_break_regression_tile={result.Action.TileType} selected_breaks_triplet={selected.BreaksTriplet} nine_score={nineTong.Score} nine_penalty={nineTong.SetPreservationScore:F1}");
+    return result.Action.TileType != 17
+        && !selected.BreaksTriplet
+        && nineTong.BreaksTriplet
+        && nineTong.SetPreservationScore < 0;
 }
 
 static bool SmokeReactionPassesSevenPairsTenpai(NeijiangAiFacade facade)
@@ -428,6 +541,58 @@ static bool SmokeReactionPrefersGangWhenPengWouldRediscard(NeijiangAiFacade faca
     Console.WriteLine($"peng_rediscard_reaction_action={result.Action.ActionType} gang={result.ActionScores.GetValueOrDefault("gang")} peng={result.ActionScores.GetValueOrDefault("peng")}");
     return result.Action.ActionType == NeijiangActionType.Gang
         && result.ActionScores.GetValueOrDefault("gang") > result.ActionScores.GetValueOrDefault("peng");
+}
+
+static bool SmokeReactionPassesWideNoSpeedPengFromSeedLive(NeijiangAiFacade facade)
+{
+    var hand18 = new[] { 1, 1, 2, 1, 0, 0, 2, 2, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0 };
+    var discards = new[]
+    {
+        new[] { 8 },
+        new[] { 8, 5, 7 },
+        new[] { 5, 9, 13 },
+        Array.Empty<int>(),
+    };
+    var melds = new[]
+    {
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+        new[] { 0, 0, 0, 16, 16, 16 },
+        Array.Empty<int>(),
+    };
+    var state = BuildMarkedDiscardState(3, 2, 1, 12, hand18, discards, melds);
+    state.HasHu[2] = true;
+    var result = facade.DecideReaction(state, 7, false, true, false, 1, "discard");
+    Console.WriteLine($"reaction_wide_no_speed_peng_action={result.Action.ActionType} pass={result.ActionScores.GetValueOrDefault("pass")} peng={result.ActionScores.GetValueOrDefault("peng")} current={result.CurrentShanten}/{result.CurrentLiveUkeire} after={result.ShantenAfter}/{result.LiveUkeireAfter}");
+    return result.Action.ActionType == NeijiangActionType.Pass
+        && result.ShantenAfter == result.CurrentShanten
+        && result.CurrentLiveUkeire >= 12
+        && result.ActionScores.GetValueOrDefault("peng") < result.ActionScores.GetValueOrDefault("pass");
+}
+
+static bool SmokeLateWallPassesNarrowNoSpeedPeng(NeijiangAiFacade facade)
+{
+    var hand18 = new[] { 0, 2, 0, 2, 0, 0, 2, 3, 0, 0, 0, 0, 0, 0, 2, 0, 0, 2 };
+    var discards = new[]
+    {
+        new[] { 12, 10, 16, 16, 1 },
+        new[] { 4, 12, 12, 2, 10 },
+        new[] { 10, 13, 1, 0 },
+        new[] { 9, 10 },
+    };
+    var melds = new[]
+    {
+        new[] { 0, 0, 0, 2, 2, 2 },
+        new[] { 9, 9, 9, 13, 13, 13 },
+        new[] { 11, 11, 11, 4, 4, 4 },
+        Array.Empty<int>(),
+    };
+    var state = BuildMarkedDiscardState(3, 0, 0, 4, hand18, discards, melds);
+    var result = facade.DecideReaction(state, 1, false, true, false, 0, "discard");
+    Console.WriteLine($"late_wall_no_speed_peng_action={result.Action.ActionType} pass={result.ActionScores.GetValueOrDefault("pass")} peng={result.ActionScores.GetValueOrDefault("peng")} current_live={result.CurrentLiveUkeire} after_live={result.LiveUkeireAfter}");
+    return result.Action.ActionType == NeijiangActionType.Pass
+        && result.ShantenAfter == result.CurrentShanten
+        && result.ActionScores.GetValueOrDefault("peng") < result.ActionScores.GetValueOrDefault("pass");
 }
 
 static bool SmokeLateWallKeepsReadyOverSafeFold(NeijiangAiFacade facade)
@@ -514,6 +679,304 @@ static bool SmokeLateWallKeepsReadyAgainstAbandonedSuitThreat(NeijiangAiFacade f
     return result.Action.TileType == 11
         && result.Shanten == 0
         && threeTong.Danger < 56;
+}
+
+static bool SmokeLateWallKeepsReadyFromMarkedCases(NeijiangAiFacade facade)
+{
+    var case64 = BuildMarkedCase64();
+    var result64 = facade.DecideDiscard(case64);
+    var case253 = BuildMarkedCase253();
+    var result253 = facade.DecideDiscard(case253);
+    Console.WriteLine($"late_wall_marked_case64_tile={result64.Action.TileType} shanten={result64.Shanten} case253_tile={result253.Action.TileType} shanten={result253.Shanten}");
+    return result64.Shanten == 0
+        && result64.Action.TileType != 5
+        && result253.Shanten == 0
+        && result253.Action.TileType != 15;
+}
+
+static NeijiangStateView BuildMarkedCase64()
+{
+    var hand18 = new[] { 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0 };
+    var discards = new[]
+    {
+        new[] { 17, 0, 13 },
+        new[] { 6, 17, 9, 17, 5, 13 },
+        Array.Empty<int>(),
+        new[] { 1, 5, 13, 0, 5, 8, 13 },
+    };
+    var melds = new[]
+    {
+        new[] { 9, 9, 9, 7, 7, 7, 7, 10, 10, 10 },
+        new[] { 4, 4, 4, 8, 8, 8, 16, 16, 16 },
+        Array.Empty<int>(),
+        new[] { 15, 15, 15 },
+    };
+    var state = BuildMarkedDiscardState(1, 3, 1, 0, hand18, discards, melds);
+    state.HasHu[0] = true;
+    state.HasHu[2] = true;
+    return state;
+}
+
+static NeijiangStateView BuildMarkedCase253()
+{
+    var hand18 = new[] { 2, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0 };
+    var discards = new[]
+    {
+        new[] { 15, 13, 7, 14, 6, 12 },
+        new[] { 5, 16, 8, 3, 6, 7 },
+        new[] { 11, 8, 17 },
+        new[] { 5 },
+    };
+    var melds = new[]
+    {
+        new[] { 4, 4, 4 },
+        new[] { 17, 17, 17, 9, 9, 9, 9 },
+        new[] { 10, 10, 10 },
+        Array.Empty<int>(),
+    };
+    var state = BuildMarkedDiscardState(1, 2, 1, 0, hand18, discards, melds);
+    state.HasHu[2] = true;
+    state.HasHu[3] = true;
+    return state;
+}
+
+static bool SmokePrefersOrphanTerminalFromMarkedCases(NeijiangAiFacade facade)
+{
+    var case210 = BuildMarkedCase210();
+    var result210 = facade.DecideDiscard(case210);
+    var case304 = BuildMarkedCase304();
+    var result304 = facade.DecideDiscard(case304);
+    Console.WriteLine($"orphan_terminal_case210_tile={result210.Action.TileType} case304_tile={result304.Action.TileType}");
+    return result210.Action.TileType == 17
+        && result304.Action.TileType == 17;
+}
+
+static bool SmokePrefersIsolatedTerminalOverBreakingRuns(NeijiangAiFacade facade)
+{
+    var hand18 = new[]
+    {
+        1, 0, 0, 1, 1, 1, 1, 2, 0,
+        1, 1, 1, 1, 1, 1, 1, 0, 0
+    };
+    var discards = new[]
+    {
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+        new[] { 2 },
+        Array.Empty<int>(),
+    };
+    var melds = new[]
+    {
+        new[] { 5, 5, 5 },
+        Array.Empty<int>(),
+        new[] { 1, 1, 1 },
+        Array.Empty<int>(),
+    };
+    var state = BuildMarkedDiscardState(1, 2, 1, 18, hand18, discards, melds);
+    var result = facade.DecideDiscard(state);
+    var oneTiao = result.Candidates.First(candidate => candidate.TileType == 0);
+    var oneTong = result.Candidates.First(candidate => candidate.TileType == 9);
+    var eightTiao = result.Candidates.First(candidate => candidate.TileType == 7);
+    Console.WriteLine($"isolated_terminal_case_tile={result.Action.TileType} one_tiao={oneTiao.Score} one_tong={oneTong.Score} eight_tiao={eightTiao.Score}");
+    return result.Action.TileType == 0
+        && oneTiao.Score > oneTong.Score
+        && oneTiao.Score > eightTiao.Score;
+}
+
+static bool SmokeHaidiPreservesPairWaitOverFutureShape(NeijiangAiFacade facade)
+{
+    var hand18 = new[]
+    {
+        0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 2, 1, 2, 0, 0, 0, 0
+    };
+    var discards = new[]
+    {
+        new[] { 6, 14, 0, 8 },
+        new[] { 9, 8 },
+        new[] { 2, 10, 12, 17, 6 },
+        new[] { 14, 10, 8, 1, 14 },
+    };
+    var melds = new[]
+    {
+        new[] { 5, 5, 5, 17, 17, 17 },
+        Array.Empty<int>(),
+        new[] { 1, 1, 1, 4, 4, 4, 0, 0, 0 },
+        new[] { 15, 15, 15, 16, 16, 16, 16, 2, 2, 2 },
+    };
+    var passedHu = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    passedHu[3][12] = 1;
+    var state = BuildMarkedDiscardState(2, 2, 2, 0, hand18, discards, melds, passedHu);
+    state.HasHu[0] = true;
+    state.HasHu[1] = true;
+    var result = facade.DecideDiscard(state);
+    var fourTong = result.Candidates.First(candidate => candidate.TileType == 12);
+    var fiveTong = result.Candidates.First(candidate => candidate.TileType == 13);
+    Console.WriteLine($"haidi_pair_wait_tile={result.Action.TileType} search={result.SearchUsed} four_tong={fourTong.Score} five_tong={fiveTong.Score} four_danger={fourTong.Danger} five_danger={fiveTong.Danger}");
+    return result.Action.TileType == 12
+        && !result.SearchUsed
+        && fourTong.Score > fiveTong.Score;
+}
+
+static NeijiangStateView BuildMarkedCase210()
+{
+    var hand18 = new[] { 0, 0, 1, 1, 0, 0, 3, 3, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1 };
+    var discards = new[]
+    {
+        new[] { 11 },
+        Array.Empty<int>(),
+        new[] { 13 },
+        Array.Empty<int>(),
+    };
+    var melds = new[]
+    {
+        new[] { 8, 8, 8, 9, 9, 9, 9 },
+        new[] { 0, 0, 0, 16, 16, 16 },
+        new[] { 10, 10, 10 },
+        new[] { 17, 17, 17, 1, 1, 1 },
+    };
+    return BuildMarkedDiscardState(1, 1, 1, 18, hand18, discards, melds);
+}
+
+static NeijiangStateView BuildMarkedCase304()
+{
+    var hand18 = new[] { 0, 0, 0, 1, 1, 1, 1, 2, 0, 1, 0, 1, 1, 1, 0, 0, 0, 1 };
+    var discards = new[]
+    {
+        new[] { 3 },
+        Array.Empty<int>(),
+        new[] { 7 },
+        Array.Empty<int>(),
+    };
+    var melds = new[]
+    {
+        new[] { 0, 0, 0, 9, 9, 9 },
+        new[] { 1, 1, 1 },
+        new[] { 8, 8, 8 },
+        new[] { 2, 2, 2 },
+    };
+    var state = BuildMarkedDiscardState(2, 3, 2, 17, hand18, discards, melds);
+    state.HasHu[0] = true;
+    state.HasHu[1] = true;
+    return state;
+}
+
+static bool SmokeBaoJiaoRecommendationLocksToLastDraw(NeijiangAiFacade facade)
+{
+    var hand18 = new[] { 0, 1, 1, 1, 0, 1, 1, 2, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1 };
+    var discards = new[]
+    {
+        new[] { 11, 16 },
+        new[] { 17 },
+        Array.Empty<int>(),
+        new[] { 16 },
+    };
+    var melds = new[]
+    {
+        Array.Empty<int>(),
+        new[] { 9, 9, 9 },
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+    };
+    var state = BuildMarkedDiscardState(3, 0, 3, 15, hand18, discards, melds);
+    state.IsBaoJiao = true;
+    state.LastDrawTileType = 13; // 5筒
+    state.IsReady[3] = true;
+    state.IsCalled[3] = true;
+
+    var result = facade.DecideDiscard(state);
+    Console.WriteLine($"bao_jiao_lock_tile={result.Action.TileType} candidates={string.Join(",", result.Candidates.Select(item => item.TileType))}");
+    return result.Action.TileType == 13
+        && result.Candidates.Count == 1
+        && result.Candidates[0].TileType == 13;
+}
+
+static bool SmokeReadyPreservesCentralBoneFromSeedLive(NeijiangAiFacade facade)
+{
+    var hand18 = new[] { 0, 1, 1, 2, 2, 2, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 2 };
+    var discards = new[]
+    {
+        new[] { 6 },
+        new[] { 14 },
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+    };
+    var melds = new[]
+    {
+        new[] { 8, 8, 8 },
+        new[] { 7, 7, 7 },
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+    };
+    var state = BuildMarkedDiscardState(3, 1, 3, 17, hand18, discards, melds);
+    var result = facade.DecideDiscard(state);
+    var threeTong = result.Candidates.First(candidate => candidate.TileType == 11);
+    var sixTong = result.Candidates.First(candidate => candidate.TileType == 14);
+    Console.WriteLine($"ready_central_seedlive_tile={result.Action.TileType} three={threeTong.Score}/{threeTong.Shanten}/{threeTong.WaitCount}/{threeTong.LiveUkeire} six={sixTong.Score}/{sixTong.Shanten}/{sixTong.WaitCount}/{sixTong.LiveUkeire}");
+    return result.Action.TileType == 11
+        && threeTong.Shanten == sixTong.Shanten
+        && threeTong.WaitCount == sixTong.WaitCount
+        && threeTong.LiveUkeire == sixTong.LiveUkeire
+        && threeTong.Score > sixTong.Score;
+}
+
+static bool SmokeExtremeDangerSameSpeedOverrideFromSeedLive(NeijiangAiFacade facade)
+{
+    var hand18 = new[] { 2, 2, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, 0, 1, 2, 1, 0, 0 };
+    var discards = new[]
+    {
+        new[] { 11, 16 },
+        new[] { 17 },
+        new[] { 7 },
+        new[] { 7, 16 },
+    };
+    var melds = new[]
+    {
+        Array.Empty<int>(),
+        new[] { 9, 9, 9 },
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+    };
+    var state = BuildMarkedDiscardState(1, 0, 1, 13, hand18, discards, melds);
+    state.IsReady[3] = true;
+    state.IsCalled[3] = true;
+    var result = facade.DecideDiscard(state);
+    var sixTiao = result.Candidates.First(candidate => candidate.TileType == 5);
+    var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
+    Console.WriteLine($"extreme_danger_same_speed_tile={result.Action.TileType} selected={selected.Score}/{selected.Shanten}/{selected.LiveUkeire}/{selected.Danger} six_tiao={sixTiao.Score}/{sixTiao.Shanten}/{sixTiao.LiveUkeire}/{sixTiao.Danger}");
+    return result.Action.TileType != 5
+        && selected.Shanten <= sixTiao.Shanten
+        && selected.LiveUkeire + 1 >= sixTiao.LiveUkeire
+        && selected.Danger < sixTiao.Danger;
+}
+
+static NeijiangStateView BuildMarkedDiscardState(
+    int seatIndex,
+    int dealerSeat,
+    int currentSeat,
+    int wallCount,
+    int[] hand18,
+    int[][] discards,
+    int[][] melds,
+    int[][]? passedHu = null,
+    int[][]? passedPeng = null,
+    int[][]? passedGang = null)
+{
+    var visible18 = new int[18];
+    foreach (var tileType in hand18.Select((count, tileType) => (count, tileType)).SelectMany(item => Enumerable.Repeat(item.tileType, item.count)))
+        visible18[tileType]++;
+    foreach (var seatDiscards in discards)
+    {
+        foreach (var tileType in seatDiscards)
+            visible18[tileType]++;
+    }
+    foreach (var seatMelds in melds)
+    {
+        foreach (var tileType in seatMelds)
+            visible18[tileType]++;
+    }
+    var remaining18 = visible18.Select(count => Math.Max(0, 4 - count)).ToArray();
+    return NeijiangStateCodec.FromRaw(seatIndex, dealerSeat, currentSeat, wallCount, hand18, visible18, remaining18, discards, melds, passedHu, passedPeng, passedGang);
 }
 
 static bool SmokeRiskCalibration()
@@ -791,6 +1254,86 @@ static bool SmokeHellOracleRejectsExactDealIn()
         && result.OracleDealInTargetSeats.Count == 0;
 }
 
+static bool SmokeHellOracleAvoidsFeedingHumanCalls()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 0, 0, 0, 3, 3, 3, 6, 6, 6, 10, 10, 10, 17, 5 })
+        aiHand[tile]++;
+    var visible = new int[18];
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 18, aiHand, visible);
+
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0][5] = 2;
+    var exactWall = Enumerable.Repeat(1, 18).ToArray();
+    exactWall[5] = 3;
+    exactWall[17] = 1;
+
+    var result = new NeijiangHellOracleEngine().DecideDiscard(state, allHands, exactWall, fairTileType: 5);
+    Console.WriteLine($"hell_oracle_human_call_tile={result.Action.TileType} category={result.Category} severity={result.Severity} fair_peng={result.FairFeedsHumanPeng} oracle_peng={result.OracleFeedsHumanPeng}");
+    return result.Action.TileType != 5
+        && result.Category == "human_peng_suppression"
+        && result.Severity == "medium"
+        && result.FairFeedsHumanPeng
+        && !result.FairFeedsHumanGang
+        && !result.OracleFeedsHumanPeng
+        && !result.OracleFeedsHumanGang;
+}
+
+static bool SmokeHellOracleAvoidsFeedingHumanGang()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 0, 0, 0, 3, 3, 3, 6, 6, 6, 10, 10, 10, 17, 5 })
+        aiHand[tile]++;
+    var visible = new int[18];
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 18, aiHand, visible);
+
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0][5] = 3;
+    var exactWall = Enumerable.Repeat(1, 18).ToArray();
+    exactWall[5] = 3;
+    exactWall[17] = 1;
+
+    var result = new NeijiangHellOracleEngine().DecideDiscard(state, allHands, exactWall, fairTileType: 5);
+    Console.WriteLine($"hell_oracle_human_gang_tile={result.Action.TileType} category={result.Category} severity={result.Severity} fair_gang={result.FairFeedsHumanGang} oracle_gang={result.OracleFeedsHumanGang}");
+    return result.Action.TileType != 5
+        && result.Category == "human_gang_suppression"
+        && result.Severity == "high"
+        && result.FairFeedsHumanGang
+        && !result.OracleFeedsHumanPeng
+        && !result.OracleFeedsHumanGang;
+}
+
+static bool SmokeHellOracleRaisesPressureWhenHumanLeads()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 0, 0, 0, 3, 3, 3, 6, 6, 6, 10, 10, 10, 17, 5 })
+        aiHand[tile]++;
+    var visible = new int[18];
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 18, aiHand, visible);
+
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0][5] = 2;
+    var exactWall = Enumerable.Repeat(1, 18).ToArray();
+    var trailing = new NeijiangHellOracleEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        fairTileType: 5,
+        currentScores: new[] { -12, 18, 4, 2 });
+    var leading = new NeijiangHellOracleEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        fairTileType: 5,
+        currentScores: new[] { 26, 18, 4, 2 });
+
+    Console.WriteLine($"hell_oracle_pressure_trailing={trailing.HumanPressureLevel} leading={leading.HumanPressureLevel} leading_reasons={string.Join("|", leading.Reasons)}");
+    return trailing.HumanPressureLevel == 1
+        && leading.HumanPressureLevel == 4
+        && leading.FairFeedsHumanPeng
+        && !leading.OracleFeedsHumanPeng;
+}
+
 static bool SmokeLateWallRiskRegression(NeijiangAiFacade facade)
 {
     var case37 = NeijiangStateCodec.FromRaw(3, 0, 3, 3,
@@ -820,7 +1363,8 @@ static bool SmokeLateWallRiskRegression(NeijiangAiFacade facade)
     var result37 = facade.DecideDiscard(case37);
     var result84 = facade.DecideDiscard(case84);
     var result215 = facade.DecideDiscard(case215);
-    Console.WriteLine($"late_wall_case37_tile={result37.Action.TileType} case84_tile={result84.Action.TileType} case215_tile={result215.Action.TileType}");
+    var case215Top = string.Join(",", result215.Candidates.Take(4).Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.WaitCount}/{candidate.Danger}"));
+    Console.WriteLine($"late_wall_case37_tile={result37.Action.TileType} case84_tile={result84.Action.TileType} case215_tile={result215.Action.TileType} case215_top={case215Top}");
     return result37.Action.TileType != 0
         && result84.Action.TileType != 2
         && result215.Action.TileType != 8;

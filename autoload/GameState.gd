@@ -51,6 +51,7 @@ const HELL_TRAINING_DIR := "user://测试数据统计/hell_training"
 const HELL_MARKED_CASE_DIR := "user://测试数据统计/hell_marked_cases"
 const HELL_REPLAY_DIR := "user://测试数据统计/hell_replay"
 const AI_ANALYSIS_RECORDING_ENABLED := false
+const DEBUG_TRAINING_RECORDING_ENABLED := true
 const AI_CHAIN_DEBUG_ENABLED := false
 const DIAGNOSTIC_EXPORT_ENABLED := false
 const AI_ANALYSIS_DIR := "user://ai_analysis"
@@ -61,6 +62,7 @@ const DIAGNOSTIC_MAX_ARRAY_ITEMS := 80
 const DIAGNOSTIC_MAX_DICT_KEYS := 120
 const DIAGNOSTIC_MAX_STRING_LENGTH := 4000
 const DIAGNOSTIC_MAX_TEXT_FILE_CHARS := 120000
+const DIAGNOSTIC_MAX_DIR_TEXT_FILES := 160
 
 var current_phase: RoundPhase = RoundPhase.BOOT
 var current_dealer_seat: int = 0
@@ -152,7 +154,7 @@ func _ready() -> void:
 	gang_advisor = GangAdvisorScript.new()
 	ai_tuning_config = AITuningConfigScript.new()
 	ai_tuning_config.apply_preset(AITuningConfigScript.PRESET_HELL)
-	ai_tuning_config.set_diagnostics_recording_enabled(AI_ANALYSIS_RECORDING_ENABLED)
+	ai_tuning_config.set_diagnostics_recording_enabled(_is_ai_analysis_recording_enabled())
 	ai_level = AILevel.CHEATING
 	ai_learning_engine = AILearningEngineScript.new()
 	ai_learning_engine.load_profile()
@@ -164,7 +166,7 @@ func _ready() -> void:
 	_bind_native_csharp_runtime_if_available()
 	ai_manager.ai_turn_analysis_ready.connect(_on_ai_turn_analysis_ready)
 	ai_manager.ai_reaction_analysis_ready.connect(_on_ai_reaction_analysis_ready)
-	if AI_ANALYSIS_RECORDING_ENABLED:
+	if _is_ai_analysis_recording_enabled():
 		_ensure_ai_analysis_session()
 		if _is_hell_training_mode():
 			_ensure_hell_training_session()
@@ -422,7 +424,7 @@ func _apply_ai_runtime_tuning() -> void:
 	_apply_ai_learning_adjustment()
 	_apply_ai_manual_tuning()
 	if ai_manager != null:
-		ai_manager.set_compact_runtime_snapshots(not human_trainer_hint_enabled and not _is_hell_training_mode() and not AI_ANALYSIS_RECORDING_ENABLED)
+		ai_manager.set_compact_runtime_snapshots(not human_trainer_hint_enabled and not _is_hell_training_mode() and not _is_ai_analysis_recording_enabled())
 
 
 func set_ai_tuning_value(key: String, value: int) -> bool:
@@ -722,8 +724,21 @@ func _can_seat_self_hu_now(seat: int) -> bool:
 	if current_turn_seat != seat or players[seat]["has_won"]:
 		return false
 	if _get_last_draw_tile_id_for_seat(seat) == -1:
-		return false
+		if not _is_opening_self_hu_window(seat):
+			return false
 	return mahjong_judge.can_player_self_hu(_build_player_state(seat), rules)
+
+
+func _is_opening_self_hu_window(seat: int) -> bool:
+	if seat != current_dealer_seat:
+		return false
+	if str(last_turn_context.get("draw_reason", "")) != "opening_discard":
+		return false
+	if int(last_turn_context.get("seat", -1)) != seat:
+		return false
+	if not discard_pile.is_empty():
+		return false
+	return int(players[seat].get("hand_count", 0)) == 14
 
 
 func can_human_bao_jiao(seat: int) -> bool:
@@ -1129,6 +1144,7 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 			"seat": seat,
 			"decision": base.duplicate(true),
 			"decision_path": "self_action",
+			"self_action_diagnostic": _build_self_action_diagnostic_profile(seat, self_action),
 			"player_state": player_state.duplicate(true),
 			"table_state": table_state.duplicate(true),
 		})
@@ -1148,33 +1164,29 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 		debug_last_message = "C# AI 已返回，但推荐牌未映射到当前手牌。"
 		_record_ai_chain_debug("turn_build_map_failed seat=%d analysis=%s" % [seat, JSON.stringify(analysis).left(900)])
 		return {}
-	var hell_result := _try_apply_hell_oracle_to_discard(seat, player_state, table_state, analysis, selected_tile)
-	selected_tile = hell_result.get("selected_tile", selected_tile)
-	var hell_oracle: Dictionary = hell_result.get("oracle", {})
+	var hell_decision := _apply_hell_oracle_to_discard_decision(
+		base,
+		seat,
+		player_state,
+		table_state,
+		analysis,
+		selected_tile
+	)
+	selected_tile = hell_decision.get("selected_tile", selected_tile)
+	var hell_oracle: Dictionary = hell_decision.get("oracle", {})
 	_record_ai_chain_debug("turn_build_ok seat=%d tile=%s id=%d backend=%s" % [
 		seat,
 		str(selected_tile.get("display_name", selected_tile.get("tile_name", "?"))),
 		int(selected_tile.get("id", -1)),
 		str(analysis.get("backend_mode", "")),
 	])
-	base["action"] = "discard"
-	base["tile_id"] = int(selected_tile.get("id", -1))
-	base["analysis"] = analysis.duplicate(true)
-	if not hell_oracle.is_empty():
-		base["hell_oracle"] = hell_oracle.duplicate(true)
-		base["fair_tile_id"] = int(analysis.get("recommended", {}).get("tile", {}).get("id", -1))
-		base["fair_tile_type"] = int(analysis.get("recommended", {}).get("csharp_tile_type", -1))
-		base["actual_action"] = {
-			"action": "discard",
-			"tile_id": int(selected_tile.get("id", -1)),
-			"tile_type": _neijiang_tile_type(selected_tile),
-			"source": "hell_oracle" if bool(ai_tuning_config.hell_execute_oracle_action) else "fair_ai",
-		}
+	base = hell_decision.get("decision", base)
 	_record_ai_analysis_event("turn_decision_built", {
 		"seat": seat,
 		"decision": base.duplicate(true),
 		"decision_path": "discard",
 		"selected_tile": selected_tile.duplicate(true),
+		"turn_diagnostic": _build_turn_diagnostic_profile(seat, analysis, selected_tile, hell_oracle),
 		"player_state": player_state.duplicate(true),
 		"table_state": table_state.duplicate(true),
 	})
@@ -1313,7 +1325,23 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 			})
 			return add_gang_ok
 		"discard":
-			var tile_id := int(decision.get("tile_id", -1))
+			var requested_tile_id := int(decision.get("tile_id", -1))
+			var tile_id := _resolve_legal_ai_discard_tile_id(seat, requested_tile_id)
+			if tile_id == -1:
+				_record_ai_chain_debug("turn_execute_discard_blocked seat=%d requested_tile_id=%d msg=%s" % [
+					seat,
+					requested_tile_id,
+					debug_last_message,
+				])
+				_record_ai_analysis_event("turn_action_executed", {
+					"seat": seat,
+					"action": "discard",
+					"tile_id": requested_tile_id,
+					"executed": false,
+					"decision": decision.duplicate(true),
+					"debug_last_message": debug_last_message,
+				})
+				return false
 			var tile_type := _neijiang_tile_type(_tile_by_id_in_hand(seat, tile_id))
 			_record_hell_decision_snapshot(decision, "discard", tile_type)
 			var ok := _discard_tile_internal(seat, tile_id)
@@ -1342,6 +1370,29 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 		"debug_last_message": "unknown_action",
 	})
 	return false
+
+
+func _resolve_legal_ai_discard_tile_id(seat: int, requested_tile_id: int) -> int:
+	if seat < 0 or seat >= players.size():
+		return -1
+	if not bool(players[seat].get("bao_jiao", false)):
+		return requested_tile_id
+	var last_draw_tile_id := _get_last_draw_tile_id_for_seat(seat)
+	if last_draw_tile_id == -1:
+		debug_last_message = "%s 已报叫，当前没有可弃的新摸牌。" % _seat_display_name(seat)
+		return -1
+	if requested_tile_id == last_draw_tile_id:
+		return requested_tile_id
+	if _must_self_gang_bao_gang_tile(seat, last_draw_tile_id):
+		debug_last_message = "%s 摸到已报杠牌，必须报杠，不能弃牌。" % _seat_display_name(seat)
+		return -1
+	debug_last_message = "%s 已报叫，AI 推荐动原手牌，已强制改打新摸牌。" % _seat_display_name(seat)
+	_record_ai_chain_debug("turn_bao_jiao_forced_last_draw_discard seat=%d requested=%d forced=%d" % [
+		seat,
+		requested_tile_id,
+		last_draw_tile_id,
+	])
+	return last_draw_tile_id
 
 
 func run_ai_reaction() -> bool:
@@ -1382,6 +1433,7 @@ func run_ai_reaction() -> bool:
 			"decision": decision.duplicate(true),
 			"requested_action": requested_action,
 			"resolved_action": resolved_action,
+			"reaction_diagnostic": _build_reaction_diagnostic_profile(seat, candidate, decision, requested_action, resolved_action),
 			"executed": pass_executed,
 			"discard_context": current_discard_context.duplicate(true),
 		})
@@ -1393,6 +1445,7 @@ func run_ai_reaction() -> bool:
 			"decision": decision.duplicate(true),
 			"requested_action": requested_action,
 			"resolved_action": resolved_action,
+			"reaction_diagnostic": _build_reaction_diagnostic_profile(seat, candidate, decision, requested_action, resolved_action),
 			"executed": true,
 			"discard_context": current_discard_context.duplicate(true),
 		})
@@ -1408,6 +1461,7 @@ func run_ai_reaction() -> bool:
 		"decision": decision.duplicate(true),
 		"requested_action": requested_action,
 		"resolved_action": resolved_action,
+		"reaction_diagnostic": _build_reaction_diagnostic_profile(seat, candidate, decision, requested_action, resolved_action),
 		"executed": false,
 		"fallback_pass_executed": pass_ok,
 		"discard_context": current_discard_context.duplicate(true),
@@ -2700,7 +2754,7 @@ func _emit_state_changed() -> void:
 
 
 func _record_ai_chain_debug(message: String) -> void:
-	if not AI_CHAIN_DEBUG_ENABLED:
+	if not _is_ai_chain_debug_enabled():
 		return
 	var line := "%d R%d P%s T%s %s" % [
 		Time.get_ticks_msec(),
@@ -2722,7 +2776,7 @@ func _record_ai_chain_debug(message: String) -> void:
 
 
 func export_diagnostic_package(copy_to_downloads: bool = true) -> Dictionary:
-	if not DIAGNOSTIC_EXPORT_ENABLED:
+	if not _is_diagnostic_export_enabled():
 		return {
 			"ok": false,
 			"error": "diagnostic_export_disabled",
@@ -2798,6 +2852,11 @@ func _build_diagnostic_export_package(internal_path: String, file_name: String) 
 			"user://ai_chain_debug.log",
 			"user://ui_prefs.cfg",
 		]),
+		"training_files": {
+			"ai_analysis": _collect_diagnostic_dir_text_files(AI_ANALYSIS_DIR, DIAGNOSTIC_MAX_DIR_TEXT_FILES),
+			"hell_training": _collect_diagnostic_dir_text_files(HELL_TRAINING_DIR, DIAGNOSTIC_MAX_DIR_TEXT_FILES),
+			"hell_marked_cases": _collect_diagnostic_dir_text_files(HELL_MARKED_CASE_DIR, DIAGNOSTIC_MAX_DIR_TEXT_FILES),
+		},
 	}
 
 
@@ -2841,6 +2900,46 @@ func _collect_diagnostic_text_files(paths: Array) -> Dictionary:
 		var path := str(item)
 		result[path] = _read_diagnostic_text_file(path)
 	return result
+
+
+func _collect_diagnostic_dir_text_files(root_path: String, max_files: int) -> Dictionary:
+	var result := {
+		"root": root_path,
+		"root_absolute": ProjectSettings.globalize_path(root_path),
+		"files": {},
+		"truncated": false,
+	}
+	var paths: Array[String] = []
+	_collect_diagnostic_dir_paths(root_path, paths, max_files)
+	if paths.size() > max_files:
+		result["truncated"] = true
+		paths = paths.slice(0, max_files)
+	for path in paths:
+		result["files"][path] = _read_diagnostic_text_file(path)
+	return result
+
+
+func _collect_diagnostic_dir_paths(path: String, paths: Array[String], max_files: int) -> void:
+	if paths.size() > max_files:
+		return
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	while true:
+		var entry := dir.get_next()
+		if entry.is_empty():
+			break
+		if entry.begins_with("."):
+			continue
+		var child_path := path.path_join(entry)
+		if dir.current_is_dir():
+			_collect_diagnostic_dir_paths(child_path, paths, max_files)
+		elif entry.ends_with(".json") or entry.ends_with(".jsonl") or entry.ends_with(".csv") or entry.ends_with(".md") or entry.ends_with(".log"):
+			paths.append(child_path)
+			if paths.size() > max_files:
+				break
+	dir.list_dir_end()
 
 
 func _read_diagnostic_text_file(path: String) -> Dictionary:
@@ -2998,6 +3097,17 @@ func _on_ai_turn_analysis_ready(request_id: int, seat_index: int, analysis: Dict
 		"tile_id": int(selected_tile.get("id", -1)),
 		"analysis": analysis.duplicate(true),
 	}
+	var hell_decision := _apply_hell_oracle_to_discard_decision(
+		pending_ai_turn_decision,
+		seat_index,
+		_build_player_state(seat_index),
+		_build_table_state(),
+		analysis,
+		selected_tile
+	)
+	pending_ai_turn_decision = hell_decision.get("decision", pending_ai_turn_decision)
+	selected_tile = hell_decision.get("selected_tile", selected_tile)
+	var hell_oracle: Dictionary = hell_decision.get("oracle", {})
 	_record_ai_chain_debug("turn_async_ready id=%d seat=%d backend=%s tile=%s" % [
 		request_id,
 		seat_index,
@@ -3009,6 +3119,7 @@ func _on_ai_turn_analysis_ready(request_id: int, seat_index: int, analysis: Dict
 		"seat": seat_index,
 		"decision": pending_ai_turn_decision.duplicate(true),
 		"request_meta": pending_ai_turn_request_meta.duplicate(true),
+		"turn_diagnostic": _build_turn_diagnostic_profile(seat_index, analysis, selected_tile, hell_oracle),
 	})
 	_clear_pending_ai_turn_request()
 	_emit_state_changed()
@@ -3075,6 +3186,13 @@ func _on_ai_reaction_analysis_ready(request_id: int, seat_index: int, analysis: 
 		"seat": seat_index,
 		"decision": pending_ai_reaction_decision.duplicate(true),
 		"request_meta": pending_ai_reaction_request_meta.duplicate(true),
+		"reaction_diagnostic": _build_reaction_diagnostic_profile(
+			seat_index,
+			candidate,
+			analysis,
+			str(analysis.get("action", "pass")),
+			_resolve_ai_reaction_action(seat_index, candidate, str(analysis.get("action", "pass")).strip_edges().to_lower())
+		),
 	})
 	_clear_pending_ai_reaction_request()
 	_emit_state_changed()
@@ -3485,6 +3603,330 @@ func _record_ai_reaction_review(seat: int, candidate: Dictionary, decision: Dict
 	ai_reaction_review_history.append(review)
 	while ai_reaction_review_history.size() > AI_REACTION_REVIEW_LIMIT:
 		ai_reaction_review_history.remove_at(0)
+
+
+func _build_turn_diagnostic_profile(seat: int, analysis: Dictionary, selected_tile: Dictionary, hell_oracle: Dictionary = {}) -> Dictionary:
+	var options: Array = analysis.get("options", [])
+	var selected_type := int(analysis.get("recommended", {}).get("csharp_tile_type", _neijiang_tile_type(selected_tile)))
+	var selected_candidate := _find_candidate_by_tile_type(options, selected_type)
+	if selected_candidate.is_empty():
+		selected_candidate = analysis.get("recommended", {}).duplicate(true)
+	var score_sorted := _sort_turn_candidates_by_score(options)
+	var speed_sorted := _sort_turn_candidates_by_speed(options)
+	var selected_rank := _candidate_rank_by_tile_type(score_sorted, selected_type)
+	var best_score_candidate: Dictionary = score_sorted[0].duplicate(true) if not score_sorted.is_empty() else {}
+	var selected_shanten := int(selected_candidate.get("shanten", 8))
+	var best_safe_alternative := _find_turn_candidate_alternative(options, selected_type, 18, selected_shanten + 1)
+	var best_speed_alternative: Dictionary = speed_sorted[0].duplicate(true) if not speed_sorted.is_empty() else {}
+	var best_big_route_alternative := _find_big_route_candidate_alternative(options, selected_type)
+	var strategy_profile: Dictionary = analysis.get("strategy_profile", {})
+	var csharp_result: Dictionary = analysis.get("csharp_result", {})
+	var flags := _build_turn_diagnostic_flags(
+		selected_candidate,
+		best_score_candidate,
+		best_safe_alternative,
+		best_speed_alternative,
+		best_big_route_alternative,
+		selected_rank,
+		strategy_profile
+	)
+	return {
+		"schema_version": 2,
+		"seat": seat,
+		"selected": _compact_turn_candidate_for_training(selected_candidate),
+		"selected_tile": selected_tile.duplicate(true),
+		"selected_rank_by_score": selected_rank,
+		"candidate_count": options.size(),
+		"top_score_candidates": _compact_turn_candidates_for_training(score_sorted, 8),
+		"top_speed_candidates": _compact_turn_candidates_for_training(speed_sorted, 5),
+		"best_safe_alternative": _compact_turn_candidate_for_training(best_safe_alternative),
+		"best_speed_alternative": _compact_turn_candidate_for_training(best_speed_alternative),
+		"best_big_route_alternative": _compact_turn_candidate_for_training(best_big_route_alternative),
+		"score_gap_to_best": int(best_score_candidate.get("score", 0)) - int(selected_candidate.get("score", 0)),
+		"selected_score_components": _build_candidate_score_components(selected_candidate),
+		"strategy_profile": strategy_profile.duplicate(true),
+		"belief_summary": analysis.get("belief_summary", {}).duplicate(true),
+		"backend": {
+			"mode": str(analysis.get("backend_mode", "")),
+			"elapsed_ms": int(csharp_result.get("elapsedMs", -1)),
+			"mobile_speed_mode": bool(csharp_result.get("mobileSpeedMode", false)),
+			"cache": csharp_result.get("cache", {}).duplicate(true),
+			"belief_metrics": csharp_result.get("beliefMetrics", {}).duplicate(true),
+		},
+		"diagnostic_flags": flags,
+		"hell_oracle": hell_oracle.duplicate(true),
+	}
+
+
+func _build_reaction_diagnostic_profile(seat: int, candidate: Dictionary, decision: Dictionary, requested_action: String, resolved_action: String) -> Dictionary:
+	var action_scores: Dictionary = decision.get("action_scores", {})
+	var score_table := _build_action_score_table(action_scores)
+	var best_action := str(score_table[0].get("action", "")) if not score_table.is_empty() else ""
+	var resolved_score := int(action_scores.get(resolved_action, decision.get("score", 0)))
+	var best_score := int(score_table[0].get("score", resolved_score)) if not score_table.is_empty() else resolved_score
+	var flags: Array[String] = []
+	if requested_action != resolved_action:
+		_append_unique_string(flags, "frontend_resolution_changed_backend_request")
+	if resolved_action != best_action and not best_action.is_empty():
+		_append_unique_string(flags, "resolved_action_not_top_score")
+	if abs(int(action_scores.get("peng", -999999)) - int(action_scores.get("gang", -999999))) <= 160 and action_scores.has("peng") and action_scores.has("gang"):
+		_append_unique_string(flags, "peng_gang_close_score")
+	if int(decision.get("current_shanten", 8)) <= 0 and resolved_action == "peng":
+		_append_unique_string(flags, "peng_from_ready_hand")
+	if int(decision.get("threat_level", 0)) >= 3:
+		_append_unique_string(flags, "high_table_threat")
+	return {
+		"schema_version": 2,
+		"seat": seat,
+		"candidate": candidate.duplicate(true),
+		"requested_action": requested_action,
+		"resolved_action": resolved_action,
+		"best_action_by_score": best_action,
+		"score_gap_to_best": best_score - resolved_score,
+		"action_score_table": score_table,
+		"current_shanten": int(decision.get("current_shanten", -1)),
+		"current_live_ukeire": int(decision.get("current_live_ukeire", 0)),
+		"shanten_after": int(decision.get("shanten_after", -1)),
+		"live_ukeire_after": int(decision.get("live_ukeire_after", 0)),
+		"round_stage": int(decision.get("round_stage", -1)),
+		"round_stage_label": str(decision.get("round_stage_label", "")),
+		"threat_level": int(decision.get("threat_level", 0)),
+		"max_ready_posterior": float(decision.get("max_ready_posterior", 0.0)),
+		"posterior_summary": Array(decision.get("posterior_summary", [])).duplicate(true),
+		"future_summary": Array(decision.get("future_summary", [])).duplicate(true),
+		"search": {
+			"used": bool(decision.get("search_used", false)),
+			"simulations": int(decision.get("search_simulations", 0)),
+			"bonus": float(decision.get("search_bonus", 0.0)),
+		},
+		"diagnostic_flags": flags,
+		"reasons": Array(decision.get("reasons", [])).duplicate(true),
+	}
+
+
+func _build_self_action_diagnostic_profile(seat: int, decision: Dictionary) -> Dictionary:
+	return {
+		"schema_version": 2,
+		"seat": seat,
+		"action": str(decision.get("action", "pass")),
+		"tile_type": int(decision.get("tile_type", -1)),
+		"gang_subtype": str(decision.get("gang_subtype", "")),
+		"action_score_table": _build_action_score_table(decision.get("analysis", {}).get("action_scores", decision.get("action_scores", {}))),
+		"reasons": Array(decision.get("analysis", {}).get("reasons", decision.get("reasons", []))).duplicate(true),
+	}
+
+
+func _build_round_diagnostic_summary() -> Dictionary:
+	var ai_core_debug := _build_ai_core_debug_snapshot()
+	var backend_status: Dictionary = ai_core_debug.get("backend_status", {})
+	return {
+		"schema_version": 2,
+		"round_index": round_index,
+		"scores": _hell_score_snapshot(),
+		"ai_decision_metrics": ai_decision_metrics.duplicate(true),
+		"reaction_review_count": ai_reaction_review_history.size(),
+		"latest_reaction_review": latest_ai_reaction_review.duplicate(true),
+		"hell_training": _build_hell_training_debug_snapshot(),
+		"ai_core_performance": ai_core_debug.get("performance_metrics", {}).duplicate(true),
+		"ai_core_requests": ai_core_debug.get("request_state", {}).duplicate(true),
+		"backend_status": backend_status.duplicate(true),
+	}
+
+
+func _sort_turn_candidates_by_score(options: Array) -> Array:
+	var sorted := options.duplicate(true)
+	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var score_a := int(a.get("score", 0))
+		var score_b := int(b.get("score", 0))
+		if score_a != score_b:
+			return score_a > score_b
+		return int(a.get("live_ukeire", 0)) > int(b.get("live_ukeire", 0))
+	)
+	return sorted
+
+
+func _sort_turn_candidates_by_speed(options: Array) -> Array:
+	var sorted := options.duplicate(true)
+	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var shanten_a := int(a.get("shanten", 8))
+		var shanten_b := int(b.get("shanten", 8))
+		if shanten_a != shanten_b:
+			return shanten_a < shanten_b
+		var wait_a := int(a.get("wait_count", 0))
+		var wait_b := int(b.get("wait_count", 0))
+		if wait_a != wait_b:
+			return wait_a > wait_b
+		return int(a.get("live_ukeire", 0)) > int(b.get("live_ukeire", 0))
+	)
+	return sorted
+
+
+func _find_candidate_by_tile_type(options: Array, tile_type: int) -> Dictionary:
+	for option_item in options:
+		var option: Dictionary = option_item
+		if int(option.get("csharp_tile_type", option.get("tile_type", -1))) == tile_type:
+			return option.duplicate(true)
+	return {}
+
+
+func _candidate_rank_by_tile_type(options: Array, tile_type: int) -> int:
+	for index in range(options.size()):
+		var option: Dictionary = options[index]
+		if int(option.get("csharp_tile_type", option.get("tile_type", -1))) == tile_type:
+			return index + 1
+	return 0
+
+
+func _find_turn_candidate_alternative(options: Array, excluded_tile_type: int, max_danger: int, max_shanten: int) -> Dictionary:
+	var best := {}
+	for option_item in options:
+		var option: Dictionary = option_item
+		if int(option.get("csharp_tile_type", option.get("tile_type", -1))) == excluded_tile_type:
+			continue
+		if int(option.get("risk", 100)) > max_danger:
+			continue
+		if int(option.get("shanten", 8)) > max_shanten:
+			continue
+		if best.is_empty() or int(option.get("score", 0)) > int(best.get("score", 0)):
+			best = option.duplicate(true)
+	return best
+
+
+func _find_big_route_candidate_alternative(options: Array, excluded_tile_type: int) -> Dictionary:
+	var best := {}
+	for option_item in options:
+		var option: Dictionary = option_item
+		if int(option.get("csharp_tile_type", option.get("tile_type", -1))) == excluded_tile_type:
+			continue
+		if not _candidate_has_big_route(option):
+			continue
+		if best.is_empty() or int(option.get("score", 0)) > int(best.get("score", 0)):
+			best = option.duplicate(true)
+	return best
+
+
+func _candidate_has_big_route(option: Dictionary) -> bool:
+	for route in Array(option.get("routes_after", [])):
+		var text := str(route)
+		if text == "七对" or text == "对对胡" or text == "清一色":
+			return true
+	return false
+
+
+func _build_turn_diagnostic_flags(
+	selected: Dictionary,
+	best_score: Dictionary,
+	best_safe: Dictionary,
+	best_speed: Dictionary,
+	best_big_route: Dictionary,
+	selected_rank: int,
+	strategy_profile: Dictionary
+) -> Array[String]:
+	var flags: Array[String] = []
+	if selected_rank > 1:
+		_append_unique_string(flags, "selected_not_top_score")
+	if int(selected.get("risk", 0)) >= 60:
+		_append_unique_string(flags, "selected_high_risk")
+	if int(selected.get("shanten", 8)) > 0 and int(selected.get("live_ukeire", 0)) <= 4:
+		_append_unique_string(flags, "selected_narrow_live_ukeire")
+	if not Array(selected.get("route_loss", [])).is_empty():
+		_append_unique_string(flags, "selected_loses_route")
+	if not best_safe.is_empty() and int(best_safe.get("score", 0)) + 450 >= int(selected.get("score", 0)):
+		_append_unique_string(flags, "safe_alternative_close")
+	if not best_speed.is_empty() and int(best_speed.get("shanten", 8)) < int(selected.get("shanten", 8)):
+		_append_unique_string(flags, "faster_alternative_exists")
+	if not best_big_route.is_empty() and not _candidate_has_big_route(selected):
+		_append_unique_string(flags, "big_route_alternative_exists")
+	if int(strategy_profile.get("threat_level", 0)) >= 3:
+		_append_unique_string(flags, "high_table_threat")
+	if int(best_score.get("score", 0)) - int(selected.get("score", 0)) >= 900:
+		_append_unique_string(flags, "large_score_gap_to_best")
+	return flags
+
+
+func _compact_turn_candidates_for_training(candidates: Array, limit: int) -> Array:
+	var result: Array = []
+	for index in range(mini(limit, candidates.size())):
+		var candidate: Dictionary = candidates[index]
+		result.append(_compact_turn_candidate_for_training(candidate))
+	return result
+
+
+func _compact_turn_candidate_for_training(candidate: Dictionary) -> Dictionary:
+	if candidate.is_empty():
+		return {}
+	var tile_type := int(candidate.get("csharp_tile_type", candidate.get("tile_type", -1)))
+	return {
+		"tile_type": tile_type,
+		"tile_label": _neijiang_tile_type_label(tile_type),
+		"tile_name": str(candidate.get("tile_name", candidate.get("tile", {}).get("display_name", ""))),
+		"score": int(candidate.get("score", 0)),
+		"shanten": int(candidate.get("shanten", 8)),
+		"ukeire": int(candidate.get("ukeire", 0)),
+		"live_ukeire": int(candidate.get("live_ukeire", 0)),
+		"wait_count": int(candidate.get("wait_count", 0)),
+		"danger": int(candidate.get("risk", 0)),
+		"risk_label": str(candidate.get("risk_label", "")),
+		"strategy_tag": str(candidate.get("strategy_tag", "")),
+		"strategy_mode": str(candidate.get("strategy_mode", "")),
+		"routes_after": Array(candidate.get("routes_after", [])).duplicate(true),
+		"route_loss": Array(candidate.get("route_loss", [])).duplicate(true),
+		"score_components": _build_candidate_score_components(candidate),
+		"reasons": Array(candidate.get("reasons", [])).slice(0, 8),
+	}
+
+
+func _build_candidate_score_components(candidate: Dictionary) -> Dictionary:
+	if candidate.is_empty():
+		return {}
+	return {
+		"expected_net_score": float(candidate.get("expected_net_score", 0.0)),
+		"expected_win_gain": float(candidate.get("expected_win_gain", 0.0)),
+		"expected_deal_in_loss": float(candidate.get("expected_deal_in_loss", 0.0)),
+		"expected_draw_risk_loss": float(candidate.get("expected_draw_risk_loss", 0.0)),
+		"expected_ready_value": float(candidate.get("expected_ready_value", 0.0)),
+		"posterior_adjustment": float(candidate.get("posterior_adjustment", 0.0)),
+		"defense_adjustment": float(candidate.get("defense_adjustment", 0.0)),
+		"shape_score": float(candidate.get("shape_score", 0.0)),
+		"wait_shape_score": float(candidate.get("wait_shape_score", 0.0)),
+		"limited_lookahead_score": float(candidate.get("limited_lookahead_score", 0.0)),
+		"search_bonus": float(candidate.get("search_bonus", 0.0)),
+		"set_preservation_score": float(candidate.get("set_preservation_score", 0.0)),
+		"breaks_pair": bool(candidate.get("breaks_pair", false)),
+		"breaks_triplet": bool(candidate.get("breaks_triplet", false)),
+		"good_shape_count": int(candidate.get("good_shape_count", 0)),
+		"bad_shape_count": int(candidate.get("bad_shape_count", 0)),
+		"pair_pressure": int(candidate.get("pair_pressure", 0)),
+		"taatsu_overflow": int(candidate.get("taatsu_overflow", 0)),
+		"same_shanten_improvement_count": int(candidate.get("same_shanten_improvement_count", 0)),
+		"middle_tile_flexibility": int(candidate.get("middle_tile_flexibility", 0)),
+	}
+
+
+func _build_action_score_table(action_scores: Dictionary) -> Array:
+	var rows: Array = []
+	for key in action_scores.keys():
+		rows.append({
+			"action": str(key),
+			"score": int(action_scores.get(key, 0)),
+		})
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("score", 0)) > int(b.get("score", 0))
+	)
+	return rows
+
+
+func _append_unique_string(values: Array[String], value: String) -> void:
+	if value.is_empty() or values.has(value):
+		return
+	values.append(value)
+
+
+func _neijiang_tile_type_label(tile_type: int) -> String:
+	if tile_type < 0:
+		return ""
+	var rank := tile_type % 9 + 1
+	return "%d%s" % [rank, "条" if tile_type < 9 else "筒"]
 
 
 func _phase_debug_name(phase_value: int) -> String:
@@ -4829,6 +5271,7 @@ func _apply_settlement_scores_once() -> void:
 		"ai_decision_metrics": ai_decision_metrics.duplicate(true),
 		"latest_ai_reaction_review": latest_ai_reaction_review.duplicate(true),
 		"ai_reaction_review_history": ai_reaction_review_history.duplicate(true),
+		"round_diagnostic": _build_round_diagnostic_summary(),
 	})
 	_update_ai_learning_after_round(score_changes)
 	_write_hell_training_report()
@@ -4887,6 +5330,25 @@ func _is_hell_training_mode() -> bool:
 		and bool(ai_tuning_config.hell_record_oracle)
 
 
+func _is_hell_challenge_mode() -> bool:
+	return ai_tuning_config != null \
+		and str(ai_tuning_config.preset_name) == "hell" \
+		and bool(ai_tuning_config.hell_execute_oracle_action) \
+		and bool(ai_tuning_config.hell_ai_can_see_wall)
+
+
+func _is_ai_analysis_recording_enabled() -> bool:
+	return AI_ANALYSIS_RECORDING_ENABLED or (DEBUG_TRAINING_RECORDING_ENABLED and OS.is_debug_build())
+
+
+func _is_ai_chain_debug_enabled() -> bool:
+	return AI_CHAIN_DEBUG_ENABLED or _is_ai_analysis_recording_enabled()
+
+
+func _is_diagnostic_export_enabled() -> bool:
+	return DIAGNOSTIC_EXPORT_ENABLED or _is_ai_analysis_recording_enabled()
+
+
 func _ensure_hell_training_session() -> void:
 	if not hell_training_session_id.is_empty():
 		_ensure_hell_output_dirs()
@@ -4921,6 +5383,7 @@ func _hell_timestamp_slug() -> String:
 func _build_hell_training_debug_snapshot() -> Dictionary:
 	return {
 		"enabled": _is_hell_training_mode(),
+		"challenge_enabled": _is_hell_challenge_mode(),
 		"session_id": hell_training_session_id,
 		"decision_count": hell_training_decision_count,
 		"marked_count": hell_training_marked_count,
@@ -4936,7 +5399,7 @@ func _build_hell_training_debug_snapshot() -> Dictionary:
 
 
 func _ensure_ai_analysis_session() -> void:
-	if not AI_ANALYSIS_RECORDING_ENABLED:
+	if not _is_ai_analysis_recording_enabled():
 		return
 	if not ai_analysis_session_id.is_empty():
 		_ensure_ai_analysis_output_dirs()
@@ -4980,7 +5443,7 @@ func _ai_analysis_events_path() -> String:
 
 func _build_ai_analysis_recording_debug_snapshot() -> Dictionary:
 	return {
-		"enabled": AI_ANALYSIS_RECORDING_ENABLED,
+		"enabled": _is_ai_analysis_recording_enabled(),
 		"session_id": ai_analysis_session_id,
 		"event_count": ai_analysis_event_count,
 		"latest_event": latest_ai_analysis_event.duplicate(true),
@@ -4992,7 +5455,7 @@ func _build_ai_analysis_recording_debug_snapshot() -> Dictionary:
 
 
 func _record_ai_analysis_event(event_type: String, payload: Dictionary) -> void:
-	if not AI_ANALYSIS_RECORDING_ENABLED:
+	if not _is_ai_analysis_recording_enabled():
 		return
 	_ensure_ai_analysis_session()
 	ai_analysis_event_count += 1
@@ -5293,7 +5756,7 @@ func _counts18_signature(counts: Array) -> String:
 
 
 func _try_apply_hell_oracle_to_discard(seat: int, player_state: Dictionary, table_state: Dictionary, analysis: Dictionary, selected_tile: Dictionary) -> Dictionary:
-	if not _is_hell_training_mode() or ai_manager == null:
+	if not (_is_hell_training_mode() or _is_hell_challenge_mode()) or ai_manager == null:
 		return {
 			"selected_tile": selected_tile.duplicate(true),
 			"oracle": {},
@@ -5302,6 +5765,7 @@ func _try_apply_hell_oracle_to_discard(seat: int, player_state: Dictionary, tabl
 	var payload: Dictionary = ai_manager.csharp_bridge.build_discard_transport_payload(player_state, table_state, rules)
 	payload["allHands18"] = _all_hands18_for_hell()
 	payload["exactWall18"] = _exact_wall18_for_hell()
+	payload["currentScores"] = _hell_scores_array()
 	payload["fairTileType"] = fair_tile_type
 	payload["actualTileType"] = fair_tile_type
 	var oracle: Dictionary = ai_manager.analyze_hell_oracle_discard(payload)
@@ -5315,6 +5779,38 @@ func _try_apply_hell_oracle_to_discard(seat: int, player_state: Dictionary, tabl
 	return {
 		"selected_tile": final_tile,
 		"oracle": oracle,
+	}
+
+
+func _apply_hell_oracle_to_discard_decision(
+	base_decision: Dictionary,
+	seat: int,
+	player_state: Dictionary,
+	table_state: Dictionary,
+	analysis: Dictionary,
+	selected_tile: Dictionary
+) -> Dictionary:
+	var decision := base_decision.duplicate(true)
+	var hell_result := _try_apply_hell_oracle_to_discard(seat, player_state, table_state, analysis, selected_tile)
+	var final_tile: Dictionary = hell_result.get("selected_tile", selected_tile)
+	var hell_oracle: Dictionary = hell_result.get("oracle", {})
+	decision["action"] = "discard"
+	decision["tile_id"] = int(final_tile.get("id", -1))
+	decision["analysis"] = analysis.duplicate(true)
+	if not hell_oracle.is_empty():
+		decision["hell_oracle"] = hell_oracle.duplicate(true)
+		decision["fair_tile_id"] = int(analysis.get("recommended", {}).get("tile", {}).get("id", -1))
+		decision["fair_tile_type"] = int(analysis.get("recommended", {}).get("csharp_tile_type", -1))
+		decision["actual_action"] = {
+			"action": "discard",
+			"tile_id": int(final_tile.get("id", -1)),
+			"tile_type": _neijiang_tile_type(final_tile),
+			"source": "hell_oracle" if ai_tuning_config != null and bool(ai_tuning_config.hell_execute_oracle_action) else "fair_ai",
+		}
+	return {
+		"decision": decision,
+		"selected_tile": final_tile,
+		"oracle": hell_oracle,
 	}
 
 
@@ -5374,6 +5870,16 @@ func _hell_score_snapshot() -> Dictionary:
 	for player in players:
 		result[str(int(player.get("seat", -1)))] = int(player.get("score", 0))
 	return result
+
+
+func _hell_scores_array() -> Array:
+	var scores: Array[int] = []
+	for seat in range(4):
+		var score := 0
+		if seat >= 0 and seat < players.size():
+			score = int(players[seat].get("score", 0))
+		scores.append(score)
+	return scores
 
 
 func _build_hell_summary_csv(summary: Dictionary) -> String:

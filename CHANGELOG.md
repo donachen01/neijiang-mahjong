@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.38 - 2026-05-19
+
+- Fixed hell-challenge async discard decisions so C# callback results are checked by the same oracle path as synchronous discards before the tile is played.
+- Enlarged the bao-gang selection dialog with bigger title text, option rows, and option fonts for phone readability.
+- Strengthened bao-jiao lock, mid-hand risk, and hell-challenge regression coverage for discard and oracle behavior.
+
 ## 1.0.30 - 2026-05-15
 
 - Improved discard/action responsiveness by separating stale AI calculations from current human input and adding safer async decision signatures.

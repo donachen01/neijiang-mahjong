@@ -59,11 +59,11 @@ func apply_preset(name: String) -> void:
 			endgame_absolute_defense = true
 		PRESET_HELL:
 			lookahead_candidate_count = 5
-			lookahead_draw_samples = 9
+			lookahead_draw_samples = 12
 			add_gang_min_score = 8
 			an_gang_min_score = 16
-			beginner_random_pool_start_ratio = 0.40
-			intermediate_top_pick_count = 2
+			beginner_random_pool_start_ratio = 0.0
+			intermediate_top_pick_count = 1
 			attack_tendency = 3
 			defense_tendency = 3
 			fast_ting_priority = 4
@@ -73,10 +73,10 @@ func apply_preset(name: String) -> void:
 			opponent_read_tendency = 4
 			endgame_absolute_defense = true
 			hell_ai_share_ai_hands = true
-			hell_ai_can_see_human_hand = false
+			hell_ai_can_see_human_hand = true
 			hell_ai_can_see_wall = true
 			hell_record_oracle = diagnostics_recording_enabled
-			hell_execute_oracle_action = false
+			hell_execute_oracle_action = true
 			hell_log_marked_cases = diagnostics_recording_enabled
 		_:
 			preset_name = PRESET_BONE_ASH

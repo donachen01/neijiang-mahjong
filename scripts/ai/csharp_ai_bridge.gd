@@ -161,6 +161,11 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 	var players: Array = table_state.get("players", [])
 	var self_seat := int(player_state.get("seat", -1))
 	var hand_tiles: Array = player_state.get("hand_tiles", [])
+	var self_player: Dictionary = players[self_seat] if self_seat >= 0 and self_seat < players.size() else {}
+	var last_draw_tile_type := -1
+	var last_draw: Dictionary = table_state.get("last_draw_tile", {})
+	if int(last_draw.get("seat", -1)) == self_seat:
+		last_draw_tile_type = tile_codec.tile_type(last_draw.get("tile", {}), active_suits)
 	var hand18: PackedInt32Array = tile_codec.build_count_array(hand_tiles, active_suits)
 	var visible18: PackedInt32Array = tile_codec.build_visible_count_array(players, hand_tiles, active_suits, self_seat)
 	var remaining18: PackedInt32Array = tile_codec.build_remaining_count_array(hand_tiles, players, active_suits, self_seat)
@@ -204,6 +209,8 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 		"isCalled": _byte_array_to_bool_array(is_called),
 		"isReady": _byte_array_to_bool_array(is_ready),
 		"hasHu": _byte_array_to_bool_array(has_hu),
+		"isBaoJiao": bool(self_player.get("bao_jiao", false)),
+		"lastDrawTileType": last_draw_tile_type,
 	}
 
 

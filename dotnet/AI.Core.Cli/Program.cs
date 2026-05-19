@@ -494,6 +494,9 @@ static object BuildDiscardObject(NeijiangAiFacade facade, DiscardPayload payload
             sameShantenImprovementCount = item.SameShantenImprovementCount,
             middleTileFlexibility = item.MiddleTileFlexibility,
             shapeScore = item.ShapeScore,
+            breaksPair = item.BreaksPair,
+            breaksTriplet = item.BreaksTriplet,
+            setPreservationScore = item.SetPreservationScore,
             waitShapeLabel = item.WaitShapeLabel,
             waitShapeScore = item.WaitShapeScore,
             ryanmenWaitCount = item.RyanmenWaitCount,
@@ -596,6 +599,8 @@ static NeijiangStateView BuildState(DiscardPayload payload)
     if (payload.IsCalled is { Length: 4 }) Array.Copy(payload.IsCalled, state.IsCalled, 4);
     if (payload.IsReady is { Length: 4 }) Array.Copy(payload.IsReady, state.IsReady, 4);
     if (payload.HasHu is { Length: 4 }) Array.Copy(payload.HasHu, state.HasHu, 4);
+    state.IsBaoJiao = payload.IsBaoJiao;
+    state.LastDrawTileType = payload.LastDrawTileType;
     return state;
 }
 
@@ -832,6 +837,8 @@ internal class DiscardPayload
     public bool[]? IsCalled { get; init; }
     public bool[]? IsReady { get; init; }
     public bool[]? HasHu { get; init; }
+    public bool IsBaoJiao { get; init; }
+    public int LastDrawTileType { get; init; } = -1;
     public bool MobileSpeedMode { get; init; }
     public bool CompactResult { get; init; }
 }

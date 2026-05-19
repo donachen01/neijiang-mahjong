@@ -695,6 +695,9 @@ func _build_hybrid_option(csharp_item: Dictionary, support_option: Dictionary, a
 	option["csharp_same_shanten_improvement_count"] = int(csharp_item.get("sameShantenImprovementCount", 0))
 	option["csharp_middle_tile_flexibility"] = int(csharp_item.get("middleTileFlexibility", 0))
 	option["csharp_shape_score"] = float(csharp_item.get("shapeScore", 0.0))
+	option["csharp_breaks_pair"] = bool(csharp_item.get("breaksPair", false))
+	option["csharp_breaks_triplet"] = bool(csharp_item.get("breaksTriplet", false))
+	option["csharp_set_preservation_score"] = float(csharp_item.get("setPreservationScore", 0.0))
 	option["csharp_wait_shape_label"] = str(csharp_item.get("waitShapeLabel", ""))
 	option["csharp_wait_shape_score"] = float(csharp_item.get("waitShapeScore", 0.0))
 	option["csharp_ryanmen_wait_count"] = int(csharp_item.get("ryanmenWaitCount", 0))
@@ -746,6 +749,9 @@ func _build_hybrid_option(csharp_item: Dictionary, support_option: Dictionary, a
 	option["same_shanten_improvement_count"] = int(csharp_item.get("sameShantenImprovementCount", option.get("same_shanten_improvement_count", 0)))
 	option["middle_tile_flexibility"] = int(csharp_item.get("middleTileFlexibility", option.get("middle_tile_flexibility", 0)))
 	option["shape_score"] = float(csharp_item.get("shapeScore", option.get("shape_score", 0.0)))
+	option["breaks_pair"] = bool(csharp_item.get("breaksPair", option.get("breaks_pair", false)))
+	option["breaks_triplet"] = bool(csharp_item.get("breaksTriplet", option.get("breaks_triplet", false)))
+	option["set_preservation_score"] = float(csharp_item.get("setPreservationScore", option.get("set_preservation_score", 0.0)))
 	option["wait_shape_label"] = str(csharp_item.get("waitShapeLabel", option.get("wait_shape_label", "")))
 	option["wait_shape_score"] = float(csharp_item.get("waitShapeScore", option.get("wait_shape_score", 0.0)))
 	option["ryanmen_wait_count"] = int(csharp_item.get("ryanmenWaitCount", option.get("ryanmen_wait_count", 0)))
@@ -779,6 +785,10 @@ func _compact_csharp_result(csharp_result: Dictionary) -> Dictionary:
 		"dealInProbability": float(csharp_result.get("dealInProbability", 0.0)),
 		"searchUsed": bool(csharp_result.get("searchUsed", false)),
 		"searchSimulations": int(csharp_result.get("searchSimulations", 0)),
+		"elapsedMs": int(csharp_result.get("elapsedMs", -1)),
+		"beliefMetrics": csharp_result.get("beliefMetrics", {}).duplicate(true),
+		"cache": csharp_result.get("cache", {}).duplicate(true),
+		"mobileSpeedMode": bool(csharp_result.get("mobileSpeedMode", false)),
 		"backendMode": str(csharp_result.get("backendMode", "")),
 	}
 
@@ -1206,6 +1216,12 @@ func _build_turn_cache_key(player_state: Dictionary, table_state: Dictionary, ru
 	parts.append("cheat=%d" % int(allow_cheat))
 	parts.append("force_gd=%d" % int(force_gdscript))
 	parts.append("prefer_csharp=%d" % int(prefer_csharp_backend))
+	parts.append("self_bao=%d" % int(bool(player_state.get("bao_jiao", false))))
+	var last_draw: Dictionary = table_state.get("last_draw_tile", {})
+	parts.append("last_draw=%d:%s" % [
+		int(last_draw.get("seat", -1)),
+		_encode_single_tile(last_draw.get("tile", {}), active_suits),
+	])
 	parts.append("hand=%s" % _encode_tile_counts(player_state.get("hand_tiles", []), active_suits))
 	var players: Array = table_state.get("players", [])
 	for index in range(players.size()):
@@ -1232,6 +1248,11 @@ func _encode_tile_sequence(tiles: Array, active_suits: Array) -> String:
 		if tile_type >= 0:
 			encoded.append(str(tile_type))
 	return ",".join(encoded)
+
+
+func _encode_single_tile(tile: Dictionary, active_suits: Array) -> String:
+	var tile_type: int = int(csharp_bridge.tile_codec.tile_type(tile, active_suits))
+	return str(tile_type) if tile_type >= 0 else "-1"
 
 
 func _encode_meld_sequence(melds: Array, active_suits: Array) -> String:

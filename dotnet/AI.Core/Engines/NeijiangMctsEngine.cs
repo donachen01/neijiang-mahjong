@@ -15,6 +15,9 @@ public sealed class NeijiangMctsEngine
         int topK = 3,
         int rolloutDepth = 2)
     {
+        if (state.WallCount <= 0)
+            return new NeijiangSearchResult { Used = false };
+
         if (candidates.Count < 2)
             return new NeijiangSearchResult { Used = false };
 

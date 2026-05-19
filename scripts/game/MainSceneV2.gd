@@ -19,6 +19,7 @@ const AI_REACTION_DELAY := 0.52
 const AI_READY_POLL_SEC := 0.03
 const AI_WATCHDOG_POLL_SEC := 0.12
 const DIAGNOSTIC_EXPORT_UI_ENABLED := false
+const DEBUG_DIAGNOSTIC_EXPORT_UI_ENABLED := true
 const OPENING_ROLL_TICK := 0.04
 const OPENING_ROLL_TICKS := 10
 const BOARD_TARGET_RATIO := 1065.0 / 772.0
@@ -319,6 +320,7 @@ var floating_ai_helper_button: Button
 var floating_opponent_hand_button: Button
 var floating_hell_mark_button: Button
 var floating_diagnostic_export_button: Button
+var diagnostic_export_in_progress: bool = false
 var floating_left_button_bar: VBoxContainer
 var floating_left_toggle_button: Button
 var floating_preset_button: Button
@@ -1761,7 +1763,7 @@ func _update_floating_button_texts() -> void:
 		floating_hell_mark_button.visible = not floating_left_buttons_collapsed and bool(snapshot.get("hell_training", {}).get("enabled", false))
 	if floating_diagnostic_export_button != null:
 		floating_diagnostic_export_button.text = "导出"
-		floating_diagnostic_export_button.visible = DIAGNOSTIC_EXPORT_UI_ENABLED and not floating_left_buttons_collapsed
+		floating_diagnostic_export_button.visible = _is_diagnostic_export_ui_enabled() and not floating_left_buttons_collapsed
 	if floating_exit_button != null:
 		floating_exit_button.visible = false
 	_apply_floating_action_button_styles()
@@ -2157,7 +2159,7 @@ func _setup_left_floating_buttons() -> void:
 	floating_ai_helper_button.pressed.connect(_on_top_ai_helper_button_pressed)
 	floating_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
 	floating_hell_mark_button.pressed.connect(_on_hell_mark_button_pressed)
-	if DIAGNOSTIC_EXPORT_UI_ENABLED:
+	if _is_diagnostic_export_ui_enabled():
 		floating_diagnostic_export_button = _create_floating_circle_button("导")
 		floating_diagnostic_export_button.pressed.connect(_on_diagnostic_export_button_pressed)
 	floating_left_button_bar.add_child(floating_ai_helper_button)
@@ -2181,6 +2183,10 @@ func _create_floating_circle_button(text: String) -> Button:
 	button.focus_mode = Control.FOCUS_NONE
 	button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	return button
+
+
+func _is_diagnostic_export_ui_enabled() -> bool:
+	return DIAGNOSTIC_EXPORT_UI_ENABLED or (DEBUG_DIAGNOSTIC_EXPORT_UI_ENABLED and OS.is_debug_build())
 
 
 func _position_floating_action_buttons() -> void:
@@ -2241,7 +2247,7 @@ func _handle_left_floating_action_click(global_pos: Vector2) -> bool:
 		{"button": floating_preset_button, "action": Callable(self, "_on_top_bar_button_pressed")},
 		{"button": floating_ai_tuning_button, "action": Callable(self, "_on_top_ai_tuning_button_pressed")},
 	]
-	if DIAGNOSTIC_EXPORT_UI_ENABLED and floating_diagnostic_export_button != null:
+	if _is_diagnostic_export_ui_enabled() and floating_diagnostic_export_button != null:
 		targets.insert(3, {"button": floating_diagnostic_export_button, "action": Callable(self, "_on_diagnostic_export_button_pressed")})
 	for entry in targets:
 		var button: Button = entry.get("button", null)
@@ -2965,6 +2971,8 @@ func _update_v17_player_info_panels(snapshot: Dictionary) -> void:
 			ding_que_badge.visible = ding_que != ""
 
 		var status_parts: Array[String] = []
+		if bool(player.get("bao_jiao", false)):
+			status_parts.append("报叫")
 		status_parts.append("%d分" % score)
 		status_label.text = " ".join(status_parts)
 		status_label.visible = not status_label.text.is_empty()
@@ -6114,7 +6122,7 @@ func _ai_preset_hint_text(preset_name: String) -> String:
 		"intermediate":
 			return "当前 AI 预设：中级 · 稳健成叫"
 		"hell":
-			return "当前 AI 预设：地狱 · 两门快攻"
+			return "当前 AI 预设：地狱挑战 · 透视压分"
 		_:
 			return "当前 AI 预设：骨灰 · 内江老手"
 
@@ -7107,6 +7115,17 @@ func _on_hell_mark_button_pressed() -> void:
 
 
 func _on_diagnostic_export_button_pressed() -> void:
+	if diagnostic_export_in_progress:
+		return
+	_run_diagnostic_export_deferred()
+
+
+func _run_diagnostic_export_deferred() -> void:
+	diagnostic_export_in_progress = true
+	if floating_diagnostic_export_button != null and is_instance_valid(floating_diagnostic_export_button):
+		floating_diagnostic_export_button.disabled = true
+		floating_diagnostic_export_button.text = "..."
+	await get_tree().process_frame
 	if OS.has_feature("android"):
 		OS.request_permissions()
 	var result := game_manager.export_diagnostic_package()
@@ -7125,9 +7144,25 @@ func _on_diagnostic_export_button_pressed() -> void:
 		elif not path_to_copy.is_empty():
 			DisplayServer.clipboard_set(path_to_copy)
 	print("[DiagnosticExport] ", JSON.stringify(result))
-	OS.alert(message, "诊断导出")
+	_show_nonblocking_diagnostic_export_message(message)
+	diagnostic_export_in_progress = false
+	if floating_diagnostic_export_button != null and is_instance_valid(floating_diagnostic_export_button):
+		floating_diagnostic_export_button.disabled = false
+		floating_diagnostic_export_button.text = "导"
 	_update_top_bar(game_manager.get_snapshot())
 	_on_snapshot_changed(game_manager.get_snapshot())
+
+
+func _show_nonblocking_diagnostic_export_message(message: String) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = "诊断导出"
+	dialog.dialog_text = message
+	dialog.exclusive = false
+	dialog.process_mode = Node.PROCESS_MODE_ALWAYS
+	dialog.confirmed.connect(dialog.queue_free)
+	dialog.canceled.connect(dialog.queue_free)
+	root_ui.add_child(dialog)
+	dialog.popup_centered(Vector2(720, 360))
 
 
 func _build_diagnostic_export_message(result: Dictionary) -> String:
@@ -7365,6 +7400,7 @@ func _ensure_bao_gang_dialog() -> void:
 	bao_gang_dialog.cancel_button_text = "取消"
 	bao_gang_dialog.exclusive = true
 	bao_gang_dialog.visible = false
+	bao_gang_dialog.min_size = Vector2(620, 420)
 	bao_gang_dialog.confirmed.connect(_on_bao_gang_dialog_confirmed)
 	add_child(bao_gang_dialog)
 
@@ -7377,21 +7413,26 @@ func _show_bao_gang_selection_dialog(options: Array) -> void:
 	var box := VBoxContainer.new()
 	bao_gang_dialog_content = box
 	box.name = "BaoGangOptions"
-	box.add_theme_constant_override("separation", 8)
+	box.custom_minimum_size = Vector2(560, 260)
+	box.add_theme_constant_override("separation", 18)
 	var title := Label.new()
 	title.text = "选择要声明的报杠"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 34)
 	box.add_child(title)
 	for option_item in options:
 		var option: Dictionary = option_item
 		var check := CheckBox.new()
 		check.text = str(option.get("display_name", option.get("key", "")))
 		check.button_pressed = true
+		check.custom_minimum_size = Vector2(520, 72)
+		check.add_theme_font_size_override("font_size", 30)
+		check.add_theme_constant_override("h_separation", 18)
 		check.set_meta("bao_gang_key", str(option.get("key", "")))
 		box.add_child(check)
 		bao_gang_option_checks.append(check)
 	bao_gang_dialog.add_child(box)
-	bao_gang_dialog.popup_centered(Vector2(360, 220 + options.size() * 34))
+	bao_gang_dialog.popup_centered(Vector2(640, 360 + options.size() * 78))
 
 
 func _on_bao_gang_dialog_confirmed() -> void:
