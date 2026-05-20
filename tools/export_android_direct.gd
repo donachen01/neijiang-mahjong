@@ -104,10 +104,13 @@ func _export_android() -> void:
 	preset.set("custom_features", "C#")
 	preset.set("export_filter", "all_resources")
 	preset.set("include_filter", "")
-	preset.set("exclude_filter", "docs/*,tests/*,tools/*,build/*,backups/*,测试数据统计/*,.tmp_tts/*,.venv_tts/*,.git/*,.godot/*")
+	preset.set("exclude_filter", "docs/*,tests/*,tools/*,build/*,evidence/*,backups/*,测试数据统计/*,.tmp_tts/*,.venv_tts/*,.git/*,.godot/*")
 	preset.set("script_export_mode", 2)
 	preset.set("gradle_build/use_gradle_build", true)
-	preset.set("gradle_build/gradle_build_directory", "/Users/chendong/Documents/内江麻将工程_20260502_103823_v2/build/android/gradle_build")
+	var gradle_build_dir := OS.get_environment("GODOT_ANDROID_GRADLE_BUILD_DIR")
+	if gradle_build_dir == "":
+		gradle_build_dir = "/tmp/neijiang_mahjong_android_gradle_build"
+	preset.set("gradle_build/gradle_build_directory", gradle_build_dir)
 	preset.set("gradle_build/android_source_template", _resolve_template_file("android_source.zip"))
 	preset.set("gradle_build/compress_native_libraries", false)
 	preset.set("gradle_build/export_format", 0)
@@ -166,6 +169,11 @@ func _export_android() -> void:
 	for index in range(platform.call("get_message_count")):
 		print("message[%d].type=%s" % [index, str(platform.call("get_message_type", index))])
 		print("message[%d].text=%s" % [index, str(platform.call("get_message_text", index))])
+	if result != OK:
+		if FileAccess.file_exists(output_path):
+			DirAccess.remove_absolute(output_path)
+		quit(result)
+		return
 	if FileAccess.file_exists(output_path):
 		print("output_exists=true")
 		print("output_size=", FileAccess.get_file_as_bytes(output_path).size())
