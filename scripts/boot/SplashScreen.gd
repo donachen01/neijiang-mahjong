@@ -6,6 +6,7 @@ const SPLASH_SECONDS := 3.0
 @onready var splash_image: TextureRect = %SplashImage
 @onready var title_label: Label = %TitleLabel
 @onready var loading_label: Label = %LoadingLabel
+@onready var version_label: Label = %VersionLabel
 @onready var dice_left: Label = %DiceLeft
 @onready var dice_right: Label = %DiceRight
 @onready var credit_label: Label = %CreditLabel
@@ -17,6 +18,7 @@ var _dice_faces := ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	modulate = Color(1, 1, 1, 0)
+	version_label.text = _app_version_text()
 	splash_image.pivot_offset = get_viewport_rect().size * 0.5
 	dice_left.pivot_offset = dice_left.size * 0.5
 	dice_right.pivot_offset = dice_right.size * 0.5
@@ -56,3 +58,10 @@ func _tween_dice(weight: float, label: Label, phase: float) -> void:
 func _update_die_face(label: Label, offset: int, speed: float) -> void:
 	var index := int(floor(_elapsed * speed) + offset) % _dice_faces.size()
 	label.text = _dice_faces[index]
+
+
+func _app_version_text() -> String:
+	var version := str(ProjectSettings.get_setting("application/config/version", "")).strip_edges()
+	if version == "":
+		return ""
+	return "版本 v%s" % version
