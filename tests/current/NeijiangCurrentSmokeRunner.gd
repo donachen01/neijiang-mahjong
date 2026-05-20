@@ -19,6 +19,8 @@ func _run() -> void:
 	_run_test("opening_dealer_self_hu_without_last_draw_is_available", _test_opening_dealer_self_hu_without_last_draw_is_available, failures)
 	_run_test("ai_async_decisions_reject_changed_hand_signature", _test_ai_async_decisions_reject_changed_hand_signature, failures)
 	_run_test("ai_bao_jiao_discard_rejects_non_last_draw", _test_ai_bao_jiao_discard_rejects_non_last_draw, failures)
+	_run_test("ai_bao_jiao_unreported_fourth_9tong_discards_last_draw", _test_ai_bao_jiao_unreported_fourth_9tong_discards_last_draw, failures)
+	_run_test("ai_bao_jiao_unreported_fourth_same_type_discards_last_draw", _test_ai_bao_jiao_unreported_fourth_same_type_discards_last_draw, failures)
 	_run_test("ai_bao_jiao_signature_tracks_last_draw", _test_ai_bao_jiao_signature_tracks_last_draw, failures)
 	if failures.is_empty():
 		print("NEIJIANG CURRENT SMOKE OK")
@@ -368,6 +370,101 @@ func _test_ai_bao_jiao_discard_rejects_non_last_draw():
 		return "expected no discard after rejecting illegal C# decision, got %s" % [game_state.discard_pile]
 	if str(game_state.debug_last_message).find("C#") == -1:
 		return "expected debug message to identify C# contract failure, got %s" % game_state.debug_last_message
+	return true
+
+
+func _test_ai_bao_jiao_unreported_fourth_9tong_discards_last_draw():
+	var tong_9_tiles := [
+		_make_tile(601, "tong", 9),
+		_make_tile(602, "tong", 9),
+		_make_tile(603, "tong", 9),
+		_make_tile(604, "tong", 9),
+	]
+	return _assert_bao_jiao_unreported_fourth_tile_discards_last_draw(
+		"真实规则复盘：未报 9筒杠，摸第 4 张 9筒",
+		tong_9_tiles,
+		"tong_9",
+		17
+	)
+
+
+func _test_ai_bao_jiao_unreported_fourth_same_type_discards_last_draw():
+	var tiao_7_tiles := [
+		_make_tile(701, "tiao", 7),
+		_make_tile(702, "tiao", 7),
+		_make_tile(703, "tiao", 7),
+		_make_tile(704, "tiao", 7),
+	]
+	return _assert_bao_jiao_unreported_fourth_tile_discards_last_draw(
+		"同类型回归：未报 7条杠，摸第 4 张 7条",
+		tiao_7_tiles,
+		"tiao_7",
+		6
+	)
+
+
+func _assert_bao_jiao_unreported_fourth_tile_discards_last_draw(case_name: String, four_same_tiles: Array, forbidden_bao_gang_key: String, expected_tile_type: int):
+	var game_state = _build_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
+	game_state.current_dealer_seat = 0
+	game_state.current_turn_seat = 1
+	game_state.wall_count = 12
+	var last_draw_tile: Dictionary = four_same_tiles[3].duplicate(true)
+	game_state.players.clear()
+	game_state.players.append_array([
+		_make_player(0, []),
+		_make_player(1, [
+			_make_tile(621, "tiao", 1),
+			_make_tile(622, "tiao", 2),
+			_make_tile(623, "tiao", 4),
+			_make_tile(624, "tiao", 5),
+			_make_tile(625, "tiao", 8),
+			_make_tile(626, "tong", 1),
+			_make_tile(627, "tong", 3),
+			_make_tile(628, "tong", 4),
+			_make_tile(629, "tong", 6),
+			_make_tile(630, "tong", 8),
+			four_same_tiles[0],
+			four_same_tiles[1],
+			four_same_tiles[2],
+			last_draw_tile,
+		]),
+		_make_player(2, []),
+		_make_player(3, []),
+	])
+	game_state.players[1]["bao_jiao"] = true
+	game_state.players[1]["bao_gang_tiles"] = []
+	game_state.players[1]["bao_jiao_ting_tiles"] = [_make_tile(631, "tong", 2)]
+	game_state.players[1]["rule_marks"] = ["报叫"]
+	game_state.last_draw_tile = {"seat": 1, "tile": last_draw_tile.duplicate(true)}
+	game_state.last_turn_context = {
+		"seat": 1,
+		"draw_reason": "normal_draw",
+	}
+	var an_options: Array = game_state._find_all_an_gang_options(1)
+	if not an_options.is_empty():
+		return "%s expected no an-gang options when %s is not in bao_gang_tiles, got %s" % [case_name, forbidden_bao_gang_key, an_options]
+	var mandatory_types: Array = game_state._mandatory_gang_tile_types_for_seat(1, an_options, game_state._find_all_add_gang_options(1))
+	if mandatory_types.has(expected_tile_type):
+		return "%s expected unreported tile type %d not to be mandatory gang, got %s" % [case_name, expected_tile_type, mandatory_types]
+	var self_action: Dictionary = game_state._build_ai_self_action_decision(1, game_state._build_player_state(1), game_state._build_table_state())
+	if not self_action.is_empty():
+		return "%s expected no C# self gang action for unreported fourth tile, got %s" % [case_name, self_action]
+	var decision: Dictionary = game_state._build_ai_turn_decision()
+	if str(decision.get("action", "")) != "discard":
+		return "%s expected discard decision, got %s" % [case_name, decision]
+	if int(decision.get("tile_id", -1)) != int(last_draw_tile.get("id", -1)):
+		return "%s expected decision to discard last draw id %d, got %s" % [case_name, int(last_draw_tile.get("id", -1)), decision]
+	var ok: bool = game_state._execute_ai_turn_decision(decision)
+	if not ok:
+		return "%s expected AI discard execution to succeed, debug=%s decision=%s" % [case_name, game_state.debug_last_message, decision]
+	if not game_state.players[1]["melds"].is_empty():
+		return "%s expected no gang meld after execution, got %s" % [case_name, game_state.players[1]["melds"]]
+	if game_state.discard_pile.is_empty():
+		return "%s expected discard pile to contain last draw" % case_name
+	var discarded: Dictionary = game_state.discard_pile[-1].get("tile", {})
+	if int(discarded.get("id", -1)) != int(last_draw_tile.get("id", -1)):
+		return "%s expected discarded tile id %d, got %s" % [case_name, int(last_draw_tile.get("id", -1)), discarded]
 	return true
 
 

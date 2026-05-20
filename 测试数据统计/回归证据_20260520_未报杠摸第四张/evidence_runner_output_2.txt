@@ -1,0 +1,7 @@
+Godot Engine v4.6.2.stable.mono.official.71f334935 - https://godotengine.org
+
+[NeijiangCSharpRuntime] ready
+[GameState] bound native C# runtime ready=true
+[GameState] bound native C# runtime ready=true
+[GameState] bound native C# runtime ready=true
+WROTE /Users/chendong/Documents/内江麻将工程_20260502_103823_v2/测试数据统计/回归证据_20260520_未报杠摸第四张/case_replay_results.json

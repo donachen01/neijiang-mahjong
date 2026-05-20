@@ -1,0 +1,24 @@
+Godot Engine v4.6.2.stable.mono.official.71f334935 - https://godotengine.org
+
+[NeijiangCSharpRuntime] ready
+[GameState] bound native C# runtime ready=true
+PASS csharp_self_action_exposes_gang_subtype
+PASS game_state_executes_csharp_add_gang_subtype
+PASS opening_bao_jiao_queue_scans_ai_and_human_players
+PASS ai_opening_bao_jiao_uses_csharp_selection
+PASS ai_opening_bao_jiao_passes_when_csharp_declines
+PASS opening_bao_jiao_can_select_triplet_bao_gang
+PASS bao_jiao_blocks_peng_and_non_whitelist_discard_gang
+PASS bao_jiao_allows_whitelisted_discard_gang
+PASS bao_jiao_allows_only_whitelisted_an_gang
+PASS mandatory_self_bao_gang_is_csharp_decision
+PASS ai_reaction_honors_backend_peng_when_gang_available
+PASS mandatory_reaction_bao_gang_is_csharp_decision
+PASS add_gang_requires_matching_last_draw_after_peng
+PASS peng_does_not_reask_self_action_for_immediate_add_gang
+PASS reaction_context_defers_native_ai_until_timer
+NEIJIANG BAO GANG REGRESSION OK
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2641)
+ERROR: 29 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:810)

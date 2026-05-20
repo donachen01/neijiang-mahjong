@@ -1,0 +1,294 @@
+{
+  "case_name": "真实规则复盘：未报 9筒杠，摸第 4 张 9筒",
+  "passed": true,
+  "input": {
+    "bao_gang_tiles": [],
+    "last_draw_tile": {
+      "display_name": "9筒",
+      "id": 604,
+      "rank": 9,
+      "sort_key": 109,
+      "suit": "tong"
+    },
+    "hand_tiles_before": [
+      {
+        "display_name": "1条",
+        "id": 621,
+        "rank": 1,
+        "sort_key": 1,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "2条",
+        "id": 622,
+        "rank": 2,
+        "sort_key": 2,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "4条",
+        "id": 623,
+        "rank": 4,
+        "sort_key": 4,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "5条",
+        "id": 624,
+        "rank": 5,
+        "sort_key": 5,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "8条",
+        "id": 625,
+        "rank": 8,
+        "sort_key": 8,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "1筒",
+        "id": 626,
+        "rank": 1,
+        "sort_key": 101,
+        "suit": "tong"
+      },
+      {
+        "display_name": "3筒",
+        "id": 627,
+        "rank": 3,
+        "sort_key": 103,
+        "suit": "tong"
+      },
+      {
+        "display_name": "4筒",
+        "id": 628,
+        "rank": 4,
+        "sort_key": 104,
+        "suit": "tong"
+      },
+      {
+        "display_name": "6筒",
+        "id": 629,
+        "rank": 6,
+        "sort_key": 106,
+        "suit": "tong"
+      },
+      {
+        "display_name": "8筒",
+        "id": 630,
+        "rank": 8,
+        "sort_key": 108,
+        "suit": "tong"
+      },
+      {
+        "display_name": "9筒",
+        "id": 601,
+        "rank": 9,
+        "sort_key": 109,
+        "suit": "tong"
+      },
+      {
+        "display_name": "9筒",
+        "id": 602,
+        "rank": 9,
+        "sort_key": 109,
+        "suit": "tong"
+      },
+      {
+        "display_name": "9筒",
+        "id": 603,
+        "rank": 9,
+        "sort_key": 109,
+        "suit": "tong"
+      }
+    ]
+  },
+  "checks": {
+    "add_gang_options": [],
+    "an_gang_options": [],
+    "debug_last_message": "Seat 0 摸牌 9条，等待出牌。",
+    "discarded_tile": {
+      "display_name": "9筒",
+      "id": 604,
+      "rank": 9,
+      "sort_key": 109,
+      "suit": "tong"
+    },
+    "execution_ok": true,
+    "mandatory_gang_tile_types": [],
+    "melds_after": [],
+    "self_action_decision": {},
+    "turn_decision": {
+      "action": "discard",
+      "actual_action": {
+        "action": "discard",
+        "source": "hell_challenge_direct",
+        "tile_id": 604,
+        "tile_type": 17
+      },
+      "backend_mode": "hell_challenge_direct",
+      "hell_oracle_category": "bao_jiao_route",
+      "hell_oracle_reasons": [
+        "报叫专线：已报叫后摸什么出什么",
+        "C#只允许出本轮摸牌，前端不得替换为其他手牌"
+      ],
+      "recommended_csharp_tile_type": 17,
+      "recommended_tile": {
+        "display_name": "9筒",
+        "id": 604,
+        "rank": 9,
+        "sort_key": 109,
+        "suit": "tong"
+      },
+      "tile_id": 604
+    }
+  }
+}
+{
+  "case_name": "同类型回归：未报 7条杠，摸第 4 张 7条",
+  "passed": true,
+  "input": {
+    "bao_gang_tiles": [],
+    "last_draw_tile": {
+      "display_name": "7条",
+      "id": 704,
+      "rank": 7,
+      "sort_key": 7,
+      "suit": "tiao"
+    },
+    "hand_tiles_before": [
+      {
+        "display_name": "1条",
+        "id": 621,
+        "rank": 1,
+        "sort_key": 1,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "2条",
+        "id": 622,
+        "rank": 2,
+        "sort_key": 2,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "4条",
+        "id": 623,
+        "rank": 4,
+        "sort_key": 4,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "5条",
+        "id": 624,
+        "rank": 5,
+        "sort_key": 5,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "8条",
+        "id": 625,
+        "rank": 8,
+        "sort_key": 8,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "1筒",
+        "id": 626,
+        "rank": 1,
+        "sort_key": 101,
+        "suit": "tong"
+      },
+      {
+        "display_name": "3筒",
+        "id": 627,
+        "rank": 3,
+        "sort_key": 103,
+        "suit": "tong"
+      },
+      {
+        "display_name": "4筒",
+        "id": 628,
+        "rank": 4,
+        "sort_key": 104,
+        "suit": "tong"
+      },
+      {
+        "display_name": "6筒",
+        "id": 629,
+        "rank": 6,
+        "sort_key": 106,
+        "suit": "tong"
+      },
+      {
+        "display_name": "8筒",
+        "id": 630,
+        "rank": 8,
+        "sort_key": 108,
+        "suit": "tong"
+      },
+      {
+        "display_name": "7条",
+        "id": 701,
+        "rank": 7,
+        "sort_key": 7,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "7条",
+        "id": 702,
+        "rank": 7,
+        "sort_key": 7,
+        "suit": "tiao"
+      },
+      {
+        "display_name": "7条",
+        "id": 703,
+        "rank": 7,
+        "sort_key": 7,
+        "suit": "tiao"
+      }
+    ]
+  },
+  "checks": {
+    "add_gang_options": [],
+    "an_gang_options": [],
+    "debug_last_message": "Seat 0 摸牌 3筒，等待出牌。",
+    "discarded_tile": {
+      "display_name": "7条",
+      "id": 704,
+      "rank": 7,
+      "sort_key": 7,
+      "suit": "tiao"
+    },
+    "execution_ok": true,
+    "mandatory_gang_tile_types": [],
+    "melds_after": [],
+    "self_action_decision": {},
+    "turn_decision": {
+      "action": "discard",
+      "actual_action": {
+        "action": "discard",
+        "source": "hell_challenge_direct",
+        "tile_id": 704,
+        "tile_type": 6
+      },
+      "backend_mode": "hell_challenge_direct",
+      "hell_oracle_category": "bao_jiao_route",
+      "hell_oracle_reasons": [
+        "报叫专线：已报叫后摸什么出什么",
+        "C#只允许出本轮摸牌，前端不得替换为其他手牌"
+      ],
+      "recommended_csharp_tile_type": 6,
+      "recommended_tile": {
+        "display_name": "7条",
+        "id": 704,
+        "rank": 7,
+        "sort_key": 7,
+        "suit": "tiao"
+      },
+      "tile_id": 704
+    }
+  }
+}
