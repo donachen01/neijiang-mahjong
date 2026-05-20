@@ -36,7 +36,7 @@ func _ready() -> void:
 	_run_test("neijiang_bao_jiao_plan_is_available_on_opening_ting", _test_neijiang_bao_jiao_plan_is_available_on_opening_ting, failures)
 	_run_test("neijiang_bao_gang_whitelist_requires_keep_ting", _test_neijiang_bao_gang_whitelist_requires_keep_ting, failures)
 	_run_test("neijiang_bao_jiao_payer_pays_extra_on_loss", _test_neijiang_bao_jiao_payer_pays_extra_on_loss, failures)
-	_run_test("neijiang_ai_bao_jiao_discard_rejects_non_last_draw", _test_neijiang_ai_bao_jiao_discard_rejects_non_last_draw, failures)
+	_run_test("neijiang_ai_bao_jiao_discard_falls_back_to_last_draw", _test_neijiang_ai_bao_jiao_discard_falls_back_to_last_draw, failures)
 
 	if failures.is_empty():
 		print("RULE REGRESSION OK: 30/30")
@@ -1114,7 +1114,7 @@ func _test_neijiang_bao_jiao_payer_pays_extra_on_loss():
 	return true
 
 
-func _test_neijiang_ai_bao_jiao_discard_rejects_non_last_draw():
+func _test_neijiang_ai_bao_jiao_discard_falls_back_to_last_draw():
 	var game_state = _build_neijiang_test_game_state()
 	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
 	game_state.current_dealer_seat = 0
@@ -1159,14 +1159,18 @@ func _test_neijiang_ai_bao_jiao_discard_rejects_non_last_draw():
 		"tile_id": int(locked_tile.get("id")),
 		"hand_count": int(game_state.players[1].get("hand_count")),
 	})
-	if executed:
-		return "expected AI illegal bao-jiao discard to be rejected instead of frontend-forced"
+	if not executed:
+		return "expected AI bao-jiao fallback to discard the just-drawn tile, got %s" % game_state.debug_last_message
 	if not _hand_contains_tile_id(game_state.players[1].get("hand_tiles", []), int(locked_tile.get("id"))):
 		return "expected locked bao-jiao tile to remain in hand"
-	if not _hand_contains_tile_id(game_state.players[1].get("hand_tiles", []), int(drawn_tile.get("id"))):
-		return "expected drawn tile to remain because frontend must not substitute C# decision"
-	if not game_state.discard_pile.is_empty():
-		return "expected no discard after rejecting illegal C# decision, got %s" % [game_state.discard_pile]
+	if _hand_contains_tile_id(game_state.players[1].get("hand_tiles", []), int(drawn_tile.get("id"))):
+		return "expected just-drawn tile to be discarded after bao-jiao fallback"
+	if game_state.discard_pile.is_empty():
+		return "expected fallback discard to enter discard pile"
+	var discarded: Dictionary = game_state.discard_pile.back()
+	var discarded_tile: Dictionary = discarded.get("tile", {})
+	if int(discarded_tile.get("id", -1)) != int(drawn_tile.get("id")):
+		return "expected discarded tile to be just-drawn tile, got %s" % [discarded]
 	return true
 
 

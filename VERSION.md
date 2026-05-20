@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.40`
+Current app version: `1.0.41`
 
-`1.0.40` is the practical-use Android package: it keeps the slower randomized AI pacing and disables runtime diagnostic export, AI training/analysis recording, and auto-learning file persistence by default.
+`1.0.41` fixes a bao-jiao AI turn stall: when the backend recommends discarding an original locked hand tile after bao-jiao, the frontend now falls back to discarding the just-drawn tile so the AI keeps playing.
 
 ## Versioning Workflow
 

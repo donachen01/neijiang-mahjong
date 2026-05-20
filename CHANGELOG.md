@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.41 - 2026-05-20
+
+- Fixed a bao-jiao AI stall where the backend could recommend discarding an original locked hand tile and the frontend rejected it without progressing the turn.
+- Bao-jiao AI now falls back to discarding the just-drawn tile when a discard recommendation would violate the bao-jiao lock, while still blocking discard if that draw is a mandatory bao-gang tile.
+- Added regression coverage using the same locked-tile plus just-drawn-tile shape from the stalled AI turn.
+
 ## 1.0.40 - 2026-05-20
 
 - Disabled runtime diagnostic export, AI analysis/training logs, and auto-learning file persistence for the practical-use Android package.
