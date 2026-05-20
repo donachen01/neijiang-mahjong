@@ -14,6 +14,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 
+	_run_test("user_release_hides_diagnostic_and_dev_buttons", _test_user_release_hides_diagnostic_and_dev_buttons.bind(root_node), failures)
 	_run_test("ai_action_delay_is_randomized_between_half_and_three_seconds", _test_ai_action_delay_is_randomized_between_half_and_three_seconds.bind(root_node), failures)
 	_run_test("self_hu_helper_prioritizes_hu_over_discard_recommendation", _test_self_hu_helper_prioritizes_hu_over_discard_recommendation.bind(root_node), failures)
 	_run_test("selected_tile_helper_uses_csharp_candidate_details", _test_selected_tile_helper_uses_csharp_candidate_details.bind(root_node), failures)
@@ -54,6 +55,26 @@ func _test_ai_action_delay_is_randomized_between_half_and_three_seconds(root_nod
 		observed[int(round(delay_seconds * 1000.0))] = true
 	if observed.size() < 2:
 		return "expected randomized AI action delays, got one repeated value"
+	return true
+
+
+func _test_user_release_hides_diagnostic_and_dev_buttons(root_node: Node):
+	if bool(root_node.call("_is_diagnostic_export_ui_enabled")):
+		return "expected diagnostic export UI disabled"
+	root_node.set("floating_left_buttons_collapsed", false)
+	root_node.call("_update_floating_button_texts")
+	var diagnostic_button = root_node.get("floating_diagnostic_export_button")
+	if diagnostic_button != null and bool(diagnostic_button.visible):
+		return "expected diagnostic export button hidden"
+	var tuning_button = root_node.get("floating_ai_tuning_button")
+	if tuning_button != null and bool(tuning_button.visible):
+		return "expected AI tuning button hidden in user release"
+	var opponent_button = root_node.get("floating_opponent_hand_button")
+	if opponent_button != null and bool(opponent_button.visible):
+		return "expected opponent hand debug button hidden in user release"
+	var mark_button = root_node.get("floating_hell_mark_button")
+	if mark_button != null and bool(mark_button.visible):
+		return "expected hell mark button hidden in user release"
 	return true
 
 
@@ -353,22 +374,22 @@ func _test_main_controls_are_layered_by_purpose(root_node: Node):
 	var opponent: Button = root_node.get("floating_opponent_hand_button") as Button
 	var preset: Button = root_node.get("floating_preset_button") as Button
 	var tuning: Button = root_node.get("floating_ai_tuning_button") as Button
-	if drawer == null or toggle == null or helper == null or opponent == null or preset == null or tuning == null:
-		return "expected AI tool drawer to expose AI/helper/opponent/preset/tuning buttons"
+	if drawer == null or toggle == null or helper == null or preset == null:
+		return "expected AI tool drawer to expose AI/helper/preset controls"
 	if toggle.text != "AI":
 		return "expected drawer entry button to read AI, got %s" % toggle.text
 	root_node.set("floating_left_buttons_collapsed", false)
 	root_node.call("_update_floating_button_texts")
-	if not helper.visible or not opponent.visible or not preset.visible or not tuning.visible:
-		return "expected expanded AI drawer to show helper, open-hand, preset, and tuning controls"
+	if not helper.visible or not preset.visible:
+		return "expected expanded AI drawer to show helper and preset controls"
+	if opponent != null and opponent.visible:
+		return "expected practical-use build to hide open-hand developer control"
+	if tuning != null and tuning.visible:
+		return "expected practical-use build to hide tuning developer control"
 	if not str(helper.text).begins_with("辅助"):
 		return "expected helper toggle label to include status, got %s" % helper.text
-	if not str(opponent.text).begins_with("明牌"):
-		return "expected open-hand toggle label to include status, got %s" % opponent.text
 	if not str(preset.text).begins_with("难度"):
 		return "expected preset control to be shown as difficulty status, got %s" % preset.text
-	if tuning.text != "调参":
-		return "expected tuning control text 调参, got %s" % tuning.text
 	if helper.custom_minimum_size.x > 190.0 or helper.custom_minimum_size.y > 64.0:
 		return "expected AI drawer buttons to be compact pills, got %.1fx%.1f" % [helper.custom_minimum_size.x, helper.custom_minimum_size.y]
 	return true

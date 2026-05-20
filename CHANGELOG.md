@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.40 - 2026-05-20
+
+- Disabled runtime diagnostic export, AI analysis/training logs, and auto-learning file persistence for the practical-use Android package.
+- Hid diagnostic export, hell-marking, tuning, and opponent-hand developer buttons from the in-game floating tools.
+- Kept the 0.5-3.0 second randomized AI table pacing from 1.0.39.
+
 ## 1.0.39 - 2026-05-20
 
 - Slowed visible AI table actions with a randomized 0.5-3.0 second thinking delay for turns and reactions.

@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.39`
+Current app version: `1.0.40`
 
-`1.0.39` slows AI table actions with a randomized 0.5-3.0 second thinking delay, so computer turns and reactions feel less mechanical.
+`1.0.40` is the practical-use Android package: it keeps the slower randomized AI pacing and disables runtime diagnostic export, AI training/analysis recording, and auto-learning file persistence by default.
 
 ## Versioning Workflow
 

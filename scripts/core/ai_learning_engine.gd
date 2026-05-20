@@ -28,14 +28,22 @@ const PARAMETER_LABELS := {
 var profile: Dictionary = {}
 var last_backend_mode: String = "gdscript"
 var native_csharp_runtime: Object = null
+var persistence_enabled: bool = true
 
 
 func set_native_csharp_runtime(runtime: Object) -> void:
 	native_csharp_runtime = runtime
 
 
+func set_persistence_enabled(enabled: bool) -> void:
+	persistence_enabled = enabled
+
+
 func load_profile() -> Dictionary:
 	profile = _default_profile()
+	if not persistence_enabled:
+		last_backend_mode = "disabled"
+		return profile.duplicate(true)
 	if not FileAccess.file_exists(LEARNING_FILE):
 		save_profile()
 		return profile.duplicate(true)
@@ -55,6 +63,8 @@ func load_profile() -> Dictionary:
 
 
 func save_profile() -> bool:
+	if not persistence_enabled:
+		return false
 	_ensure_learning_dir()
 	var file := FileAccess.open(LEARNING_FILE, FileAccess.WRITE)
 	if file == null:
@@ -86,6 +96,11 @@ func get_runtime_summary() -> Dictionary:
 
 
 func record_human_round(round_result: Dictionary) -> Dictionary:
+	if not persistence_enabled:
+		last_backend_mode = "disabled"
+		if profile.is_empty():
+			profile = _default_profile()
+		return profile.duplicate(true)
 	if _record_human_round_via_csharp(round_result):
 		load_profile()
 		return profile.duplicate(true)

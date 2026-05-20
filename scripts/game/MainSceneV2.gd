@@ -19,7 +19,8 @@ const AI_ACTION_DELAY_MAX_SEC := 3.0
 const AI_READY_POLL_SEC := 0.03
 const AI_WATCHDOG_POLL_SEC := 0.12
 const DIAGNOSTIC_EXPORT_UI_ENABLED := false
-const DEBUG_DIAGNOSTIC_EXPORT_UI_ENABLED := true
+const DEBUG_DIAGNOSTIC_EXPORT_UI_ENABLED := false
+const RELEASE_USER_BUILD_UI := true
 const OPENING_ROLL_TICK := 0.04
 const OPENING_ROLL_TICKS := 10
 const BOARD_TARGET_RATIO := 1065.0 / 772.0
@@ -1780,17 +1781,17 @@ func _update_floating_button_texts() -> void:
 		floating_preset_button.visible = not floating_left_buttons_collapsed
 	if floating_ai_tuning_button != null:
 		floating_ai_tuning_button.text = "调参"
-		floating_ai_tuning_button.visible = not floating_left_buttons_collapsed
+		floating_ai_tuning_button.visible = not RELEASE_USER_BUILD_UI and not floating_left_buttons_collapsed
 	if floating_ai_helper_button != null:
 		floating_ai_helper_button.text = "辅助 %s" % ("开" if ai_helper_enabled else "关")
 		floating_ai_helper_button.visible = not floating_left_buttons_collapsed
 	if floating_opponent_hand_button != null:
 		floating_opponent_hand_button.text = "明牌 %s" % ("开" if opponent_hands_enabled else "关")
-		floating_opponent_hand_button.visible = not floating_left_buttons_collapsed
+		floating_opponent_hand_button.visible = not RELEASE_USER_BUILD_UI and not floating_left_buttons_collapsed
 	if floating_hell_mark_button != null:
 		var snapshot := game_manager.get_snapshot()
 		floating_hell_mark_button.text = "标记"
-		floating_hell_mark_button.visible = not floating_left_buttons_collapsed and bool(snapshot.get("hell_training", {}).get("enabled", false))
+		floating_hell_mark_button.visible = not RELEASE_USER_BUILD_UI and not floating_left_buttons_collapsed and bool(snapshot.get("hell_training", {}).get("enabled", false))
 	if floating_diagnostic_export_button != null:
 		floating_diagnostic_export_button.text = "导出"
 		floating_diagnostic_export_button.visible = _is_diagnostic_export_ui_enabled() and not floating_left_buttons_collapsed
@@ -2149,15 +2150,16 @@ func _setup_floating_action_buttons() -> void:
 	floating_right_toggle_button = _create_floating_circle_button("-")
 	floating_right_toggle_button.pressed.connect(_toggle_right_floating_buttons)
 	floating_right_button_bar.add_child(floating_right_toggle_button)
-	floating_ai_tuning_button = _create_floating_circle_button("调")
 	floating_ai_helper_button = _create_floating_circle_button("辅")
-	floating_opponent_hand_button = _create_floating_circle_button("明")
-	floating_ai_tuning_button.pressed.connect(_on_top_ai_tuning_button_pressed)
 	floating_ai_helper_button.pressed.connect(_on_top_ai_helper_button_pressed)
-	floating_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
-	floating_right_button_bar.add_child(floating_ai_tuning_button)
 	floating_right_button_bar.add_child(floating_ai_helper_button)
-	floating_right_button_bar.add_child(floating_opponent_hand_button)
+	if not RELEASE_USER_BUILD_UI:
+		floating_ai_tuning_button = _create_floating_circle_button("调")
+		floating_opponent_hand_button = _create_floating_circle_button("明")
+		floating_ai_tuning_button.pressed.connect(_on_top_ai_tuning_button_pressed)
+		floating_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
+		floating_right_button_bar.add_child(floating_ai_tuning_button)
+		floating_right_button_bar.add_child(floating_opponent_hand_button)
 
 	if not root_ui.resized.is_connected(_position_floating_action_buttons):
 		root_ui.resized.connect(_position_floating_action_buttons)
@@ -2185,10 +2187,12 @@ func _setup_left_floating_buttons() -> void:
 	floating_diagnostic_export_button = null
 	floating_exit_button = null
 	floating_preset_button.pressed.connect(_on_top_bar_button_pressed)
-	floating_ai_tuning_button.pressed.connect(_on_top_ai_tuning_button_pressed)
+	if not RELEASE_USER_BUILD_UI:
+		floating_ai_tuning_button.pressed.connect(_on_top_ai_tuning_button_pressed)
 	floating_ai_helper_button.pressed.connect(_on_top_ai_helper_button_pressed)
-	floating_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
-	floating_hell_mark_button.pressed.connect(_on_hell_mark_button_pressed)
+	if not RELEASE_USER_BUILD_UI:
+		floating_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
+		floating_hell_mark_button.pressed.connect(_on_hell_mark_button_pressed)
 	if _is_diagnostic_export_ui_enabled():
 		floating_diagnostic_export_button = _create_floating_circle_button("导")
 		floating_diagnostic_export_button.pressed.connect(_on_diagnostic_export_button_pressed)
@@ -2216,6 +2220,8 @@ func _create_floating_circle_button(text: String) -> Button:
 
 
 func _is_diagnostic_export_ui_enabled() -> bool:
+	if RELEASE_USER_BUILD_UI:
+		return false
 	return DIAGNOSTIC_EXPORT_UI_ENABLED or (DEBUG_DIAGNOSTIC_EXPORT_UI_ENABLED and OS.is_debug_build())
 
 

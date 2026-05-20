@@ -9,11 +9,11 @@ func _init() -> void:
 
 func _run() -> void:
 	var failures: Array[String] = []
-	_run_test("startup_defaults_to_debug_training_release_safe", _test_startup_defaults_to_debug_training_release_safe, failures)
+	_run_test("startup_defaults_to_user_release_recording_off", _test_startup_defaults_to_user_release_recording_off, failures)
 	_run_test("hell_challenge_mode_executes_oracle_without_recording", _test_hell_challenge_mode_executes_oracle_without_recording, failures)
 	_run_test("hell_challenge_oracle_replaces_deal_in_discard", _test_hell_challenge_oracle_replaces_deal_in_discard, failures)
 	_run_test("hell_challenge_async_decision_applies_oracle", _test_hell_challenge_async_decision_applies_oracle, failures)
-	_run_test("debug_training_records_analysis_event", _test_debug_training_records_analysis_event, failures)
+	_run_test("user_release_skips_training_event_recording", _test_user_release_skips_training_event_recording, failures)
 	_run_test("neijiang_uses_two_suits_without_ding_que", _test_neijiang_uses_two_suits_without_ding_que, failures)
 	_run_test("neijiang_initial_deal_uses_72_tiles", _test_neijiang_initial_deal_uses_72_tiles, failures)
 	_run_test("opening_dealer_self_hu_without_last_draw_is_available", _test_opening_dealer_self_hu_without_last_draw_is_available, failures)
@@ -51,7 +51,7 @@ func _test_neijiang_uses_two_suits_without_ding_que():
 	return true
 
 
-func _test_startup_defaults_to_debug_training_release_safe():
+func _test_startup_defaults_to_user_release_recording_off():
 	var game_state = _build_game_state()
 	var snapshot: Dictionary = game_state.get_debug_snapshot()
 	var config: Dictionary = snapshot.get("ai_tuning_config", {})
@@ -59,9 +59,10 @@ func _test_startup_defaults_to_debug_training_release_safe():
 		return "expected startup preset hell, got %s" % [config]
 	if int(snapshot.get("ai_level_index", -1)) != int(GAME_STATE_SCRIPT.AILevel.CHEATING):
 		return "expected startup ai level cheating in hell mode, got %s" % [snapshot.get("ai_level_index", -1)]
-	var expected_debug_recording := OS.is_debug_build()
-	if bool(config.get("diagnostics_recording_enabled", false)) != expected_debug_recording:
-		return "expected diagnostics recording to match debug build=%s, got %s" % [str(expected_debug_recording), config]
+	if bool(config.get("diagnostics_recording_enabled", false)):
+		return "expected diagnostics recording disabled for user release, got %s" % [config]
+	if bool(config.get("auto_learning_enabled", true)):
+		return "expected auto learning recording disabled for user release, got %s" % [config]
 	if not bool(config.get("hell_ai_can_see_wall", false)):
 		return "expected hell challenge to see wall, got %s" % [config]
 	if not bool(config.get("hell_ai_can_see_human_hand", false)):
@@ -69,13 +70,18 @@ func _test_startup_defaults_to_debug_training_release_safe():
 	if not bool(config.get("hell_execute_oracle_action", false)):
 		return "expected hell challenge to execute oracle action, got %s" % [config]
 	var hell: Dictionary = snapshot.get("hell_training", {})
-	if bool(hell.get("enabled", false)) != expected_debug_recording:
-		return "expected hell diagnostics to match debug build=%s, got %s" % [str(expected_debug_recording), hell]
+	if bool(hell.get("enabled", false)):
+		return "expected hell diagnostics disabled for user release, got %s" % [hell]
 	if not bool(hell.get("challenge_enabled", false)):
 		return "expected hell challenge to be enabled independent of diagnostics, got %s" % [hell]
 	var recording: Dictionary = snapshot.get("ai_analysis_recording", {})
-	if bool(recording.get("enabled", false)) != expected_debug_recording:
-		return "expected ai analysis recording to match debug build=%s, got %s" % [str(expected_debug_recording), recording]
+	if bool(recording.get("enabled", false)):
+		return "expected ai analysis recording disabled for user release, got %s" % [recording]
+	var export_result: Dictionary = game_state.export_diagnostic_package(false)
+	if bool(export_result.get("ok", false)):
+		return "expected diagnostic export disabled for user release, got %s" % [export_result]
+	if str(export_result.get("error", "")) != "diagnostic_export_disabled":
+		return "expected diagnostic_export_disabled, got %s" % [export_result]
 	return true
 
 
@@ -164,7 +170,7 @@ func _test_hell_challenge_async_decision_applies_oracle():
 	return true
 
 
-func _test_debug_training_records_analysis_event():
+func _test_user_release_skips_training_event_recording():
 	var game_state = _build_game_state()
 	game_state._record_ai_analysis_event("training_probe", {
 		"turn_diagnostic": {
@@ -173,20 +179,13 @@ func _test_debug_training_records_analysis_event():
 		},
 	})
 	var recording: Dictionary = game_state.get_debug_snapshot().get("ai_analysis_recording", {})
-	if OS.is_debug_build():
-		if int(recording.get("event_count", 0)) < 1:
-			return "expected debug training event to be recorded, got %s" % [recording]
-		if str(recording.get("session_id", "")).is_empty():
-			return "expected debug training session id, got %s" % [recording]
-		var export_result: Dictionary = game_state.export_diagnostic_package(false)
-		if not bool(export_result.get("ok", false)):
-			return "expected debug diagnostic export to succeed, got %s" % [export_result]
-	else:
-		if int(recording.get("event_count", 0)) != 0:
-			return "expected release build to skip training events, got %s" % [recording]
-		var release_export_result: Dictionary = game_state.export_diagnostic_package(false)
-		if bool(release_export_result.get("ok", false)) or str(release_export_result.get("error", "")) != "diagnostic_export_disabled":
-			return "expected release diagnostic export disabled, got %s" % [release_export_result]
+	if int(recording.get("event_count", 0)) != 0:
+		return "expected user release to skip training events, got %s" % [recording]
+	if not str(recording.get("session_id", "")).is_empty():
+		return "expected no training session id in user release, got %s" % [recording]
+	var export_result: Dictionary = game_state.export_diagnostic_package(false)
+	if bool(export_result.get("ok", false)) or str(export_result.get("error", "")) != "diagnostic_export_disabled":
+		return "expected user release diagnostic export disabled, got %s" % [export_result]
 	return true
 
 

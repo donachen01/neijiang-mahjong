@@ -51,7 +51,8 @@ const HELL_TRAINING_DIR := "user://测试数据统计/hell_training"
 const HELL_MARKED_CASE_DIR := "user://测试数据统计/hell_marked_cases"
 const HELL_REPLAY_DIR := "user://测试数据统计/hell_replay"
 const AI_ANALYSIS_RECORDING_ENABLED := false
-const DEBUG_TRAINING_RECORDING_ENABLED := true
+const DEBUG_TRAINING_RECORDING_ENABLED := false
+const AI_LEARNING_RECORDING_ENABLED := false
 const AI_CHAIN_DEBUG_ENABLED := false
 const DIAGNOSTIC_EXPORT_ENABLED := false
 const AI_ANALYSIS_DIR := "user://ai_analysis"
@@ -154,9 +155,11 @@ func _ready() -> void:
 	gang_advisor = GangAdvisorScript.new()
 	ai_tuning_config = AITuningConfigScript.new()
 	ai_tuning_config.apply_preset(AITuningConfigScript.PRESET_HELL)
+	ai_tuning_config.auto_learning_enabled = AI_LEARNING_RECORDING_ENABLED
 	ai_tuning_config.set_diagnostics_recording_enabled(_is_ai_analysis_recording_enabled())
 	ai_level = AILevel.CHEATING
 	ai_learning_engine = AILearningEngineScript.new()
+	ai_learning_engine.set_persistence_enabled(AI_LEARNING_RECORDING_ENABLED)
 	ai_learning_engine.load_profile()
 	_apply_ai_learning_adjustment()
 	opening_roll_resolver = OpeningRollResolverScript.new()
@@ -341,6 +344,13 @@ func set_ai_preset(preset_name: String) -> bool:
 func set_hell_diagnostics_recording_enabled(enabled: bool) -> bool:
 	if ai_tuning_config == null:
 		return false
+	if not _is_runtime_recording_enabled():
+		ai_tuning_config.set_diagnostics_recording_enabled(false)
+		latest_hell_decision_snapshot.clear()
+		hell_last_marked_signature = ""
+		debug_last_message = "实际使用包已关闭 AI 训练记录。"
+		_emit_state_changed()
+		return false
 	ai_tuning_config.set_diagnostics_recording_enabled(enabled)
 	if enabled and str(ai_tuning_config.preset_name) == AITuningConfigScript.PRESET_HELL:
 		_ensure_hell_training_session()
@@ -360,8 +370,10 @@ func get_ai_preset_name() -> String:
 func _reload_ai_learning_for_new_round() -> void:
 	if ai_tuning_config == null or ai_learning_engine == null:
 		return
+	ai_learning_engine.set_persistence_enabled(AI_LEARNING_RECORDING_ENABLED)
 	ai_learning_engine.load_profile()
 	ai_tuning_config.apply_preset(str(ai_tuning_config.preset_name))
+	ai_tuning_config.auto_learning_enabled = AI_LEARNING_RECORDING_ENABLED
 	_apply_ai_runtime_tuning()
 
 
@@ -489,6 +501,12 @@ func set_ai_csharp_host_mode_enabled(enabled: bool, port: int = 38581) -> bool:
 func set_ai_auto_learning_enabled(enabled: bool) -> bool:
 	if ai_tuning_config == null:
 		return false
+	if not AI_LEARNING_RECORDING_ENABLED:
+		ai_tuning_config.auto_learning_enabled = false
+		_apply_ai_runtime_tuning()
+		debug_last_message = "实际使用包已关闭 AI 自动学习记录。"
+		_emit_state_changed()
+		return false
 	ai_tuning_config.auto_learning_enabled = enabled
 	ai_tuning_config.apply_preset(str(ai_tuning_config.preset_name))
 	ai_tuning_config.auto_learning_enabled = enabled
@@ -532,6 +550,8 @@ func reset_ai_tuning_overrides() -> bool:
 
 func _update_ai_learning_after_round(score_changes: Dictionary) -> void:
 	if ai_learning_engine == null:
+		return
+	if not AI_LEARNING_RECORDING_ENABLED:
 		return
 	if players.is_empty() or bool(players[0].get("is_ai", false)):
 		return
@@ -5354,6 +5374,8 @@ func _is_hell_challenge_mode() -> bool:
 
 
 func _is_ai_analysis_recording_enabled() -> bool:
+	if not _is_runtime_recording_enabled():
+		return false
 	return AI_ANALYSIS_RECORDING_ENABLED or (DEBUG_TRAINING_RECORDING_ENABLED and OS.is_debug_build())
 
 
@@ -5363,6 +5385,14 @@ func _is_ai_chain_debug_enabled() -> bool:
 
 func _is_diagnostic_export_enabled() -> bool:
 	return DIAGNOSTIC_EXPORT_ENABLED or _is_ai_analysis_recording_enabled()
+
+
+func _is_runtime_recording_enabled() -> bool:
+	return AI_ANALYSIS_RECORDING_ENABLED \
+		or DEBUG_TRAINING_RECORDING_ENABLED \
+		or AI_LEARNING_RECORDING_ENABLED \
+		or DIAGNOSTIC_EXPORT_ENABLED \
+		or AI_CHAIN_DEBUG_ENABLED
 
 
 func _ensure_hell_training_session() -> void:
