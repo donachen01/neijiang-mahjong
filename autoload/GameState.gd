@@ -1419,13 +1419,13 @@ func _resolve_legal_ai_discard_tile_id(seat: int, requested_tile_id: int) -> int
 	if _must_self_gang_bao_gang_tile(seat, last_draw_tile_id):
 		debug_last_message = "%s 摸到已报杠牌，必须报杠，不能弃牌。" % _seat_display_name(seat)
 		return -1
-	debug_last_message = "%s 已报叫，C# AI 推荐动原手牌，已改为打出新摸牌。" % _seat_display_name(seat)
-	_record_ai_chain_debug("turn_bao_jiao_fallback_to_last_draw_discard seat=%d requested=%d last_draw=%d" % [
+	debug_last_message = "%s 已报叫，C# AI 推荐动原手牌，拒绝执行非法出牌。" % _seat_display_name(seat)
+	_record_ai_chain_debug("turn_bao_jiao_reject_non_last_draw_discard seat=%d requested=%d last_draw=%d" % [
 		seat,
 		requested_tile_id,
 		last_draw_tile_id,
 	])
-	return last_draw_tile_id
+	return -1
 
 
 func run_ai_reaction() -> bool:

@@ -13,10 +13,12 @@ func _run() -> void:
 	_run_test("csharp_action_tile_matches_godot_recommended_tile", _test_csharp_action_tile_matches_godot_recommended_tile, failures)
 	_run_test("csharp_candidate_reasons_survive_godot_mapping", _test_csharp_candidate_reasons_survive_godot_mapping, failures)
 	_run_test("csharp_route_plan_survives_godot_mapping", _test_csharp_route_plan_survives_godot_mapping, failures)
+	_run_test("bao_jiao_csharp_tile_type_maps_to_last_draw_tile", _test_bao_jiao_csharp_tile_type_maps_to_last_draw_tile, failures)
 	_run_test("self_action_gang_subtype_survives_godot_mapping", _test_self_action_gang_subtype_survives_godot_mapping, failures)
 	_run_test("native_runtime_async_reaction_returns_result", _test_native_runtime_async_reaction_returns_result, failures)
 	_run_test("native_runtime_mobile_compact_discard_returns_action_candidate", _test_native_runtime_mobile_compact_discard_returns_action_candidate, failures)
 	_run_test("ai_manager_sync_hell_challenge_preserves_pressure_diagnostics", _test_ai_manager_sync_hell_challenge_preserves_pressure_diagnostics, failures)
+	_run_test("ai_manager_sync_hell_challenge_bao_jiao_uses_last_draw", _test_ai_manager_sync_hell_challenge_bao_jiao_uses_last_draw, failures)
 	_run_test("ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction", _test_ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction, failures)
 	_run_test("ai_manager_uses_native_async_hell_challenge_discard_path", _test_ai_manager_uses_native_async_hell_challenge_discard_path, failures)
 	_run_test("ai_manager_sync_hell_challenge_reaction_blocks_human", _test_ai_manager_sync_hell_challenge_reaction_blocks_human, failures)
@@ -100,6 +102,50 @@ func _test_csharp_candidate_reasons_survive_godot_mapping():
 		return "expected C# reasons to survive mapping, got %s" % [recommended]
 	if not Array(recommended.get("risk_reasons", [])).has("现物偏安全"):
 		return "expected C# risk reasons to survive mapping, got %s" % [recommended]
+	return true
+
+
+func _test_bao_jiao_csharp_tile_type_maps_to_last_draw_tile():
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	var locked_same_type := _make_tile(41, "tong", 2)
+	var last_draw_tile := _make_tile(99, "tong", 2)
+	var player_state := {
+		"seat": 1,
+		"bao_jiao": true,
+		"hand_tiles": [
+			locked_same_type,
+			_make_tile(42, "tiao", 1),
+			last_draw_tile,
+		],
+	}
+	var table_state := {
+		"last_draw_tile": {
+			"seat": 1,
+			"tile": last_draw_tile.duplicate(true),
+		},
+	}
+	var csharp_result := {
+		"action": "discard",
+		"tileType": 10,
+		"candidates": [
+			{
+				"tileType": 10,
+				"score": 130000,
+				"shanten": 0,
+				"liveUkeire": 8,
+				"reasons": ["报叫专线：已报叫后摸什么出什么"],
+			},
+		],
+	}
+	var analysis: Dictionary = ai_manager._build_csharp_discard_analysis(player_state, csharp_result, null, ai_manager.csharp_bridge, "contract_test", table_state)
+	var recommended: Dictionary = analysis.get("recommended", {})
+	var recommended_tile: Dictionary = recommended.get("tile", {})
+	if int(recommended.get("csharp_tile_type", -1)) != 10:
+		return "expected C# tileType 10 to survive mapping, got %s" % [recommended]
+	if int(recommended_tile.get("id", -1)) != int(last_draw_tile.get("id", -1)):
+		return "expected bao-jiao mapping to use last_draw tile id, got %s" % [recommended]
+	if int(recommended_tile.get("id", -1)) == int(locked_same_type.get("id", -1)):
+		return "expected locked same-type tile to stay unselected, got %s" % [recommended]
 	return true
 
 
@@ -367,6 +413,74 @@ func _test_ai_manager_sync_hell_challenge_preserves_pressure_diagnostics():
 		return "expected compact native selected discard not to feed human peng, got %s" % [native]
 	if Array(native.get("reasons", [])).is_empty():
 		return "expected compact native direct reasons to survive mapping, got %s" % [native]
+	return true
+
+
+func _test_ai_manager_sync_hell_challenge_bao_jiao_uses_last_draw():
+	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null:
+		return "expected native C# runtime autoload"
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	ai_manager.set_native_csharp_runtime(runtime)
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var locked_same_type := _make_tile(501, "tong", 2)
+	var last_draw_tile := _make_tile(599, "tong", 2)
+	var players := []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"hand_tiles": [],
+			"discards": [],
+			"melds": [],
+			"bao_jiao": seat == 1,
+			"has_won": false,
+		})
+	var all_hands18 := [_empty18(), _empty18(), _empty18(), _empty18()]
+	all_hands18[1][10] = 2
+	var exact_wall18 := _empty18()
+	exact_wall18[10] = 2
+	var analysis: Dictionary = ai_manager.analyze_hell_challenge_discard(
+		{
+			"seat": 1,
+			"bao_jiao": true,
+			"hand_tiles": [
+				locked_same_type,
+				_make_tile(502, "tiao", 1),
+				_make_tile(503, "tiao", 2),
+				last_draw_tile,
+			],
+		},
+		{
+			"players": players,
+			"current_turn_seat": 1,
+			"wall_count": 17,
+			"dealer_seat": 0,
+			"last_draw_tile": {
+				"seat": 1,
+				"tile": last_draw_tile.duplicate(true),
+			},
+			"reaction_pass_evidence": [],
+		},
+		rules,
+		{
+			"allHands18": all_hands18,
+			"exactWall18": exact_wall18,
+			"currentScores": [0, 0, 0, 0],
+		}
+	)
+	if str(analysis.get("backend_mode", "")) != "hell_challenge_direct":
+		return "expected hell challenge backend, got %s" % [analysis]
+	var native: Dictionary = analysis.get("csharp_result", {})
+	if str(native.get("category", "")) != "bao_jiao_route":
+		return "expected backend bao_jiao_route, got %s" % [native]
+	if int(native.get("tileType", -1)) != 10:
+		return "expected backend to choose last-draw tile type 10, got %s" % [native]
+	var recommended: Dictionary = analysis.get("recommended", {})
+	var tile: Dictionary = recommended.get("tile", {})
+	if int(tile.get("id", -1)) != int(last_draw_tile.get("id", -1)):
+		return "expected recommended Godot tile id to be last_draw, got %s" % [recommended]
+	if int(tile.get("id", -1)) == int(locked_same_type.get("id", -1)):
+		return "expected locked same-type tile to remain unselected, got %s" % [recommended]
 	return true
 
 

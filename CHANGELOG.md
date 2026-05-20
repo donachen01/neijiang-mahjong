@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.42 - 2026-05-20
+
+- Reworked the bao-jiao AI stall fix so the frontend no longer substitutes a discard decision; it remains a legality guard and rejects illegal original-hand discards.
+- Fixed the C#/Godot discard contract for bao-jiao turns by mapping backend tile-type decisions to the actual just-drawn tile id when the hand contains duplicate same-type tiles.
+- Added native hell-challenge coverage proving the backend returns `bao_jiao_route` for bao-jiao turns and the mapped Godot discard id is the last-draw tile.
+
 ## 1.0.41 - 2026-05-20
 
 - Fixed a bao-jiao AI stall where the backend could recommend discarding an original locked hand tile and the frontend rejected it without progressing the turn.

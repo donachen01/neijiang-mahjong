@@ -241,7 +241,7 @@ func analyze_hell_challenge_discard(player_state: Dictionary, table_state: Dicti
 		last_native_turn_error = str(native_result.get("error", "empty_hell_challenge_result"))
 		return {}
 	last_native_turn_error = ""
-	return _build_csharp_discard_analysis(player_state, native_result, rules_config, csharp_bridge, "hell_challenge_direct")
+	return _build_csharp_discard_analysis(player_state, native_result, rules_config, csharp_bridge, "hell_challenge_direct", table_state)
 
 
 func analyze_hell_challenge_reaction(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, hell_payload: Dictionary) -> Dictionary:
@@ -430,6 +430,7 @@ func _start_native_turn_analysis_background(request_id: int, player_state: Dicti
 		"seat": int(player_state.get("seat", -1)),
 		"native_request_id": native_request_id,
 		"player_state": player_state.duplicate(true),
+		"table_state": table_state.duplicate(true),
 		"rules_config": rules_config,
 		"hell_challenge": use_hell_challenge,
 		"payload_ms": payload_ms,
@@ -504,7 +505,7 @@ func _deliver_native_turn_payload(request_id: int, request: Dictionary, native_r
 	var analysis: Dictionary = {}
 	var active_backend := "hell_challenge_direct_async" if bool(request.get("hell_challenge", false)) else "csharp_native_async"
 	if native_error.is_empty():
-		analysis = _build_csharp_discard_analysis(request.get("player_state", {}), native_result, request.get("rules_config"), csharp_bridge, active_backend)
+		analysis = _build_csharp_discard_analysis(request.get("player_state", {}), native_result, request.get("rules_config"), csharp_bridge, active_backend, request.get("table_state", {}))
 		last_native_turn_error = ""
 	else:
 		last_native_turn_error = native_error
@@ -602,16 +603,19 @@ func _build_csharp_reaction_analysis(csharp_result: Dictionary, default_backend:
 	}
 
 
-func _build_csharp_discard_analysis(player_state: Dictionary, csharp_result: Dictionary, rules_config, bridge_instance, backend_mode: String) -> Dictionary:
+func _build_csharp_discard_analysis(player_state: Dictionary, csharp_result: Dictionary, rules_config, bridge_instance, backend_mode: String, table_state: Dictionary = {}) -> Dictionary:
 	if csharp_result.is_empty():
 		return {}
 	var action_tile_type := int(csharp_result.get("tileType", -1))
 	var active_suits: Array = bridge_instance.tile_codec.resolve_active_suits(rules_config)
 	var hand_tiles: Array = player_state.get("hand_tiles", [])
+	var preferred_tile_by_type := _build_preferred_discard_tile_by_type(player_state, table_state, active_suits, bridge_instance)
 	var hand_tile_by_type: Dictionary = {}
 	for tile in hand_tiles:
 		var tile_type: int = int(bridge_instance.tile_codec.tile_type(tile, active_suits))
-		if tile_type >= 0 and not hand_tile_by_type.has(tile_type):
+		if tile_type >= 0 and preferred_tile_by_type.has(tile_type):
+			hand_tile_by_type[tile_type] = preferred_tile_by_type[tile_type].duplicate(true)
+		elif tile_type >= 0 and not hand_tile_by_type.has(tile_type):
 			hand_tile_by_type[tile_type] = tile.duplicate(true)
 	var enriched: Array = []
 	for candidate in csharp_result.get("candidates", []):
@@ -804,6 +808,26 @@ func _select_csharp_recommended_option(enriched_options: Array, action_tile_type
 			if int(item.get("csharp_tile_type", -1)) == action_tile_type:
 				return item
 	return enriched_options[0] if not enriched_options.is_empty() else {}
+
+
+func _build_preferred_discard_tile_by_type(player_state: Dictionary, table_state: Dictionary, active_suits: Array, bridge_instance) -> Dictionary:
+	var result: Dictionary = {}
+	if not bool(player_state.get("bao_jiao", false)):
+		return result
+	var self_seat := int(player_state.get("seat", -1))
+	var last_draw: Dictionary = table_state.get("last_draw_tile", {})
+	if int(last_draw.get("seat", -1)) != self_seat:
+		return result
+	var last_draw_tile: Dictionary = last_draw.get("tile", {})
+	var last_draw_type := int(bridge_instance.tile_codec.tile_type(last_draw_tile, active_suits))
+	if last_draw_type < 0:
+		return result
+	for tile in player_state.get("hand_tiles", []):
+		var hand_tile: Dictionary = tile
+		if int(hand_tile.get("id", -1)) == int(last_draw_tile.get("id", -2)):
+			result[last_draw_type] = hand_tile.duplicate(true)
+			return result
+	return result
 
 
 func _build_hybrid_option(csharp_item: Dictionary, support_option: Dictionary, active_suits: Array, bridge_instance = null) -> Dictionary:
@@ -1202,7 +1226,7 @@ func _compute_turn_analysis(player_state: Dictionary, table_state: Dictionary, r
 		var native_result := _analyze_discard_via_native_runtime(player_state, table_state, rules_config)
 		var native_error := _validate_native_discard_result(native_result)
 		if native_error.is_empty():
-			analysis = _build_csharp_discard_analysis(player_state, native_result, rules_config, local_csharp_bridge, "csharp_native")
+			analysis = _build_csharp_discard_analysis(player_state, native_result, rules_config, local_csharp_bridge, "csharp_native", table_state)
 			active_backend = "csharp_native"
 		else:
 			last_native_turn_error = native_error
@@ -1220,7 +1244,7 @@ func _compute_turn_analysis(player_state: Dictionary, table_state: Dictionary, r
 	elif not force_gdscript and _should_use_csharp_backend(rules_config) and local_csharp_bridge.is_available():
 		var csharp_result := local_csharp_bridge.analyze_discard(player_state, table_state, rules_config, request_tag)
 		if not csharp_result.is_empty():
-			analysis = _build_csharp_discard_analysis(player_state, csharp_result, rules_config, local_csharp_bridge, "csharp_cli")
+			analysis = _build_csharp_discard_analysis(player_state, csharp_result, rules_config, local_csharp_bridge, "csharp_cli", table_state)
 			active_backend = "csharp_cli"
 	if analysis.is_empty() and rules_config != null and bool(rules_config.is_neijiang_mode()) and strict_native_runtime_required:
 		last_native_turn_error = "strict_csharp_required_no_discard_analysis" if last_native_turn_error.is_empty() else last_native_turn_error
