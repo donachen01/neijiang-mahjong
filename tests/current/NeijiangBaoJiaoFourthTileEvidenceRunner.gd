@@ -1,6 +1,8 @@
 extends SceneTree
 
 const GAME_STATE_SCRIPT := preload("res://autoload/GameState.gd")
+const AI_MANAGER_SCRIPT := preload("res://scripts/ai/AIManager.gd")
+const RULE_CONFIG_SCRIPT := preload("res://scripts/core/rule_config.gd")
 const OUTPUT_PATH := "res://测试数据统计/回归证据_20260520_未报杠摸第四张/case_replay_results.json"
 
 
@@ -87,6 +89,7 @@ func _build_case(case_name: String, four_same_tiles: Array, forbidden_bao_gang_k
 		"seat": 1,
 		"draw_reason": "normal_draw",
 	}
+	var hand_tiles_before: Array = game_state.players[1]["hand_tiles"].duplicate(true)
 	var an_options: Array = game_state._find_all_an_gang_options(1)
 	var add_options: Array = game_state._find_all_add_gang_options(1)
 	var mandatory_types: Array = game_state._mandatory_gang_tile_types_for_seat(1, an_options, add_options)
@@ -98,6 +101,7 @@ func _build_case(case_name: String, four_same_tiles: Array, forbidden_bao_gang_k
 	var discarded: Dictionary = {}
 	if not game_state.discard_pile.is_empty():
 		discarded = game_state.discard_pile[-1].get("tile", {})
+	var native_backend_paths := _run_native_backend_path_checks(hand_tiles_before, last_draw_tile, expected_tile_type)
 	var passed: bool = an_options.is_empty() \
 		and add_options.is_empty() \
 		and not mandatory_types.has(expected_tile_type) \
@@ -105,6 +109,7 @@ func _build_case(case_name: String, four_same_tiles: Array, forbidden_bao_gang_k
 		and str(decision.get("action", "")) == "discard" \
 		and int(decision.get("tile_id", -1)) == int(last_draw_tile.get("id", -1)) \
 		and execution_ok \
+		and _all_backend_path_checks_passed(native_backend_paths) \
 		and game_state.players[1]["melds"].is_empty() \
 		and int(discarded.get("id", -1)) == int(last_draw_tile.get("id", -1))
 	return {
@@ -115,7 +120,7 @@ func _build_case(case_name: String, four_same_tiles: Array, forbidden_bao_gang_k
 			"bao_gang_tiles": [],
 			"forbidden_bao_gang_key": forbidden_bao_gang_key,
 			"expected_tile_type": expected_tile_type,
-			"hand_tiles_before": game_state.players[1]["hand_tiles"].duplicate(true),
+			"hand_tiles_before": hand_tiles_before,
 			"last_draw_tile": last_draw_tile.duplicate(true),
 		},
 		"checks": {
@@ -124,11 +129,105 @@ func _build_case(case_name: String, four_same_tiles: Array, forbidden_bao_gang_k
 			"mandatory_gang_tile_types": mandatory_types,
 			"self_action_decision": self_action,
 			"turn_decision": _summarize_turn_decision(decision),
+			"native_backend_paths": native_backend_paths,
 			"execution_ok": execution_ok,
 			"discarded_tile": discarded,
 			"melds_after": game_state.players[1]["melds"].duplicate(true),
 			"debug_last_message": game_state.debug_last_message,
 		},
+		"passed": passed,
+	}
+
+
+func _all_backend_path_checks_passed(path_checks: Array) -> bool:
+	if path_checks.is_empty():
+		return false
+	for check in path_checks:
+		var item: Dictionary = check
+		if not bool(item.get("passed", false)):
+			return false
+	return true
+
+
+func _run_native_backend_path_checks(hand_tiles: Array, last_draw_tile: Dictionary, expected_tile_type: int) -> Array:
+	var runtime = get_root().get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null:
+		return [{
+			"backend_mode": "native_runtime_missing",
+			"passed": false,
+		}]
+	return [
+		_run_native_backend_path_check(runtime, hand_tiles, last_draw_tile, expected_tile_type, true, "csharp_native_async"),
+		_run_native_backend_path_check(runtime, hand_tiles, last_draw_tile, expected_tile_type, false, "csharp_native_sync_delivery"),
+	]
+
+
+func _run_native_backend_path_check(runtime: Object, hand_tiles: Array, last_draw_tile: Dictionary, expected_tile_type: int, native_async_enabled: bool, expected_backend: String) -> Dictionary:
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	ai_manager.set_native_csharp_runtime(runtime)
+	ai_manager.set_native_async_enabled(native_async_enabled)
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var players := []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"hand_tiles": [],
+			"discards": [],
+			"melds": [],
+			"bao_jiao": seat == 1,
+			"has_won": false,
+		})
+	var request_id := ai_manager.start_turn_analysis_background(
+		{
+			"seat": 1,
+			"bao_jiao": true,
+			"hand_tiles": hand_tiles.duplicate(true),
+		},
+		{
+			"players": players,
+			"current_turn_seat": 1,
+			"wall_count": 12,
+			"dealer_seat": 0,
+			"last_draw_tile": {
+				"seat": 1,
+				"tile": last_draw_tile.duplicate(true),
+			},
+			"reaction_pass_evidence": [],
+		},
+		rules,
+		null,
+		null,
+		null,
+		false,
+		{}
+	)
+	var delivered := 0
+	if request_id > 0:
+		for _attempt in range(400):
+			delivered = ai_manager.pump_async_requests()
+			if delivered > 0:
+				break
+			OS.delay_msec(10)
+	var latest: Dictionary = ai_manager.latest_turn_snapshot
+	var analysis: Dictionary = latest.get("analysis", {})
+	var native: Dictionary = analysis.get("csharp_result", {})
+	var recommended: Dictionary = analysis.get("recommended", {})
+	var tile: Dictionary = recommended.get("tile", {})
+	var passed := request_id > 0 \
+		and delivered > 0 \
+		and str(analysis.get("backend_mode", "")) == expected_backend \
+		and int(native.get("tileType", -1)) == expected_tile_type \
+		and int(tile.get("id", -1)) == int(last_draw_tile.get("id", -1))
+	return {
+		"backend_mode": expected_backend,
+		"native_async_enabled": native_async_enabled,
+		"request_id": request_id,
+		"delivered_count": delivered,
+		"actual_backend_mode": str(analysis.get("backend_mode", "")),
+		"csharp_tile_type": int(native.get("tileType", -1)),
+		"recommended_tile_id": int(tile.get("id", -1)),
+		"recommended_tile": tile.duplicate(true),
+		"last_draw_tile_id": int(last_draw_tile.get("id", -1)),
 		"passed": passed,
 	}
 

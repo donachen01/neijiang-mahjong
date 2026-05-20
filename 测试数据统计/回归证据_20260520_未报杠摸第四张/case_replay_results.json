@@ -5,7 +5,7 @@
 			"checks": {
 				"add_gang_options": [],
 				"an_gang_options": [],
-				"debug_last_message": "Seat 0 摸牌 5筒，等待出牌。",
+				"debug_last_message": "Seat 0 摸牌 2条，等待出牌。",
 				"discarded_tile": {
 					"display_name": "9筒",
 					"id": 604,
@@ -16,6 +16,44 @@
 				"execution_ok": true,
 				"mandatory_gang_tile_types": [],
 				"melds_after": [],
+				"native_backend_paths": [
+					{
+						"actual_backend_mode": "csharp_native_async",
+						"backend_mode": "csharp_native_async",
+						"csharp_tile_type": 17,
+						"delivered_count": 1,
+						"last_draw_tile_id": 604,
+						"native_async_enabled": true,
+						"passed": true,
+						"recommended_tile": {
+							"display_name": "9筒",
+							"id": 604,
+							"rank": 9,
+							"sort_key": 109,
+							"suit": "tong"
+						},
+						"recommended_tile_id": 604,
+						"request_id": 1
+					},
+					{
+						"actual_backend_mode": "csharp_native_sync_delivery",
+						"backend_mode": "csharp_native_sync_delivery",
+						"csharp_tile_type": 17,
+						"delivered_count": 1,
+						"last_draw_tile_id": 604,
+						"native_async_enabled": false,
+						"passed": true,
+						"recommended_tile": {
+							"display_name": "9筒",
+							"id": 604,
+							"rank": 9,
+							"sort_key": 109,
+							"suit": "tong"
+						},
+						"recommended_tile_id": 604,
+						"request_id": 1
+					}
+				],
 				"self_action_decision": {
 
 				},
@@ -140,6 +178,13 @@
 						"rank": 9,
 						"sort_key": 109,
 						"suit": "tong"
+					},
+					{
+						"display_name": "9筒",
+						"id": 604,
+						"rank": 9,
+						"sort_key": 109,
+						"suit": "tong"
 					}
 				],
 				"last_draw_tile": {
@@ -169,6 +214,44 @@
 				"execution_ok": true,
 				"mandatory_gang_tile_types": [],
 				"melds_after": [],
+				"native_backend_paths": [
+					{
+						"actual_backend_mode": "csharp_native_async",
+						"backend_mode": "csharp_native_async",
+						"csharp_tile_type": 6,
+						"delivered_count": 1,
+						"last_draw_tile_id": 704,
+						"native_async_enabled": true,
+						"passed": true,
+						"recommended_tile": {
+							"display_name": "7条",
+							"id": 704,
+							"rank": 7,
+							"sort_key": 7,
+							"suit": "tiao"
+						},
+						"recommended_tile_id": 704,
+						"request_id": 1
+					},
+					{
+						"actual_backend_mode": "csharp_native_sync_delivery",
+						"backend_mode": "csharp_native_sync_delivery",
+						"csharp_tile_type": 6,
+						"delivered_count": 1,
+						"last_draw_tile_id": 704,
+						"native_async_enabled": false,
+						"passed": true,
+						"recommended_tile": {
+							"display_name": "7条",
+							"id": 704,
+							"rank": 7,
+							"sort_key": 7,
+							"suit": "tiao"
+						},
+						"recommended_tile_id": 704,
+						"request_id": 1
+					}
+				],
 				"self_action_decision": {
 
 				},
@@ -293,6 +376,13 @@
 						"rank": 7,
 						"sort_key": 7,
 						"suit": "tiao"
+					},
+					{
+						"display_name": "7条",
+						"id": 704,
+						"rank": 7,
+						"sort_key": 7,
+						"suit": "tiao"
 					}
 				],
 				"last_draw_tile": {
@@ -307,6 +397,6 @@
 			"passed": true
 		}
 	],
-	"generated_at": "2026-05-20T15:27:47",
+	"generated_at": "2026-05-20T16:16:04",
 	"schema": "bao_jiao_unreported_fourth_tile_replay_v1"
 }

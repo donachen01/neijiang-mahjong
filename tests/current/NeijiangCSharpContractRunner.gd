@@ -46,6 +46,8 @@ func _run() -> void:
 	_run_test("native_runtime_mobile_compact_discard_returns_action_candidate", _test_native_runtime_mobile_compact_discard_returns_action_candidate, failures)
 	_run_test("ai_manager_sync_hell_challenge_preserves_pressure_diagnostics", _test_ai_manager_sync_hell_challenge_preserves_pressure_diagnostics, failures)
 	_run_test("ai_manager_sync_hell_challenge_bao_jiao_uses_last_draw", _test_ai_manager_sync_hell_challenge_bao_jiao_uses_last_draw, failures)
+	_run_test("ai_manager_native_async_bao_jiao_unreported_fourth_discards_last_draw", _test_ai_manager_native_async_bao_jiao_unreported_fourth_discards_last_draw, failures)
+	_run_test("ai_manager_sync_delivery_bao_jiao_unreported_fourth_discards_last_draw", _test_ai_manager_sync_delivery_bao_jiao_unreported_fourth_discards_last_draw, failures)
 	_run_test("ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction", _test_ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction, failures)
 	_run_test("ai_manager_uses_native_async_hell_challenge_discard_path", _test_ai_manager_uses_native_async_hell_challenge_discard_path, failures)
 	_run_test("ai_manager_sync_hell_challenge_reaction_blocks_human", _test_ai_manager_sync_hell_challenge_reaction_blocks_human, failures)
@@ -510,6 +512,99 @@ func _test_ai_manager_sync_hell_challenge_bao_jiao_uses_last_draw():
 	if int(tile.get("id", -1)) == int(locked_same_type.get("id", -1)):
 		return "expected locked same-type tile to remain unselected, got %s" % [recommended]
 	return true
+
+
+func _test_ai_manager_native_async_bao_jiao_unreported_fourth_discards_last_draw():
+	return _assert_ai_manager_bao_jiao_unreported_fourth_discards_last_draw(true, "csharp_native_async")
+
+
+func _test_ai_manager_sync_delivery_bao_jiao_unreported_fourth_discards_last_draw():
+	return _assert_ai_manager_bao_jiao_unreported_fourth_discards_last_draw(false, "csharp_native_sync_delivery")
+
+
+func _assert_ai_manager_bao_jiao_unreported_fourth_discards_last_draw(use_native_async: bool, expected_backend: String):
+	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null:
+		return "expected native C# runtime autoload"
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	ai_manager.set_native_csharp_runtime(runtime)
+	ai_manager.set_native_async_enabled(use_native_async)
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var locked_9tong_a := _make_tile(601, "tong", 9)
+	var locked_9tong_b := _make_tile(602, "tong", 9)
+	var locked_9tong_c := _make_tile(603, "tong", 9)
+	var last_draw_9tong := _make_tile(604, "tong", 9)
+	var players := []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"hand_tiles": [],
+			"discards": [],
+			"melds": [],
+			"bao_jiao": seat == 1,
+			"has_won": false,
+		})
+	var player_state := {
+		"seat": 1,
+		"bao_jiao": true,
+		"hand_tiles": [
+			_make_tile(621, "tiao", 1),
+			_make_tile(622, "tiao", 2),
+			_make_tile(623, "tiao", 4),
+			_make_tile(624, "tiao", 5),
+			_make_tile(625, "tiao", 8),
+			_make_tile(626, "tong", 1),
+			_make_tile(627, "tong", 3),
+			_make_tile(628, "tong", 4),
+			_make_tile(629, "tong", 6),
+			_make_tile(630, "tong", 8),
+			locked_9tong_a,
+			locked_9tong_b,
+			locked_9tong_c,
+			last_draw_9tong,
+		],
+	}
+	var table_state := {
+		"players": players,
+		"current_turn_seat": 1,
+		"wall_count": 17,
+		"dealer_seat": 0,
+		"last_draw_tile": {
+			"seat": 1,
+			"tile": last_draw_9tong.duplicate(true),
+		},
+		"reaction_pass_evidence": [],
+	}
+	var request_id := ai_manager.start_turn_analysis_background(
+		player_state,
+		table_state,
+		rules,
+		null,
+		null,
+		null,
+		false,
+		{}
+	)
+	if request_id <= 0:
+		return "expected turn request id, status=%s" % [ai_manager.get_backend_status()]
+	for _attempt in range(400):
+		var delivered := ai_manager.pump_async_requests()
+		if delivered <= 0:
+			OS.delay_msec(10)
+			continue
+		var latest: Dictionary = ai_manager.latest_turn_snapshot
+		var analysis: Dictionary = latest.get("analysis", {})
+		if str(analysis.get("backend_mode", "")) != expected_backend:
+			return "expected backend %s, got %s" % [expected_backend, analysis]
+		var native: Dictionary = analysis.get("csharp_result", {})
+		if int(native.get("tileType", -1)) != 17:
+			return "expected C# backend tileType=17 for last-draw 9筒, got %s" % [native]
+		var recommended: Dictionary = analysis.get("recommended", {})
+		var tile: Dictionary = recommended.get("tile", {})
+		if int(tile.get("id", -1)) != int(last_draw_9tong.get("id", -1)):
+			return "expected recommended tile to be last draw 604, got %s" % [recommended]
+		return true
+	return "timed out waiting for bao-jiao discard via %s; status=%s" % [expected_backend, ai_manager.get_backend_status()]
 
 
 func _test_ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction():

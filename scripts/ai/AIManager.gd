@@ -36,6 +36,7 @@ var last_native_reaction_error: String = ""
 var last_native_turn_raw_summary: String = ""
 var last_native_reaction_raw_summary: String = ""
 var is_pumping_async_requests: bool = false
+var native_async_enabled: bool = true
 
 
 func _should_use_csharp_backend(rules_config) -> bool:
@@ -352,6 +353,18 @@ func set_compact_runtime_snapshots(enabled: bool) -> void:
 	compact_runtime_snapshots = enabled
 
 
+func set_native_async_enabled(enabled: bool) -> void:
+	native_async_enabled = enabled
+
+
+func should_use_native_async_requests() -> bool:
+	if not native_async_enabled:
+		return false
+	if OS.has_feature("android") or OS.has_feature("ios"):
+		return false
+	return true
+
+
 func request_turn_analysis_async(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false) -> int:
 	var seat := int(player_state.get("seat", -1))
 	var request_id := _begin_request("turn", seat)
@@ -441,6 +454,62 @@ func _start_native_turn_analysis_background(request_id: int, player_state: Dicti
 	return true
 
 
+func _start_native_turn_analysis_sync_delivery(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool, request_key: String = "", hell_payload: Dictionary = {}) -> bool:
+	var started_at_ms := Time.get_ticks_msec()
+	var analysis: Dictionary = {}
+	var active_backend := "csharp_native_sync_delivery"
+	if not hell_payload.is_empty() and has_native_hell_challenge_runtime():
+		var payload: Dictionary = csharp_bridge.build_discard_transport_payload(player_state, table_state, rules_config)
+		for key in hell_payload.keys():
+			payload[key] = hell_payload[key]
+		var raw := str(native_csharp_runtime.call("AnalyzeHellChallengeDiscardJson", JSON.stringify(payload)))
+		last_native_turn_raw_summary = "sync_delivery_hell raw=%s" % raw.left(700)
+		var parsed = JSON.parse_string(raw)
+		var native_result: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+		var native_error := _validate_native_discard_result(native_result)
+		if not native_error.is_empty():
+			last_native_turn_error = native_error
+			active_backend = "hell_challenge_direct_sync_delivery_error"
+		else:
+			analysis = _build_csharp_discard_analysis(player_state, native_result, rules_config, csharp_bridge, "hell_challenge_direct_sync_delivery", table_state)
+			active_backend = "hell_challenge_direct_sync_delivery"
+	else:
+		var result := _compute_turn_analysis(player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, "sync_delivery_%d" % request_id)
+		analysis = result.get("analysis", {}).duplicate(true)
+		active_backend = "csharp_native_sync_delivery" if str(result.get("active_backend", "")) == "csharp_native" else str(result.get("active_backend", "csharp_native_sync_delivery"))
+	if analysis.is_empty():
+		return false
+	analysis["backend_mode"] = active_backend
+	var elapsed_ms := maxi(0, Time.get_ticks_msec() - started_at_ms)
+	var result_payload := {
+		"analysis": analysis,
+		"active_backend": active_backend,
+		"elapsed_ms": elapsed_ms,
+		"budget_ms": _resolve_budget_ms("turn", active_backend),
+		"over_budget": elapsed_ms > _resolve_budget_ms("turn", active_backend),
+	}
+	active_async_requests[request_id] = {
+		"kind": "turn",
+		"seat": int(player_state.get("seat", -1)),
+		"completed_payload": {
+			"request_id": request_id,
+			"kind": "turn",
+			"seat": int(player_state.get("seat", -1)),
+			"result": result_payload,
+		},
+		"request_key": request_key,
+		"started_at_ms": started_at_ms,
+	}
+	last_native_turn_raw_summary = "%s sync_delivery_ready request=%d elapsed_ms=%d backend=%s" % [
+		last_native_turn_raw_summary,
+		request_id,
+		elapsed_ms,
+		active_backend,
+	]
+	_remember_active_async_request(request_id, request_key)
+	return true
+
+
 func _start_native_reaction_analysis_background(request_id: int, candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, request_key: String = "", hell_payload: Dictionary = {}) -> bool:
 	var payload_started_at := Time.get_ticks_msec()
 	var payload: Dictionary = csharp_bridge.build_reaction_transport_payload(candidate, player_state, table_state, discard_context, rules_config)
@@ -476,6 +545,62 @@ func _start_native_reaction_analysis_background(request_id: int, candidate: Dict
 		"started_at_ms": Time.get_ticks_msec(),
 		"request_key": request_key,
 	}
+	_remember_active_async_request(request_id, request_key)
+	return true
+
+
+func _start_native_reaction_analysis_sync_delivery(request_id: int, candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, ai_config, hu_checker, allow_cheat: bool, request_key: String = "", hell_payload: Dictionary = {}) -> bool:
+	var started_at_ms := Time.get_ticks_msec()
+	var analysis: Dictionary = {}
+	var active_backend := "hybrid_csharp_native_sync_delivery"
+	if not hell_payload.is_empty() and has_native_hell_challenge_reaction_runtime():
+		var payload: Dictionary = csharp_bridge.build_reaction_transport_payload(candidate, player_state, table_state, discard_context, rules_config)
+		for key in hell_payload.keys():
+			payload[key] = hell_payload[key]
+		var raw := str(native_csharp_runtime.call("AnalyzeHellChallengeReactionJson", JSON.stringify(payload)))
+		last_native_reaction_raw_summary = "sync_delivery_hell raw=%s" % raw.left(700)
+		var parsed = JSON.parse_string(raw)
+		var native_result: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+		var native_error := _validate_native_reaction_result(native_result)
+		if not native_error.is_empty():
+			last_native_reaction_error = native_error
+			active_backend = "hell_challenge_reaction_direct_sync_delivery_error"
+		else:
+			analysis = _build_csharp_reaction_analysis(native_result, "hell_challenge_reaction_direct_sync_delivery")
+			active_backend = "hell_challenge_reaction_direct_sync_delivery"
+	else:
+		var result := _compute_reaction_analysis(candidate, player_state, table_state, discard_context, rules_config, ai_config, hu_checker, allow_cheat)
+		analysis = result.get("analysis", {}).duplicate(true)
+		active_backend = "hybrid_csharp_native_sync_delivery" if str(result.get("active_backend", "")) == "hybrid_csharp_native" else str(result.get("active_backend", "hybrid_csharp_native_sync_delivery"))
+	if analysis.is_empty():
+		return false
+	analysis["backend_mode"] = active_backend
+	var elapsed_ms := maxi(0, Time.get_ticks_msec() - started_at_ms)
+	var result_payload := {
+		"analysis": analysis,
+		"active_backend": active_backend,
+		"elapsed_ms": elapsed_ms,
+		"budget_ms": _resolve_budget_ms("reaction", active_backend),
+		"over_budget": elapsed_ms > _resolve_budget_ms("reaction", active_backend),
+	}
+	active_async_requests[request_id] = {
+		"kind": "reaction",
+		"seat": int(player_state.get("seat", -1)),
+		"completed_payload": {
+			"request_id": request_id,
+			"kind": "reaction",
+			"seat": int(player_state.get("seat", -1)),
+			"result": result_payload,
+		},
+		"request_key": request_key,
+		"started_at_ms": started_at_ms,
+	}
+	last_native_reaction_raw_summary = "%s sync_delivery_ready request=%d elapsed_ms=%d backend=%s" % [
+		last_native_reaction_raw_summary,
+		request_id,
+		elapsed_ms,
+		active_backend,
+	]
 	_remember_active_async_request(request_id, request_key)
 	return true
 
@@ -688,7 +813,9 @@ func start_turn_analysis_background(player_state: Dictionary, table_state: Dicti
 		return existing_request_id
 	var request_id := _begin_request("turn", seat)
 	if has_native_csharp_async_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
-		if _start_native_turn_analysis_background(request_id, player_state, table_state, rules_config, request_key, hell_payload):
+		if should_use_native_async_requests() and _start_native_turn_analysis_background(request_id, player_state, table_state, rules_config, request_key, hell_payload):
+			return request_id
+		if _start_native_turn_analysis_sync_delivery(request_id, player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, request_key, hell_payload):
 			return request_id
 		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
 		return 0
@@ -728,7 +855,9 @@ func start_reaction_analysis_background(candidate: Dictionary, player_state: Dic
 		return existing_request_id
 	var request_id := _begin_request("reaction", seat)
 	if has_native_csharp_async_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
-		if _start_native_reaction_analysis_background(request_id, candidate, player_state, table_state, discard_context, rules_config, request_key, hell_payload):
+		if should_use_native_async_requests() and _start_native_reaction_analysis_background(request_id, candidate, player_state, table_state, discard_context, rules_config, request_key, hell_payload):
+			return request_id
+		if _start_native_reaction_analysis_sync_delivery(request_id, candidate, player_state, table_state, discard_context, rules_config, ai_config, hu_checker, allow_cheat, request_key, hell_payload):
 			return request_id
 		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
 		return 0
@@ -768,6 +897,11 @@ func pump_async_requests() -> int:
 	var delivered_count := 0
 	for request_id in active_async_requests.keys():
 		var request: Dictionary = active_async_requests.get(request_id, {})
+		if request.has("completed_payload"):
+			var completed_payload: Dictionary = request.get("completed_payload", {})
+			completed_ids.append(request_id)
+			delivered_count += _deliver_async_payload(completed_payload)
+			continue
 		if request.has("native_request_id"):
 			var native_delivery := _poll_native_async_request(int(request_id), request)
 			if native_delivery < 0:
