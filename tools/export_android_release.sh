@@ -30,6 +30,11 @@ export GODOT_ANDROID_OUTPUT="$PROJECT_DIR/build/android/${RELEASE_BASENAME}-base
 GODOT_BIN="${GODOT_BIN:-}"
 BUILD_TOOLS="/Users/chendong/Library/Android/sdk/build-tools/35.0.0"
 ANDROID_SOURCE_TEMPLATE="/Users/chendong/Library/Application Support/Godot/export_templates/4.6.2.stable.mono/templates/android_source.zip"
+MONO_ANDROID_LIB_SOURCE="$PROJECT_DIR/evidence/1.0.42_to_1.0.44_github_diff/extracted/1.0.42/libgodot_android.so"
+MONO_ANDROID_LIB_SHA256="9da745177c364666278250a8912d43869166998a277ab8eebfb9f7322a064b6a"
+MONO_ANDROID_APK_SOURCE="$PROJECT_DIR/evidence/1.0.42_to_1.0.44_github_diff/downloads/NeijiangMahjong-1.0.42-release.apk"
+MONO_ANDROID_APK_URL="https://github.com/donachen01/neijiang-mahjong/releases/download/v1.0.42/NeijiangMahjong-1.0.42-release.apk"
+MONO_ANDROID_APK_SHA256="68493b048df30efad322fa565c56c1e88c976fc3e832fe2d34278697b3641f9a"
 GRADLE_BUILD_DIR="${GODOT_ANDROID_GRADLE_BUILD_DIR:-/tmp/neijiang_mahjong_android_gradle_build}"
 export GODOT_ANDROID_GRADLE_BUILD_DIR="$GRADLE_BUILD_DIR"
 GRADLE_PROJECT_DIR="$GRADLE_BUILD_DIR/build"
@@ -72,6 +77,41 @@ if [[ ! -x "$GRADLE_PROJECT_DIR/gradlew" ]] || [[ ! -f "$GRADLE_BUILD_DIR/.build
   printf '%s' "$EXPECTED_BUILD_VERSION" > "$GRADLE_BUILD_DIR/.build_version"
 fi
 
+ensure_verified_mono_android_lib() {
+  if [[ -f "$MONO_ANDROID_LIB_SOURCE" ]]; then
+    local existing_hash
+    existing_hash="$(shasum -a 256 "$MONO_ANDROID_LIB_SOURCE" | awk '{print $1}')"
+    if [[ "$existing_hash" == "$MONO_ANDROID_LIB_SHA256" ]]; then
+      return 0
+    fi
+    echo "Removing invalid Mono Android lib source with hash: $existing_hash"
+    rm -f "$MONO_ANDROID_LIB_SOURCE"
+  fi
+
+  mkdir -p "${MONO_ANDROID_APK_SOURCE:h}" "${MONO_ANDROID_LIB_SOURCE:h}"
+  if [[ ! -f "$MONO_ANDROID_APK_SOURCE" ]]; then
+    echo "Downloading verified v1.0.42 APK to recover Mono Android native library..."
+    curl -L --fail --retry 3 --connect-timeout 30 -o "$MONO_ANDROID_APK_SOURCE.tmp" "$MONO_ANDROID_APK_URL"
+    mv "$MONO_ANDROID_APK_SOURCE.tmp" "$MONO_ANDROID_APK_SOURCE"
+  fi
+
+  local apk_hash
+  apk_hash="$(shasum -a 256 "$MONO_ANDROID_APK_SOURCE" | awk '{print $1}')"
+  if [[ "$apk_hash" != "$MONO_ANDROID_APK_SHA256" ]]; then
+    echo "v1.0.42 APK hash mismatch: $apk_hash"
+    echo "Expected: $MONO_ANDROID_APK_SHA256"
+    exit 1
+  fi
+
+  unzip -p "$MONO_ANDROID_APK_SOURCE" 'lib/arm64-v8a/libgodot_android.so' > "$MONO_ANDROID_LIB_SOURCE"
+  local lib_hash
+  lib_hash="$(shasum -a 256 "$MONO_ANDROID_LIB_SOURCE" | awk '{print $1}')"
+  if [[ "$lib_hash" != "$MONO_ANDROID_LIB_SHA256" ]]; then
+    echo "Extracted Mono Android lib hash mismatch: $lib_hash"
+    exit 1
+  fi
+}
+
 echo "Using Godot: $("$GODOT_BIN" --version)"
 
 rm -f "$GODOT_ANDROID_OUTPUT"
@@ -95,6 +135,27 @@ fi
 cp "$FINAL_APK" "$PRUNED_APK"
 zip -q -d "$PRUNED_APK" 'assets/docs/*' 'assets/.godot/imported/main_scene_v1_0*' 'assets/.godot/imported/table_main_3d_cartoon*' 'assets/.godot/imported/table_refined_v17*' 'assets/.godot/imported/target_layout_zone*' 'assets/.godot/imported/tile_symbols_v1*' 'assets/.godot/imported/v17_final_template*' 'assets/.godot/imported/tile_face_options*' 'assets/.godot/imported/tile_face_f_rounded_variants*' 'assets/.godot/imported/tile_back_options*' 'assets/.godot/imported/table_3d_luxury_scheme*' 'assets/.godot/imported/table_scheme_b_v3*' 2>/dev/null || true
 zip -q -d "$PRUNED_APK" 'assets/*/current_ai_*' 'assets/*/hell_training/*' 'assets/*/hell_marked_cases/*' 'assets/*/hell_replay/*' 'assets/*/*seedlive*' 'assets/*/*seed250514*' 2>/dev/null || true
+CURRENT_GODOT_LIB_SHA256="$(unzip -p "$PRUNED_APK" 'lib/arm64-v8a/libgodot_android.so' | shasum -a 256 | awk '{print $1}')"
+if [[ "$CURRENT_GODOT_LIB_SHA256" != "$MONO_ANDROID_LIB_SHA256" ]]; then
+  ensure_verified_mono_android_lib
+  SOURCE_GODOT_LIB_SHA256="$(shasum -a 256 "$MONO_ANDROID_LIB_SOURCE" | awk '{print $1}')"
+  if [[ "$SOURCE_GODOT_LIB_SHA256" != "$MONO_ANDROID_LIB_SHA256" ]]; then
+    echo "Mono Android lib source hash mismatch: $SOURCE_GODOT_LIB_SHA256"
+    exit 1
+  fi
+  echo "Replacing non-mono libgodot_android.so with verified mono Android native library."
+  PATCH_DIR="$PROJECT_DIR/build/android/${RELEASE_BASENAME}-mono-lib"
+  rm -rf "$PATCH_DIR"
+  mkdir -p "$PATCH_DIR/lib/arm64-v8a"
+  cp "$MONO_ANDROID_LIB_SOURCE" "$PATCH_DIR/lib/arm64-v8a/libgodot_android.so"
+  (cd "$PATCH_DIR" && zip -q -0 -u "$PRUNED_APK" 'lib/arm64-v8a/libgodot_android.so')
+  rm -rf "$PATCH_DIR"
+fi
+FINAL_GODOT_LIB_SHA256="$(unzip -p "$PRUNED_APK" 'lib/arm64-v8a/libgodot_android.so' | shasum -a 256 | awk '{print $1}')"
+if [[ "$FINAL_GODOT_LIB_SHA256" != "$MONO_ANDROID_LIB_SHA256" ]]; then
+  echo "Release APK still does not contain the verified mono Android native library: $FINAL_GODOT_LIB_SHA256"
+  exit 1
+fi
 "$BUILD_TOOLS/zipalign" -f -p 4 "$PRUNED_APK" "$ALIGNED_APK"
 "$BUILD_TOOLS/apksigner" sign \
   --ks "$GODOT_ANDROID_RELEASE_KEYSTORE" \

@@ -5,7 +5,7 @@
 			"checks": {
 				"add_gang_options": [],
 				"an_gang_options": [],
-				"debug_last_message": "Seat 0 摸牌 2条，等待出牌。",
+				"debug_last_message": "Seat 0 摸牌 4筒，等待出牌。",
 				"discarded_tile": {
 					"display_name": "9筒",
 					"id": 604,
@@ -203,7 +203,7 @@
 			"checks": {
 				"add_gang_options": [],
 				"an_gang_options": [],
-				"debug_last_message": "Seat 0 摸牌 7条，等待出牌。",
+				"debug_last_message": "Seat 0 摸牌 8筒，等待出牌。",
 				"discarded_tile": {
 					"display_name": "7条",
 					"id": 704,
@@ -397,6 +397,6 @@
 			"passed": true
 		}
 	],
-	"generated_at": "2026-05-20T16:16:04",
+	"generated_at": "2026-05-20T18:16:33",
 	"schema": "bao_jiao_unreported_fourth_tile_replay_v1"
 }
