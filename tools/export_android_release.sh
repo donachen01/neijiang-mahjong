@@ -29,6 +29,11 @@ RELEASE_BASENAME="NeijiangMahjong-${APP_VERSION}-release"
 export GODOT_ANDROID_OUTPUT="$PROJECT_DIR/build/android/${RELEASE_BASENAME}-base.apk"
 GODOT_BIN="${GODOT_BIN:-}"
 BUILD_TOOLS="/Users/chendong/Library/Android/sdk/build-tools/35.0.0"
+ANDROID_SOURCE_TEMPLATE="/Users/chendong/Library/Application Support/Godot/export_templates/4.6.2.stable.mono/templates/android_source.zip"
+GRADLE_BUILD_DIR="$PROJECT_DIR/build/android/gradle_build"
+GRADLE_PROJECT_DIR="$GRADLE_BUILD_DIR/build"
+ANDROID_SOURCE_HASH="8175018790bb188d4962d3350726dffb"
+EXPECTED_BUILD_VERSION="$ANDROID_SOURCE_TEMPLATE [$ANDROID_SOURCE_HASH]"
 
 if [[ -z "$GODOT_BIN" || ! -x "$GODOT_BIN" ]]; then
   for candidate in \
@@ -58,6 +63,14 @@ export GODOT_ANDROID_RELEASE_KEYSTORE="$(sed -n 's/^keystore=//p' "$SIGNING_INFO
 export GODOT_ANDROID_RELEASE_ALIAS="$(sed -n 's/^alias=//p' "$SIGNING_INFO")"
 export GODOT_ANDROID_RELEASE_PASSWORD="$(sed -n 's/^store_password=//p' "$SIGNING_INFO")"
 
+if [[ ! -x "$GRADLE_PROJECT_DIR/gradlew" ]] || [[ ! -f "$GRADLE_BUILD_DIR/.build_version" ]] || [[ "$(<"$GRADLE_BUILD_DIR/.build_version")" != "$EXPECTED_BUILD_VERSION" ]]; then
+  echo "Preparing Android Gradle build template..."
+  rm -rf "$GRADLE_BUILD_DIR"
+  mkdir -p "$GRADLE_PROJECT_DIR"
+  unzip -q "$ANDROID_SOURCE_TEMPLATE" -d "$GRADLE_PROJECT_DIR"
+  printf '%s' "$EXPECTED_BUILD_VERSION" > "$GRADLE_BUILD_DIR/.build_version"
+fi
+
 echo "Using Godot: $("$GODOT_BIN" --version)"
 
 "$GODOT_BIN" \
@@ -74,6 +87,7 @@ SIGNED_APK="$PROJECT_DIR/build/android/${RELEASE_BASENAME}.apk"
 cp "$FINAL_APK" "$PRUNED_APK"
 zip -q -d "$PRUNED_APK" 'assets/docs/*' 'assets/.godot/imported/main_scene_v1_0*' 'assets/.godot/imported/table_main_3d_cartoon*' 'assets/.godot/imported/table_refined_v17*' 'assets/.godot/imported/target_layout_zone*' 'assets/.godot/imported/tile_symbols_v1*' 'assets/.godot/imported/v17_final_template*' 'assets/.godot/imported/tile_face_options*' 'assets/.godot/imported/tile_face_f_rounded_variants*' 'assets/.godot/imported/tile_back_options*' 'assets/.godot/imported/table_3d_luxury_scheme*' 'assets/.godot/imported/table_scheme_b_v3*' 2>/dev/null || true
 zip -q -d "$PRUNED_APK" 'assets/*/current_ai_*' 'assets/*/hell_training/*' 'assets/*/hell_marked_cases/*' 'assets/*/hell_replay/*' 'assets/*/*seedlive*' 'assets/*/*seed250514*' 2>/dev/null || true
+zip -q -d "$PRUNED_APK" 'assets/dotnet/*' 2>/dev/null || true
 "$BUILD_TOOLS/zipalign" -f -p 4 "$PRUNED_APK" "$ALIGNED_APK"
 "$BUILD_TOOLS/apksigner" sign \
   --ks "$GODOT_ANDROID_RELEASE_KEYSTORE" \

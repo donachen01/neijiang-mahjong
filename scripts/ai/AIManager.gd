@@ -482,14 +482,41 @@ func _start_native_reaction_analysis_background(request_id: int, candidate: Dict
 
 func _poll_native_async_request(request_id: int, request: Dictionary) -> int:
 	if not has_native_csharp_async_runtime():
-		return 0
+		var kind_for_unavailable := str(request.get("kind", ""))
+		var age_ms := maxi(0, Time.get_ticks_msec() - int(request.get("started_at_ms", Time.get_ticks_msec())))
+		var unavailable_summary := "async_pending_native_runtime_unavailable request=%d native_id=%d age_ms=%d" % [
+			request_id,
+			int(request.get("native_request_id", 0)),
+			age_ms,
+		]
+		if kind_for_unavailable == "reaction":
+			last_native_reaction_error = "native_async_runtime_unavailable_while_pending"
+			last_native_reaction_raw_summary = unavailable_summary
+		else:
+			last_native_turn_error = "native_async_runtime_unavailable_while_pending"
+			last_native_turn_raw_summary = unavailable_summary
+		return -1
 	var native_request_id := int(request.get("native_request_id", 0))
 	var raw := str(native_csharp_runtime.call("PollAiResultJson", native_request_id))
 	var parsed = JSON.parse_string(raw)
 	var native_result: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
-	if bool(native_result.get("pending", false)):
-		return -1
 	var kind := str(request.get("kind", ""))
+	if bool(native_result.get("pending", false)):
+		var age_ms := maxi(0, Time.get_ticks_msec() - int(request.get("started_at_ms", Time.get_ticks_msec())))
+		var pending_summary := "async_pending request=%d native_id=%d age_ms=%d status=%s native_elapsed=%d thread=%d raw=%s" % [
+			request_id,
+			native_request_id,
+			age_ms,
+			str(native_result.get("status", "")),
+			int(native_result.get("elapsedMs", -1)),
+			int(native_result.get("managedThreadId", -1)),
+			raw.left(260),
+		]
+		if kind == "reaction":
+			last_native_reaction_raw_summary = pending_summary
+		else:
+			last_native_turn_raw_summary = pending_summary
+		return -1
 	if kind == "turn":
 		return _deliver_native_turn_payload(request_id, request, native_result)
 	if kind == "reaction":

@@ -18,7 +18,24 @@ public partial class NeijiangCSharpRuntime : Node
     private readonly NeijiangHellOracleEngine _hellOracle = new();
     private readonly NeijiangHellChallengeEngine _hellChallenge = new();
     private readonly NeijiangHellChallengeReactionEngine _hellChallengeReaction = new();
-    private readonly ConcurrentDictionary<int, Task<string>> _asyncRequests = new();
+    private sealed class AsyncAiRequest
+    {
+        public readonly object SyncRoot = new();
+        public readonly Func<string> Compute;
+        public readonly long StartedTimestamp = Stopwatch.GetTimestamp();
+        public bool IsCompleted;
+        public string Status = "created";
+        public string? ResultJson;
+        public string? ErrorMessage;
+        public int ManagedThreadId = -1;
+
+        public AsyncAiRequest(Func<string> compute)
+        {
+            Compute = compute;
+        }
+    }
+
+    private readonly ConcurrentDictionary<int, AsyncAiRequest> _asyncRequests = new();
     private int _nextAsyncRequestId;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -72,19 +89,45 @@ public partial class NeijiangCSharpRuntime : Node
 
     public string PollAiResultJson(int requestId)
     {
-        if (!_asyncRequests.TryGetValue(requestId, out var task))
+        if (!_asyncRequests.TryGetValue(requestId, out var request))
             return "{\"ok\":false,\"error\":\"unknown_ai_request\"}";
-        if (!task.IsCompleted)
-            return "{\"ok\":true,\"pending\":true}";
 
-        _asyncRequests.TryRemove(requestId, out _);
-        if (task.IsFaulted)
+        lock (request.SyncRoot)
         {
-            var message = task.Exception?.GetBaseException().Message ?? "async_ai_request_failed";
-            return JsonSerializer.Serialize(new { ok = false, error = message }, JsonOptions);
+            if (!request.IsCompleted)
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    ok = true,
+                    pending = true,
+                    requestId,
+                    status = request.Status,
+                    elapsedMs = ElapsedMillisecondsSince(request.StartedTimestamp),
+                    managedThreadId = request.ManagedThreadId
+                }, JsonOptions);
+            }
         }
 
-        return task.Result;
+        _asyncRequests.TryRemove(requestId, out _);
+        lock (request.SyncRoot)
+        {
+            if (!string.IsNullOrEmpty(request.ErrorMessage))
+            {
+                return JsonSerializer.Serialize(new
+                {
+                    ok = false,
+                    error = request.ErrorMessage,
+                    requestId,
+                    status = request.Status,
+                    elapsedMs = ElapsedMillisecondsSince(request.StartedTimestamp),
+                    managedThreadId = request.ManagedThreadId
+                }, JsonOptions);
+            }
+
+            return string.IsNullOrEmpty(request.ResultJson)
+                ? "{\"ok\":false,\"error\":\"empty_async_ai_result\"}"
+                : request.ResultJson;
+        }
     }
 
     public bool HasPendingAiRequests() => !_asyncRequests.IsEmpty;
@@ -597,8 +640,61 @@ public partial class NeijiangCSharpRuntime : Node
     private int StartAsyncRequest(Func<string> compute)
     {
         var requestId = Interlocked.Increment(ref _nextAsyncRequestId);
-        _asyncRequests[requestId] = Task.Run(compute);
+        var request = new AsyncAiRequest(compute);
+        _asyncRequests[requestId] = request;
+        try
+        {
+            var thread = new System.Threading.Thread(() =>
+            {
+                lock (request.SyncRoot)
+                {
+                    request.Status = "running";
+                    request.ManagedThreadId = System.Environment.CurrentManagedThreadId;
+                }
+
+                try
+                {
+                    var resultJson = request.Compute();
+                    lock (request.SyncRoot)
+                    {
+                        request.ResultJson = string.IsNullOrEmpty(resultJson)
+                            ? "{\"ok\":false,\"error\":\"empty_async_ai_result\"}"
+                            : resultJson;
+                        request.Status = "completed";
+                        request.IsCompleted = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    lock (request.SyncRoot)
+                    {
+                        request.ErrorMessage = ex.GetBaseException().Message;
+                        request.Status = "faulted";
+                        request.IsCompleted = true;
+                    }
+                }
+            })
+            {
+                IsBackground = true,
+                Name = $"NeijiangAI-{requestId}"
+            };
+            thread.Start();
+        }
+        catch (Exception ex)
+        {
+            lock (request.SyncRoot)
+            {
+                request.ErrorMessage = ex.GetBaseException().Message;
+                request.Status = "start_failed";
+                request.IsCompleted = true;
+            }
+        }
         return requestId;
+    }
+
+    private static long ElapsedMillisecondsSince(long startedTimestamp)
+    {
+        return Math.Max(0L, (long)((Stopwatch.GetTimestamp() - startedTimestamp) * 1000.0 / Stopwatch.Frequency));
     }
 
     private static object BuildBeliefMetrics(NeijiangBeliefDiagnostics before, NeijiangBeliefDiagnostics after)

@@ -4,6 +4,33 @@ const AI_MANAGER_SCRIPT := preload("res://scripts/ai/AIManager.gd")
 const RULE_CONFIG_SCRIPT := preload("res://scripts/core/rule_config.gd")
 
 
+class PendingNativeRuntime:
+	var start_count := 0
+	var poll_count := 0
+
+	func IsRuntimeReady() -> bool:
+		return true
+
+	func StartAnalyzeDiscardJson(_payload_json: String) -> int:
+		start_count += 1
+		return 901
+
+	func StartAnalyzeReactionJson(_payload_json: String) -> int:
+		start_count += 1
+		return 902
+
+	func PollAiResultJson(request_id: int) -> String:
+		poll_count += 1
+		return JSON.stringify({
+			"ok": true,
+			"pending": true,
+			"requestId": request_id,
+			"status": "running",
+			"elapsedMs": 123,
+			"managedThreadId": 12,
+		})
+
+
 func _init() -> void:
 	call_deferred("_run")
 
@@ -25,6 +52,7 @@ func _run() -> void:
 	_run_test("ai_manager_async_hell_challenge_reaction_blocks_human", _test_ai_manager_async_hell_challenge_reaction_blocks_human, failures)
 	_run_test("ai_manager_uses_native_async_reaction_path", _test_ai_manager_uses_native_async_reaction_path, failures)
 	_run_test("ai_manager_reuses_duplicate_native_reaction_request", _test_ai_manager_reuses_duplicate_native_reaction_request, failures)
+	_run_test("ai_manager_preserves_pending_native_turn_request", _test_ai_manager_preserves_pending_native_turn_request, failures)
 	if failures.is_empty():
 		print("NEIJIANG CSHARP CONTRACT OK")
 		quit(0)
@@ -688,6 +716,65 @@ func _test_ai_manager_reuses_duplicate_native_reaction_request():
 			return true
 		OS.delay_msec(10)
 	return "timed out waiting for reused native reaction request"
+
+
+func _test_ai_manager_preserves_pending_native_turn_request():
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	var runtime := PendingNativeRuntime.new()
+	ai_manager.set_native_csharp_runtime(runtime)
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var players := []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"hand_tiles": [],
+			"discards": [],
+			"melds": [],
+			"bao_jiao": false,
+			"has_won": false,
+		})
+	var request_id := ai_manager.start_turn_analysis_background(
+		{
+			"seat": 1,
+			"hand_tiles": _tiles_from_types([0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 17], 900),
+		},
+		{
+			"players": players,
+			"current_turn_seat": 1,
+			"wall_count": 18,
+			"dealer_seat": 0,
+			"reaction_pass_evidence": [],
+		},
+		rules,
+		null,
+		null,
+		null,
+		false
+	)
+	if request_id <= 0:
+		return "expected native pending turn request id"
+	if runtime.start_count != 1:
+		return "expected one native start call, got %d" % runtime.start_count
+	if ai_manager.pump_async_requests() != 0:
+		return "expected pending native request not to deliver"
+	if runtime.poll_count != 1:
+		return "expected one native poll call, got %d" % runtime.poll_count
+	if not ai_manager.has_pending_async_requests():
+		return "expected pending request to stay active"
+	var status: Dictionary = ai_manager.get_backend_status()
+	if str(status.get("last_native_turn_raw_summary", "")).find("async_pending") == -1:
+		return "expected pending diagnostic summary, got %s" % [status]
+	ai_manager.set_native_csharp_runtime(null)
+	if ai_manager.pump_async_requests() != 0:
+		return "expected unavailable native runtime not to deliver"
+	if not ai_manager.has_pending_async_requests():
+		return "expected request to stay active while native runtime is temporarily unavailable"
+	status = ai_manager.get_backend_status()
+	if str(status.get("last_native_turn_error", "")) != "native_async_runtime_unavailable_while_pending":
+		return "expected native runtime unavailable diagnostic, got %s" % [status]
+	if int(ai_manager.request_state.get("inflight_count", -1)) != 1:
+		return "expected inflight request count to remain 1, got %s" % [ai_manager.request_state]
+	return true
 
 
 func _make_tile(id: int, suit: String, rank: int) -> Dictionary:
