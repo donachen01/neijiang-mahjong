@@ -10,6 +10,8 @@ public sealed class NeijiangAiFacade
     private readonly NeijiangDecisionEngine _decisionEngine = new();
     private readonly NeijiangReactionDecisionEngine _reactionDecisionEngine = new();
     private readonly NeijiangSelfActionDecisionEngine _selfActionDecisionEngine = new();
+    private readonly NeijiangBaoJiaoDecisionEngine _baoJiaoDecisionEngine = new();
+    private readonly NeijiangDingQueDecisionEngine _dingQueDecisionEngine = new();
     private readonly NeijiangDecisionCache _turnCache = new();
 
     public NeijiangDecisionResult DecideDiscard(NeijiangStateView state) => _decisionEngine.DecideDiscard(state);
@@ -35,16 +37,30 @@ public sealed class NeijiangAiFacade
         bool canGang,
         int sourceSeat = -1,
         string reactionType = "discard",
-        bool forceLightweight = false)
-        => _reactionDecisionEngine.DecideReaction(state, reactionTileType, canHu, canPeng, canGang, sourceSeat, reactionType, forceLightweight);
+        bool forceLightweight = false,
+        bool mandatoryGang = false)
+        => _reactionDecisionEngine.DecideReaction(state, reactionTileType, canHu, canPeng, canGang, sourceSeat, reactionType, forceLightweight, mandatoryGang);
 
     public NeijiangSelfActionDecisionResult DecideSelfAction(
         NeijiangStateView state,
         bool canSelfHu,
         IReadOnlyList<int> anGangTileTypes,
         IReadOnlyList<int> addGangTileTypes,
-        IReadOnlyDictionary<int, int>? addGangQiangGangCounts = null)
-        => _selfActionDecisionEngine.DecideSelfAction(state, canSelfHu, anGangTileTypes, addGangTileTypes, addGangQiangGangCounts);
+        IReadOnlyDictionary<int, int>? addGangQiangGangCounts = null,
+        IReadOnlyList<int>? mandatoryGangTileTypes = null)
+        => _selfActionDecisionEngine.DecideSelfAction(state, canSelfHu, anGangTileTypes, addGangTileTypes, addGangQiangGangCounts, mandatoryGangTileTypes);
+
+    public NeijiangBaoJiaoDecisionResult DecideBaoJiaoDeclaration(
+        NeijiangStateView state,
+        IReadOnlyList<int> tingTileTypes,
+        IReadOnlyList<NeijiangBaoGangCandidate> baoGangCandidates,
+        int planScore)
+        => _baoJiaoDecisionEngine.DecideBaoJiaoDeclaration(state, tingTileTypes, baoGangCandidates, planScore);
+
+    public NeijiangDingQueDecisionResult DecideDingQue(
+        IReadOnlyDictionary<string, int> suitCounts,
+        IReadOnlyList<string> activeSuits)
+        => _dingQueDecisionEngine.DecideDingQue(suitCounts, activeSuits);
 
     public CacheSnapshot GetTurnCacheSnapshot() => _turnCache.Snapshot();
 }

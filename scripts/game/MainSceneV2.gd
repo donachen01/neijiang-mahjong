@@ -14,8 +14,8 @@ const SYSTEM_DRAW_AUDIO_PATH := "res://res/audio/sfx/system_draw.mp3"
 const SYSTEM_DRAW_AUDIO_SECONDS := 1.0
 const HUMAN_DRAW_ACTION_DELAY := 1.0
 const SYSTEM_DRAW_ACTION_DELAY := 0.96
-const AI_TURN_DELAY := 0.52
-const AI_REACTION_DELAY := 0.52
+const AI_ACTION_DELAY_MIN_SEC := 0.5
+const AI_ACTION_DELAY_MAX_SEC := 3.0
 const AI_READY_POLL_SEC := 0.03
 const AI_WATCHDOG_POLL_SEC := 0.12
 const DIAGNOSTIC_EXPORT_UI_ENABLED := false
@@ -95,6 +95,13 @@ const ACTION_SECONDARY_SIZE := Vector2(204.0, 204.0)
 const ACTION_PRIMARY_FONT_SIZE := 172
 const ACTION_SECONDARY_FONT_SIZE := 148
 const AI_PRESET_ORDER := ["intermediate", "bone_ash", "hell"]
+const BAO_GANG_DIALOG_MIN_SIZE := Vector2(900.0, 430.0)
+const BAO_GANG_DIALOG_CONTENT_MIN_SIZE := Vector2(840.0, 330.0)
+const BAO_GANG_DIALOG_POPUP_MAX_HEIGHT := 720.0
+const BAO_GANG_DIALOG_TITLE_FONT_SIZE := 42
+const BAO_GANG_DIALOG_OPTION_FONT_SIZE := 32
+const BAO_GANG_DIALOG_OPTION_HEIGHT := 210.0
+const BAO_GANG_DIALOG_OPTION_SEPARATION := 24
 const AI_PRESET_LABELS := {
 	"intermediate": "中级",
 	"bone_ash": "骨灰",
@@ -226,8 +233,9 @@ var right_ui
 var an_gang_button: Button
 var bao_jiao_button: Button
 var bao_gang_dialog: ConfirmationDialog
-var bao_gang_dialog_content: VBoxContainer
-var bao_gang_option_checks: Array[CheckBox] = []
+var bao_gang_dialog_content: Control
+var bao_gang_option_checks: Array[Button] = []
+var bao_gang_dialog_committed := false
 var selected_tile_id: int = -1
 var settlement_selected_seat: int = -1
 var last_snapshot: Dictionary = {}
@@ -249,6 +257,7 @@ var opening_roll_payload: Dictionary = {}
 var opening_roll_animation_ticks: int = 0
 var opening_roll_started_round: int = -1
 var opening_roll_visual_rng := RandomNumberGenerator.new()
+var ai_action_delay_rng := RandomNumberGenerator.new()
 var settlement_dismissed: bool = false
 var draw_transition_active: bool = false
 var draw_transition_started_at_ms: int = 0
@@ -347,6 +356,7 @@ const SELF_ROW_TILE_VISUAL_SCALE := SELF_ROW_TILE_VISUAL_HEIGHT / TILE_VISUAL_BA
 
 func _ready() -> void:
 	opening_roll_visual_rng.randomize()
+	ai_action_delay_rng.randomize()
 	_load_ui_preferences()
 	_setup_audio_players()
 	_setup_ai_timers()
@@ -513,13 +523,13 @@ func _setup_audio_players() -> void:
 func _setup_ai_timers() -> void:
 	ai_turn_timer = Timer.new()
 	ai_turn_timer.one_shot = false
-	ai_turn_timer.wait_time = AI_TURN_DELAY
+	ai_turn_timer.wait_time = AI_ACTION_DELAY_MIN_SEC
 	add_child(ai_turn_timer)
 	ai_turn_timer.timeout.connect(_on_ai_turn_timer_timeout)
 
 	ai_reaction_timer = Timer.new()
 	ai_reaction_timer.one_shot = false
-	ai_reaction_timer.wait_time = AI_REACTION_DELAY
+	ai_reaction_timer.wait_time = AI_ACTION_DELAY_MIN_SEC
 	add_child(ai_reaction_timer)
 	ai_reaction_timer.timeout.connect(_on_ai_reaction_timer_timeout)
 
@@ -566,13 +576,33 @@ func _kick_ai_timers_after_background_delivery() -> void:
 	if game_manager.is_ai_reaction_pending():
 		_clear_draw_transition_block("ai_reaction_background_delivery")
 	if game_manager.is_ai_turn_ready() and ai_turn_timer != null and ai_turn_timer.is_stopped() and not draw_transition_active:
-		ai_turn_timer.wait_time = AI_READY_POLL_SEC
-		ai_turn_timer_started_at_ms = Time.get_ticks_msec()
-		ai_turn_timer.start()
+		_start_ai_turn_action_timer()
 	if game_manager.is_ai_reaction_pending() and ai_reaction_timer != null and ai_reaction_timer.is_stopped():
-		ai_reaction_timer.wait_time = AI_READY_POLL_SEC
-		ai_reaction_timer_started_at_ms = Time.get_ticks_msec()
-		ai_reaction_timer.start()
+		_start_ai_reaction_action_timer()
+
+
+func _next_ai_action_delay_seconds() -> float:
+	return ai_action_delay_rng.randf_range(AI_ACTION_DELAY_MIN_SEC, AI_ACTION_DELAY_MAX_SEC)
+
+
+func _start_ai_turn_action_timer() -> void:
+	if ai_turn_timer == null:
+		return
+	ai_turn_timer.wait_time = _next_ai_action_delay_seconds()
+	ai_turn_timer_started_at_ms = Time.get_ticks_msec()
+	ai_turn_timer.start()
+
+
+func _start_ai_reaction_action_timer() -> void:
+	if ai_reaction_timer == null:
+		return
+	ai_reaction_timer.wait_time = _next_ai_action_delay_seconds()
+	ai_reaction_timer_started_at_ms = Time.get_ticks_msec()
+	ai_reaction_timer.start()
+
+
+func _set_ai_action_delay_seed(seed_value: int) -> void:
+	ai_action_delay_rng.seed = seed_value
 
 
 func _apply_style() -> void:
@@ -2925,6 +2955,7 @@ func _update_self_area(snapshot: Dictionary, self_hand_tiles: Array) -> void:
 	var self_trainer_markers := {
 		"winning_tile_id": -1,
 		"winning_source_seat": self_winning_source_seat,
+		"bao_gang_keys": self_player.get("bao_gang_tiles", []).duplicate(),
 	}
 	if ai_helper_enabled:
 		self_trainer_markers["recommended_tile_id"] = int(trainer_hint.get("recommended_tile_id", -1))
@@ -4141,18 +4172,14 @@ func _schedule_ai_progress_if_needed(snapshot: Dictionary) -> void:
 		if draw_transition_active:
 			ai_turn_timer.stop()
 		elif ai_turn_timer.is_stopped():
-			ai_turn_timer.wait_time = AI_TURN_DELAY
-			ai_turn_timer_started_at_ms = Time.get_ticks_msec()
-			ai_turn_timer.start()
+			_start_ai_turn_action_timer()
 	else:
 		ai_turn_timer.stop()
 		ai_turn_timer_started_at_ms = 0
 
 	if game_manager.is_ai_reaction_pending():
 		if ai_reaction_timer.is_stopped():
-			ai_reaction_timer.wait_time = AI_REACTION_DELAY
-			ai_reaction_timer_started_at_ms = Time.get_ticks_msec()
-			ai_reaction_timer.start()
+			_start_ai_reaction_action_timer()
 	else:
 		ai_reaction_timer.stop()
 		ai_reaction_timer_started_at_ms = 0
@@ -7276,17 +7303,10 @@ func _on_draw_transition_timer_timeout() -> void:
 	draw_transition_active = false
 	draw_transition_started_at_ms = 0
 	draw_transition_expected_ms = 0
-	ai_turn_timer.wait_time = AI_TURN_DELAY
 	if game_manager.is_ai_turn_ready():
-		var success: bool = game_manager.run_ai_turn()
-		if success:
-			return
-		if game_manager.is_ai_turn_ready():
-			game_manager.prepare_ai_turn_decision()
-			ai_turn_timer.wait_time = AI_READY_POLL_SEC
-			ai_turn_timer_started_at_ms = Time.get_ticks_msec()
-			ai_turn_timer.start()
-			return
+		game_manager.prepare_ai_turn_decision()
+		_start_ai_turn_action_timer()
+		return
 	_on_snapshot_changed(game_manager.get_snapshot())
 
 
@@ -7395,47 +7415,363 @@ func _ensure_bao_gang_dialog() -> void:
 	if bao_gang_dialog != null:
 		return
 	bao_gang_dialog = ConfirmationDialog.new()
-	bao_gang_dialog.title = "报杠"
-	bao_gang_dialog.ok_button_text = "确认"
-	bao_gang_dialog.cancel_button_text = "取消"
+	bao_gang_dialog.title = ""
+	bao_gang_dialog.ok_button_text = ""
+	bao_gang_dialog.cancel_button_text = ""
 	bao_gang_dialog.exclusive = true
 	bao_gang_dialog.visible = false
-	bao_gang_dialog.min_size = Vector2(620, 420)
-	bao_gang_dialog.confirmed.connect(_on_bao_gang_dialog_confirmed)
+	bao_gang_dialog.min_size = BAO_GANG_DIALOG_MIN_SIZE
+	bao_gang_dialog.confirmed.connect(_finish_bao_gang_dialog_selection)
+	bao_gang_dialog.canceled.connect(_finish_bao_gang_dialog_selection)
+	bao_gang_dialog.close_requested.connect(_finish_bao_gang_dialog_selection)
 	add_child(bao_gang_dialog)
+	_apply_bao_gang_dialog_chrome()
 
 
 func _show_bao_gang_selection_dialog(options: Array) -> void:
 	_ensure_bao_gang_dialog()
+	_apply_bao_gang_dialog_chrome()
+	bao_gang_dialog_committed = false
 	bao_gang_option_checks.clear()
 	if bao_gang_dialog_content != null and is_instance_valid(bao_gang_dialog_content):
 		bao_gang_dialog_content.queue_free()
-	var box := VBoxContainer.new()
-	bao_gang_dialog_content = box
-	box.name = "BaoGangOptions"
-	box.custom_minimum_size = Vector2(560, 260)
-	box.add_theme_constant_override("separation", 18)
+	var surface := Panel.new()
+	surface.name = "BaoGangSurface"
+	surface.custom_minimum_size = BAO_GANG_DIALOG_CONTENT_MIN_SIZE
+	surface.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	surface.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_apply_bao_gang_surface_style(surface)
+	bao_gang_dialog_content = surface
+	var margin := MarginContainer.new()
+	margin.name = "BaoGangSurfaceMargin"
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 34)
+	margin.add_theme_constant_override("margin_right", 34)
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_bottom", 30)
+	surface.add_child(margin)
+	var content_box := VBoxContainer.new()
+	content_box.name = "BaoGangSurfaceContent"
+	content_box.add_theme_constant_override("separation", BAO_GANG_DIALOG_OPTION_SEPARATION)
+	content_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	margin.add_child(content_box)
+	var close_button := Button.new()
+	close_button.name = "BaoGangCloseButton"
+	close_button.text = "×"
+	close_button.focus_mode = Control.FOCUS_NONE
+	close_button.custom_minimum_size = Vector2(54, 54)
+	close_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	close_button.offset_left = -70
+	close_button.offset_top = 16
+	close_button.offset_right = -16
+	close_button.offset_bottom = 70
+	_style_bao_gang_close_button(close_button)
+	close_button.pressed.connect(_finish_bao_gang_dialog_selection)
+	surface.add_child(close_button)
 	var title := Label.new()
 	title.text = "选择要声明的报杠"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 34)
-	box.add_child(title)
-	for option_item in options:
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", BAO_GANG_DIALOG_TITLE_FONT_SIZE)
+	title.add_theme_color_override("font_color", IVORY_SOFT)
+	title.add_theme_color_override("font_outline_color", Color(0.03, 0.08, 0.05, 0.92))
+	title.add_theme_constant_override("outline_size", 3)
+	title.custom_minimum_size = Vector2(0, 64)
+	content_box.add_child(title)
+	var tile_row := HBoxContainer.new()
+	tile_row.name = "BaoGangTileRow"
+	tile_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	tile_row.add_theme_constant_override("separation", BAO_GANG_DIALOG_OPTION_SEPARATION)
+	tile_row.custom_minimum_size = Vector2(0, BAO_GANG_DIALOG_OPTION_HEIGHT)
+	tile_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content_box.add_child(tile_row)
+	for option_item in options.slice(0, 4):
 		var option: Dictionary = option_item
-		var check := CheckBox.new()
-		check.text = str(option.get("display_name", option.get("key", "")))
+		var check := Button.new()
+		check.name = "BaoGangOptionButton"
+		check.text = ""
+		check.toggle_mode = true
 		check.button_pressed = true
-		check.custom_minimum_size = Vector2(520, 72)
-		check.add_theme_font_size_override("font_size", 30)
-		check.add_theme_constant_override("h_separation", 18)
+		check.focus_mode = Control.FOCUS_NONE
+		check.custom_minimum_size = Vector2(154, BAO_GANG_DIALOG_OPTION_HEIGHT)
+		check.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		check.add_theme_font_size_override("font_size", BAO_GANG_DIALOG_OPTION_FONT_SIZE)
+		_apply_bao_gang_option_style(check)
 		check.set_meta("bao_gang_key", str(option.get("key", "")))
-		box.add_child(check)
+		var option_tile: Dictionary = _bao_gang_tile_from_option(option)
+		var tile_visual := _create_bao_gang_option_tile(option_tile)
+		var holder := CenterContainer.new()
+		holder.name = "BaoGangOptionTileHolder"
+		holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		holder.set_anchors_preset(Control.PRESET_FULL_RECT)
+		check.add_child(holder)
+		holder.add_child(tile_visual)
+		if tile_visual != null:
+			_refresh_bao_gang_option_selection_visual(check, tile_visual, check.button_pressed)
+			check.toggled.connect(_on_bao_gang_option_toggled.bind(check, tile_visual))
+		tile_row.add_child(check)
 		bao_gang_option_checks.append(check)
-	bao_gang_dialog.add_child(box)
-	bao_gang_dialog.popup_centered(Vector2(640, 360 + options.size() * 78))
+	bao_gang_dialog.add_child(surface)
+	bao_gang_dialog.popup_centered(BAO_GANG_DIALOG_MIN_SIZE)
 
 
-func _on_bao_gang_dialog_confirmed() -> void:
+func _bao_gang_tile_from_option(option: Dictionary) -> Dictionary:
+	var tile: Dictionary = option.get("tile", {})
+	if not tile.is_empty():
+		return tile.duplicate(true)
+	var key := str(option.get("key", ""))
+	var parts := key.split("_")
+	if parts.size() >= 2:
+		var suit := str(parts[0])
+		var rank := int(parts[1])
+		return {
+			"id": -1,
+			"suit": suit,
+			"rank": rank,
+			"sort_key": _bao_gang_suit_sort_offset(suit) + rank,
+			"display_name": "%d%s" % [rank, _ding_que_short_text(suit)],
+		}
+	return {}
+
+
+func _bao_gang_suit_sort_offset(suit: String) -> int:
+	match suit:
+		"wan":
+			return 0
+		"tiao":
+			return 100
+		"tong":
+			return 200
+		_:
+			return 900
+
+
+func _create_bao_gang_option_row(option: Dictionary, option_tile: Dictionary) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "BaoGangOptionContent"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 54.0
+	row.offset_top = 8.0
+	row.offset_right = -24.0
+	row.offset_bottom = -8.0
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	row.add_theme_constant_override("separation", 20)
+
+	var tile_visual := TILE_SCENE.instantiate() as TileVisual2D
+	tile_visual.name = "BaoGangOptionTile"
+	tile_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tile_visual.call("configure", option_tile, 0.52, false, false, true)
+	row.add_child(tile_visual)
+
+	var text_box := VBoxContainer.new()
+	text_box.name = "BaoGangOptionText"
+	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(text_box)
+
+	var label := Label.new()
+	label.name = "BaoGangOptionBadge"
+	label.text = _bao_gang_option_badge_text(option)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 28)
+	label.add_theme_color_override("font_color", IVORY_SOFT)
+	label.add_theme_color_override("font_outline_color", Color(0.03, 0.08, 0.05, 0.90))
+	label.add_theme_constant_override("outline_size", 2)
+	text_box.add_child(label)
+	return row
+
+
+func _create_bao_gang_option_tile(option_tile: Dictionary) -> TileVisual2D:
+	var tile_visual := TILE_SCENE.instantiate() as TileVisual2D
+	tile_visual.name = "BaoGangOptionTile"
+	tile_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tile_visual.call("configure", option_tile, 0.88, false, false, true)
+	return tile_visual
+
+
+func _bao_gang_option_badge_text(option: Dictionary) -> String:
+	var subtype := str(option.get("subtype", ""))
+	match subtype:
+		"an":
+			return "暗杠"
+		"bu":
+			return "补杠"
+		"ming":
+			return "明杠"
+		_:
+			return "报杠牌"
+
+
+func _on_bao_gang_option_toggled(pressed: bool, check: Button, tile_visual: TileVisual2D) -> void:
+	_refresh_bao_gang_option_selection_visual(check, tile_visual, pressed)
+
+
+func _refresh_bao_gang_option_selection_visual(check: Button, tile_visual: TileVisual2D, selected: bool) -> void:
+	if tile_visual != null:
+		var tile_data: Dictionary = tile_visual.tile_data.duplicate(true)
+		tile_visual.call("configure", tile_data, tile_visual.tile_scale, false, false, selected)
+	if check != null:
+		check.modulate = Color.WHITE if selected else Color(0.72, 0.80, 0.74, 0.82)
+
+
+func _apply_bao_gang_dialog_chrome() -> void:
+	if bao_gang_dialog == null:
+		return
+	var empty := StyleBoxFlat.new()
+	empty.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	empty.border_color = Color(0.0, 0.0, 0.0, 0.0)
+	empty.set_border_width_all(0)
+	empty.content_margin_left = 0
+	empty.content_margin_right = 0
+	empty.content_margin_top = 0
+	empty.content_margin_bottom = 0
+	bao_gang_dialog.add_theme_stylebox_override("panel", empty)
+	bao_gang_dialog.add_theme_stylebox_override("embedded_border", empty)
+	bao_gang_dialog.add_theme_color_override("title_color", Color(IVORY_SOFT.r, IVORY_SOFT.g, IVORY_SOFT.b, 0.0))
+	bao_gang_dialog.add_theme_font_size_override("title_font_size", 1)
+	for button in [bao_gang_dialog.get_ok_button(), bao_gang_dialog.get_cancel_button()]:
+		if button != null:
+			button.visible = false
+			button.disabled = true
+			button.custom_minimum_size = Vector2.ZERO
+
+
+func _apply_bao_gang_surface_style(panel: Panel) -> void:
+	if panel == null:
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.06, 0.27, 0.19, 0.94)
+	style.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.72)
+	style.set_border_width_all(2)
+	style.corner_radius_top_left = 24
+	style.corner_radius_top_right = 24
+	style.corner_radius_bottom_left = 24
+	style.corner_radius_bottom_right = 24
+	style.content_margin_left = 30
+	style.content_margin_right = 30
+	style.content_margin_top = 28
+	style.content_margin_bottom = 28
+	style.shadow_color = Color(0.0, 0.08, 0.04, 0.54)
+	style.shadow_size = 22
+	style.shadow_offset = Vector2(0, 10)
+	panel.add_theme_stylebox_override("panel", style)
+	_ensure_material_overlay(panel, "BaoGangSurfaceSoftLight", TABLE_MATERIAL_OVERLAY_SCRIPT.MaterialMode.SOFT_PANEL, 0.55)
+
+
+func _apply_bao_gang_option_style(check: Button) -> void:
+	if check == null:
+		return
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.09, 0.34, 0.24, 0.76)
+	normal.border_color = Color(0.93, 0.76, 0.42, 0.48)
+	normal.set_border_width_all(1)
+	normal.corner_radius_top_left = 16
+	normal.corner_radius_top_right = 16
+	normal.corner_radius_bottom_left = 16
+	normal.corner_radius_bottom_right = 16
+	normal.content_margin_left = 18
+	normal.content_margin_right = 18
+	normal.content_margin_top = 10
+	normal.content_margin_bottom = 10
+	normal.shadow_color = Color(0.0, 0.07, 0.04, 0.28)
+	normal.shadow_size = 8
+	normal.shadow_offset = Vector2(0, 3)
+	var hover := normal.duplicate()
+	hover.bg_color = Color(0.13, 0.43, 0.30, 0.86)
+	hover.border_color = Color(1.0, 0.86, 0.52, 0.74)
+	var pressed := normal.duplicate()
+	pressed.bg_color = Color(0.06, 0.25, 0.18, 0.92)
+	pressed.border_color = Color(0.85, 0.64, 0.34, 0.60)
+	check.add_theme_stylebox_override("normal", normal)
+	check.add_theme_stylebox_override("hover", hover)
+	check.add_theme_stylebox_override("pressed", pressed)
+	check.add_theme_stylebox_override("focus", hover)
+	check.add_theme_stylebox_override("disabled", normal)
+	check.add_theme_color_override("font_color", IVORY_SOFT)
+	check.add_theme_color_override("font_hover_color", Color(1.0, 0.98, 0.86, 1.0))
+	check.add_theme_color_override("font_pressed_color", Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 1.0))
+	check.add_theme_color_override("font_outline_color", Color(0.03, 0.08, 0.05, 0.90))
+	check.add_theme_constant_override("outline_size", 2)
+
+
+func _style_bao_gang_close_button(button: Button) -> void:
+	if button == null:
+		return
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.32, 0.11, 0.08, 0.92)
+	normal.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.62)
+	normal.set_border_width_all(1)
+	normal.corner_radius_top_left = 14
+	normal.corner_radius_top_right = 14
+	normal.corner_radius_bottom_left = 14
+	normal.corner_radius_bottom_right = 14
+	normal.shadow_color = Color(0.0, 0.05, 0.03, 0.36)
+	normal.shadow_size = 8
+	normal.shadow_offset = Vector2(0, 3)
+	var hover := normal.duplicate()
+	hover.bg_color = Color(0.46, 0.17, 0.12, 0.96)
+	hover.border_color = Color(1.0, 0.86, 0.52, 0.78)
+	var pressed := normal.duplicate()
+	pressed.bg_color = Color(0.22, 0.08, 0.06, 0.96)
+	pressed.shadow_size = 3
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("focus", hover)
+	button.add_theme_font_size_override("font_size", 34)
+	button.add_theme_color_override("font_color", IVORY_SOFT)
+	button.add_theme_color_override("font_outline_color", Color(0.03, 0.08, 0.05, 0.90))
+	button.add_theme_constant_override("outline_size", 2)
+
+
+func _style_bao_gang_dialog_button(button: Button, primary: bool) -> void:
+	if button == null:
+		return
+	var base := Color(0.17, 0.42, 0.26, 0.94) if primary else Color(0.14, 0.25, 0.20, 0.90)
+	button.custom_minimum_size = Vector2(146, 56)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = base
+	normal.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.60)
+	normal.set_border_width_all(1)
+	normal.corner_radius_top_left = 16
+	normal.corner_radius_top_right = 16
+	normal.corner_radius_bottom_left = 16
+	normal.corner_radius_bottom_right = 16
+	normal.content_margin_left = 18
+	normal.content_margin_right = 18
+	normal.content_margin_top = 8
+	normal.content_margin_bottom = 8
+	normal.shadow_color = Color(0.0, 0.08, 0.04, 0.28)
+	normal.shadow_size = 8
+	normal.shadow_offset = Vector2(0, 3)
+	var hover := normal.duplicate()
+	hover.bg_color = base.lightened(0.12)
+	hover.border_color = Color(1.0, 0.90, 0.56, 0.84)
+	var pressed := normal.duplicate()
+	pressed.bg_color = base.darkened(0.12)
+	pressed.shadow_size = 3
+	pressed.shadow_offset = Vector2(0, 1)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("focus", hover)
+	button.add_theme_font_size_override("font_size", 24)
+	button.add_theme_color_override("font_color", IVORY_SOFT)
+	button.add_theme_color_override("font_outline_color", Color(0.03, 0.08, 0.05, 0.90))
+	button.add_theme_constant_override("outline_size", 2)
+
+
+func _finish_bao_gang_dialog_selection() -> void:
+	if bao_gang_dialog_committed:
+		return
+	bao_gang_dialog_committed = true
+	if bao_gang_dialog != null:
+		bao_gang_dialog.hide()
 	var selected_keys: Array = []
 	for check in bao_gang_option_checks:
 		if check.button_pressed:
@@ -7501,7 +7837,6 @@ func _on_settlement_shade_gui_input(event: InputEvent) -> void:
 func _on_ai_turn_timer_timeout() -> void:
 	ai_turn_timer.stop()
 	ai_turn_timer_started_at_ms = 0
-	ai_turn_timer.wait_time = AI_TURN_DELAY
 	var success: bool = game_manager.run_ai_turn()
 	if success:
 		return
@@ -7546,9 +7881,7 @@ func _on_ai_watchdog_timer_timeout() -> void:
 	if draw_transition_active:
 		return
 	if game_manager.is_ai_turn_ready() and ai_turn_timer != null and ai_turn_timer.is_stopped():
-		ai_turn_timer.wait_time = AI_TURN_DELAY
-		ai_turn_timer_started_at_ms = Time.get_ticks_msec()
-		ai_turn_timer.start()
+		_start_ai_turn_action_timer()
 		return
 	if game_manager.is_ai_turn_ready() and ai_turn_timer != null and not ai_turn_timer.is_stopped():
 		var elapsed_turn_ms := maxi(0, Time.get_ticks_msec() - ai_turn_timer_started_at_ms)
@@ -7563,9 +7896,7 @@ func _on_ai_watchdog_timer_timeout() -> void:
 				ai_turn_timer.start()
 			return
 	if game_manager.is_ai_reaction_pending() and ai_reaction_timer != null and ai_reaction_timer.is_stopped():
-		ai_reaction_timer.wait_time = AI_REACTION_DELAY
-		ai_reaction_timer_started_at_ms = Time.get_ticks_msec()
-		ai_reaction_timer.start()
+		_start_ai_reaction_action_timer()
 		return
 	if game_manager.is_ai_reaction_pending() and ai_reaction_timer != null and not ai_reaction_timer.is_stopped():
 		var elapsed_reaction_ms := maxi(0, Time.get_ticks_msec() - ai_reaction_timer_started_at_ms)

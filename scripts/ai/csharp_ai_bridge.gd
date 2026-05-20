@@ -91,21 +91,111 @@ func build_reaction_transport_payload(candidate: Dictionary, player_state: Dicti
 	return _build_reaction_payload(candidate, player_state, table_state, discard_context, rules_config)
 
 
-func build_self_action_transport_payload(player_state: Dictionary, table_state: Dictionary, rules_config, can_self_hu: bool, an_gang_tile_types: Array, add_gang_tile_types: Array, add_gang_qiang_gang_counts: Dictionary = {}) -> Dictionary:
+func build_self_action_transport_payload(player_state: Dictionary, table_state: Dictionary, rules_config, can_self_hu: bool, an_gang_tile_types: Array, add_gang_tile_types: Array, add_gang_qiang_gang_counts: Dictionary = {}, mandatory_gang_tile_types: Array = []) -> Dictionary:
 	var payload := _build_payload(player_state, table_state, rules_config)
 	payload["canSelfHu"] = can_self_hu
 	payload["anGangTileTypes"] = an_gang_tile_types.duplicate(true)
 	payload["addGangTileTypes"] = add_gang_tile_types.duplicate(true)
 	payload["addGangQiangGangCounts"] = add_gang_qiang_gang_counts.duplicate(true)
+	payload["mandatoryGangTileTypes"] = mandatory_gang_tile_types.duplicate(true)
 	return payload
 
 
-func analyze_self_action(player_state: Dictionary, table_state: Dictionary, rules_config, can_self_hu: bool, an_gang_tile_types: Array, add_gang_tile_types: Array, add_gang_qiang_gang_counts: Dictionary = {}, request_tag: String = "") -> Dictionary:
+func build_bao_jiao_transport_payload(player_state: Dictionary, table_state: Dictionary, rules_config, plan: Dictionary) -> Dictionary:
+	var payload := _build_payload(player_state, table_state, rules_config)
+	var active_suits: Array = tile_codec.resolve_active_suits(rules_config)
+	payload["tingTileTypes"] = _encode_tile_list(plan.get("ting_tiles", []), active_suits)
+	var candidates: Array = []
+	for option_item in plan.get("bao_gang_options", []):
+		var option: Dictionary = option_item
+		candidates.append({
+			"key": str(option.get("key", "")),
+			"tileType": tile_codec.tile_type(option.get("tile", {}), active_suits),
+			"subtype": str(option.get("subtype", "")),
+		})
+	payload["baoGangCandidates"] = candidates
+	payload["planScore"] = int(plan.get("plan_score", 0))
+	return payload
+
+
+func build_ding_que_transport_payload(hand_tiles: Array, active_suits: Array) -> Dictionary:
+	var counts := {}
+	for suit_value in active_suits:
+		counts[str(suit_value)] = 0
+	for tile in hand_tiles:
+		var suit := str(tile.get("suit", ""))
+		if counts.has(suit):
+			counts[suit] = int(counts.get(suit, 0)) + 1
+	return {
+		"suitCounts": counts,
+		"activeSuits": active_suits.duplicate(true),
+	}
+
+
+func analyze_bao_jiao(player_state: Dictionary, table_state: Dictionary, rules_config, plan: Dictionary, request_tag: String = "") -> Dictionary:
 	if not is_available():
 		last_transport_mode = "unavailable"
 		last_host_error = "cli_missing"
 		return {}
-	var payload := build_self_action_transport_payload(player_state, table_state, rules_config, can_self_hu, an_gang_tile_types, add_gang_tile_types, add_gang_qiang_gang_counts)
+	var payload := build_bao_jiao_transport_payload(player_state, table_state, rules_config, plan)
+	if _ensure_host_connection():
+		var host_result := _analyze_bao_jiao_via_host(payload)
+		if not host_result.is_empty():
+			last_transport_mode = "host"
+			return host_result
+	var file_path := _write_payload(payload, "bao_jiao_%s" % request_tag)
+	if file_path.is_empty():
+		last_transport_mode = "cli_failed"
+		last_host_error = "payload_write_failed"
+		return {}
+	var output: Array = []
+	var exit_code := OS.execute(DOTNET_BIN, [ProjectSettings.globalize_path(CLI_DLL_PATH), "bao-jiao-json", file_path], output, true, true)
+	if exit_code != 0 or output.is_empty():
+		last_transport_mode = "cli_failed"
+		last_host_error = "cli_exit_%d" % exit_code
+		return {}
+	var raw: String = "\n".join(output)
+	var parsed = JSON.parse_string(raw)
+	last_transport_mode = "cli_after_host_miss" if host_mode_enabled else "cli"
+	last_host_error = ""
+	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+
+
+func analyze_ding_que(hand_tiles: Array, active_suits: Array, request_tag: String = "") -> Dictionary:
+	if not is_available():
+		last_transport_mode = "unavailable"
+		last_host_error = "cli_missing"
+		return {}
+	var payload := build_ding_que_transport_payload(hand_tiles, active_suits)
+	if _ensure_host_connection():
+		var host_result := _analyze_ding_que_via_host(payload)
+		if not host_result.is_empty():
+			last_transport_mode = "host"
+			return host_result
+	var file_path := _write_payload(payload, "ding_que_%s" % request_tag)
+	if file_path.is_empty():
+		last_transport_mode = "cli_failed"
+		last_host_error = "payload_write_failed"
+		return {}
+	var output: Array = []
+	var exit_code := OS.execute(DOTNET_BIN, [ProjectSettings.globalize_path(CLI_DLL_PATH), "ding-que-json", file_path], output, true, true)
+	if exit_code != 0 or output.is_empty():
+		last_transport_mode = "cli_failed"
+		last_host_error = "cli_exit_%d" % exit_code
+		return {}
+	var raw: String = "\n".join(output)
+	var parsed = JSON.parse_string(raw)
+	last_transport_mode = "cli_after_host_miss" if host_mode_enabled else "cli"
+	last_host_error = ""
+	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+
+
+func analyze_self_action(player_state: Dictionary, table_state: Dictionary, rules_config, can_self_hu: bool, an_gang_tile_types: Array, add_gang_tile_types: Array, add_gang_qiang_gang_counts: Dictionary = {}, mandatory_gang_tile_types: Array = [], request_tag: String = "") -> Dictionary:
+	if not is_available():
+		last_transport_mode = "unavailable"
+		last_host_error = "cli_missing"
+		return {}
+	var payload := build_self_action_transport_payload(player_state, table_state, rules_config, can_self_hu, an_gang_tile_types, add_gang_tile_types, add_gang_qiang_gang_counts, mandatory_gang_tile_types)
 	if _ensure_host_connection():
 		var host_result := _analyze_self_action_via_host(payload)
 		if not host_result.is_empty():
@@ -246,6 +336,7 @@ func _build_reaction_payload(candidate: Dictionary, player_state: Dictionary, ta
 	payload["canHu"] = bool(candidate.get("can_hu", false))
 	payload["canPeng"] = bool(candidate.get("can_peng", false))
 	payload["canGang"] = bool(candidate.get("can_gang", false))
+	payload["mandatoryGang"] = bool(candidate.get("mandatory_gang", false))
 	return payload
 
 
@@ -384,6 +475,66 @@ func _analyze_self_action_via_host(payload: Dictionary) -> Dictionary:
 	var request: Dictionary = {
 		"action": "self_action",
 		"selfActionPayload": payload,
+	}
+	var request_line: String = JSON.stringify(request) + "\n"
+	var send_err: int = host_client.put_data(request_line.to_utf8_buffer())
+	if send_err != OK:
+		last_host_error = "send_err_%d" % send_err
+		_disconnect_host()
+		return {}
+	var response_line: String = _read_host_line(HOST_READ_TIMEOUT_MS)
+	if response_line == "":
+		if last_host_error == "":
+			last_host_error = "host_empty_response"
+		_disconnect_host()
+		return {}
+	var parsed = JSON.parse_string(response_line)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		last_host_error = "host_invalid_json"
+		return {}
+	var response: Dictionary = parsed
+	if not bool(response.get("ok", false)):
+		last_host_error = str(response.get("error", "host_error"))
+		return {}
+	var result = response.get("result", {})
+	last_host_error = ""
+	return result if typeof(result) == TYPE_DICTIONARY else {}
+
+
+func _analyze_bao_jiao_via_host(payload: Dictionary) -> Dictionary:
+	var request: Dictionary = {
+		"action": "bao_jiao",
+		"baoJiaoPayload": payload,
+	}
+	var request_line: String = JSON.stringify(request) + "\n"
+	var send_err: int = host_client.put_data(request_line.to_utf8_buffer())
+	if send_err != OK:
+		last_host_error = "send_err_%d" % send_err
+		_disconnect_host()
+		return {}
+	var response_line: String = _read_host_line(HOST_READ_TIMEOUT_MS)
+	if response_line == "":
+		if last_host_error == "":
+			last_host_error = "host_empty_response"
+		_disconnect_host()
+		return {}
+	var parsed = JSON.parse_string(response_line)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		last_host_error = "host_invalid_json"
+		return {}
+	var response: Dictionary = parsed
+	if not bool(response.get("ok", false)):
+		last_host_error = str(response.get("error", "host_error"))
+		return {}
+	var result = response.get("result", {})
+	last_host_error = ""
+	return result if typeof(result) == TYPE_DICTIONARY else {}
+
+
+func _analyze_ding_que_via_host(payload: Dictionary) -> Dictionary:
+	var request: Dictionary = {
+		"action": "ding_que",
+		"dingQuePayload": payload,
 	}
 	var request_line: String = JSON.stringify(request) + "\n"
 	var send_err: int = host_client.put_data(request_line.to_utf8_buffer())

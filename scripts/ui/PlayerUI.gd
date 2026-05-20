@@ -347,8 +347,10 @@ func _render_hand(player: Dictionary, show_back: bool) -> void:
 				scale = 0.248
 			SeatDock.LEFT, SeatDock.RIGHT:
 				scale = 0.19
-		var tile_data: Dictionary = hand_tiles[index] if reveal_tiles and index < hand_tiles.size() else {}
-		tile.call("configure", tile_data, scale, show_back and not reveal_tiles, false, false)
+		var source_tile_data: Dictionary = hand_tiles[index] if index < hand_tiles.size() else {}
+		var tile_data: Dictionary = source_tile_data if reveal_tiles else {}
+		var is_bao_gang := _is_bao_gang_tile(player, source_tile_data)
+		tile.call("configure", tile_data, scale, show_back and not reveal_tiles, false, is_bao_gang)
 		tile.rotation_degrees = _seat_tile_rotation_degrees()
 		hand_lane.add_child(tile)
 
@@ -440,8 +442,10 @@ func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
 		hand_center.add_child(top_hand_box)
 		for index in range(mini(hand_count, 14)):
 			var top_tile := TILE_SCENE.instantiate()
-			var tile_data: Dictionary = hand_tiles[index] if not show_back and index < hand_tiles.size() else {}
-			top_tile.call("configure", tile_data, TOP_ROW_TILE_SCALE, show_back and tile_data.is_empty(), false, false)
+			var source_tile_data: Dictionary = hand_tiles[index] if index < hand_tiles.size() else {}
+			var tile_data: Dictionary = source_tile_data if not show_back else {}
+			var is_bao_gang := _is_bao_gang_tile(player, source_tile_data)
+			top_tile.call("configure", tile_data, TOP_ROW_TILE_SCALE, show_back and tile_data.is_empty(), false, is_bao_gang)
 			top_tile.rotation_degrees = _seat_tile_rotation_degrees()
 			top_hand_box.add_child(top_tile)
 
@@ -505,8 +509,10 @@ func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
 	hand_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	hand_vbox.add_child(hand_box)
 	for index in range(mini(hand_count, 14)):
-		var tile_data: Dictionary = hand_tiles[index] if not show_back and index < hand_tiles.size() else {}
-		hand_box.add_child(_create_side_hand_tile(show_back and tile_data.is_empty(), tile_data))
+		var source_tile_data: Dictionary = hand_tiles[index] if index < hand_tiles.size() else {}
+		var tile_data: Dictionary = source_tile_data if not show_back else {}
+		var is_bao_gang := _is_bao_gang_tile(player, source_tile_data)
+		hand_box.add_child(_create_side_hand_tile(show_back and tile_data.is_empty(), tile_data, false, -1.0, is_bao_gang))
 
 	if has_hu:
 		var hu_center := CenterContainer.new()
@@ -870,6 +876,7 @@ func _build_hand_render_signature(player: Dictionary, show_back: bool) -> String
 		"show_back": show_back,
 		"hand_count": int(player.get("hand_count", 0)),
 		"tiles": _tile_signature_list(player.get("hand_tiles", []), not show_back),
+		"bao_gang": player.get("bao_gang_tiles", []).duplicate(),
 	})
 
 
@@ -882,6 +889,7 @@ func _build_opponent_band_render_signature(player: Dictionary, show_back: bool) 
 		"size": [int(round(size.x)), int(round(size.y))],
 		"hand_count": int(player.get("hand_count", 0)),
 		"tiles": _tile_signature_list(player.get("hand_tiles", []), not show_back),
+		"bao_gang": player.get("bao_gang_tiles", []).duplicate(),
 		"melds": _meld_signature_list(player.get("melds", [])),
 		"has_won": bool(player.get("has_won", false)),
 		"winning_tile": _single_tile_signature(player.get("winning_tile", {})),
@@ -927,6 +935,17 @@ func _single_tile_signature(tile: Dictionary) -> String:
 	return "%s:%d" % [str(tile.get("suit", "")), int(tile.get("rank", 0))]
 
 
+func _is_bao_gang_tile(player: Dictionary, tile_data: Dictionary) -> bool:
+	var bao_gang_keys: Array = player.get("bao_gang_tiles", [])
+	if bao_gang_keys.is_empty() or tile_data.is_empty():
+		return false
+	return bao_gang_keys.has(_tile_key(tile_data))
+
+
+func _tile_key(tile_data: Dictionary) -> String:
+	return "%s_%d" % [str(tile_data.get("suit", "")), int(tile_data.get("rank", 0))]
+
+
 func _meld_signature_list(melds: Array) -> Array:
 	var result: Array = []
 	for meld in melds:
@@ -948,10 +967,10 @@ func _create_plain_meld_tile(tile_data: Dictionary, scale: float, rotation: floa
 	return tile
 
 
-func _create_side_hand_tile(show_back: bool, tile_data: Dictionary = {}, is_winning_tile: bool = false, scale_override: float = -1.0) -> Control:
+func _create_side_hand_tile(show_back: bool, tile_data: Dictionary = {}, is_winning_tile: bool = false, scale_override: float = -1.0, is_bao_gang_tile: bool = false) -> Control:
 	var tile := TILE_SCENE.instantiate()
 	var scale := scale_override if scale_override > 0.0 else _side_hand_tile_scale()
-	tile.call("configure", tile_data, scale, show_back and tile_data.is_empty(), false, false, false, is_winning_tile)
+	tile.call("configure", tile_data, scale, show_back and tile_data.is_empty(), false, is_bao_gang_tile, false, is_winning_tile)
 	var tile_size: Vector2 = tile.custom_minimum_size
 	var wrapper := Control.new()
 	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -22,5 +22,8 @@ public sealed class NeijiangHellOracleResult
     public int ExactWallRemaining { get; init; }
     public int FairTileType { get; init; } = -1;
     public int ActualTileType { get; init; } = -1;
+    public string TeamRole { get; init; } = "";
+    public int TeamPressureBonus { get; init; }
+    public IReadOnlyList<string> TeamPlanSummary { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> Reasons { get; init; } = Array.Empty<string>();
 }

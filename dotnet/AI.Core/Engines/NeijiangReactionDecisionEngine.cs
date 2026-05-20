@@ -8,6 +8,8 @@ public sealed class NeijiangReactionDecisionEngine
     private readonly NeijiangUkeireEngine _ukeire = new();
     private readonly NeijiangBeliefEngine _belief = new();
     private readonly NeijiangDangerEngine _danger = new();
+    private readonly NeijiangBaoJiaoActionEngine _baoJiaoAction = new();
+    private readonly NeijiangRoutePlanEngine _routePlan = new();
     private const int ReactionSearchDepth = 2;
     private const int ReactionSearchRollouts = 24;
 
@@ -19,8 +21,31 @@ public sealed class NeijiangReactionDecisionEngine
         bool canGang,
         int sourceSeat = -1,
         string reactionType = "discard",
-        bool forceLightweight = false)
+        bool forceLightweight = false,
+        bool mandatoryGang = false)
     {
+        var baoJiaoDecision = _baoJiaoAction.TryDecideReaction(state, reactionTileType, canHu, canPeng, canGang, mandatoryGang);
+        if (baoJiaoDecision is not null)
+            return baoJiaoDecision;
+
+        if (mandatoryGang && canGang && reactionTileType is >= 0 and < 18 && state.Hand18[reactionTileType] >= 3)
+        {
+            return new NeijiangReactionDecisionResult
+            {
+                Action = new NeijiangAction(NeijiangActionType.Gang, reactionTileType, 120000, "已报杠遇到报杠牌，C#强制执行明杠"),
+                ShantenAfter = -1,
+                CurrentShanten = -1,
+                Reasons = new[] { "已报杠遇到报杠牌，C#强制执行明杠", "前端仅传入 mandatory 标记，不再覆盖 C# 响应" },
+                ActionScores = new Dictionary<string, int>
+                {
+                    ["mandatory_gang"] = 120000,
+                    ["gang"] = 120000,
+                    ["hu"] = canHu ? 100000 : -100000,
+                    ["pass"] = -100000
+                }
+            };
+        }
+
         if (canHu)
         {
             return new NeijiangReactionDecisionResult
@@ -41,6 +66,7 @@ public sealed class NeijiangReactionDecisionEngine
         var roundStage = ResolveRoundStage(state);
         var meldCount = state.Melds18[state.SeatIndex].Count / 3;
         var currentFollowUp = EvaluateBestFollowUp(state.Hand18, state.Remaining18, meldCount);
+        var currentPlan = _routePlan.Evaluate(state);
         var maxReadyPosterior = belief.SeatReadyPosterior.Values.DefaultIfEmpty(0.0).Max();
         var threatLevel = ResolveThreatLevel(state, belief);
         var passDiscardRisk = currentFollowUp.BestDiscardTile >= 0 ? _danger.EvaluateDetail(currentFollowUp.BestDiscardTile, state, belief) : new NeijiangDangerEvaluation();
@@ -61,7 +87,9 @@ public sealed class NeijiangReactionDecisionEngine
             ThreatLevel = threatLevel,
             RoundStage = roundStage,
             MaxReadyPosterior = maxReadyPosterior,
-            Reasons = BuildPassReasons(currentFollowUp, roundStage, threatLevel, maxReadyPosterior),
+            Reasons = BuildPassReasons(currentFollowUp, roundStage, threatLevel, maxReadyPosterior)
+                .Concat(currentPlan.Reasons)
+                .ToArray(),
             PosteriorSummary = BuildPosteriorSummary(passWallPosterior, passBlockPosterior, passDiscardRisk.Risk, maxReadyPosterior, threatLevel),
             FutureSummary = BuildFutureSummary("pass", currentFollowUp, passDiscardRisk.Risk, passWallPosterior, passBlockPosterior),
             ActionScores = scores
@@ -74,7 +102,7 @@ public sealed class NeijiangReactionDecisionEngine
 
         if (canPeng && reactionTileType is >= 0 and < 18 && state.Hand18[reactionTileType] >= 2)
         {
-            var pengResult = EvaluatePeng(state, belief, reactionTileType, currentFollowUp, roundStage, threatLevel, maxReadyPosterior);
+            var pengResult = EvaluatePeng(state, belief, reactionTileType, currentFollowUp, currentPlan, roundStage, threatLevel, maxReadyPosterior);
             if (ShouldForceOldHandPeng(state, reactionTileType, currentFollowUp, pengResult, roundStage, threatLevel, maxReadyPosterior)
                 && pengResult.Action.Score <= best.Action.Score)
             {
@@ -98,7 +126,7 @@ public sealed class NeijiangReactionDecisionEngine
 
         if (canGang && reactionTileType is >= 0 and < 18 && state.Hand18[reactionTileType] >= 3)
         {
-            var gangResult = EvaluateGang(state, belief, reactionTileType, currentFollowUp, roundStage, threatLevel, maxReadyPosterior, reactionType, sourceSeat);
+            var gangResult = EvaluateGang(state, belief, reactionTileType, currentFollowUp, currentPlan, roundStage, threatLevel, maxReadyPosterior, reactionType, sourceSeat);
             if (ShouldForceMeldedGang(state, reactionTileType, currentFollowUp, gangResult, roundStage, threatLevel, maxReadyPosterior, reactionType, sourceSeat)
                 && gangResult.Action.Score <= best.Action.Score)
             {
@@ -189,6 +217,7 @@ public sealed class NeijiangReactionDecisionEngine
         NeijiangBeliefSnapshot belief,
         int reactionTileType,
         FollowUpSummary currentFollowUp,
+        NeijiangRoutePlanResult currentPlan,
         int roundStage,
         int threatLevel,
         double maxReadyPosterior)
@@ -269,6 +298,8 @@ public sealed class NeijiangReactionDecisionEngine
             score -= 980;
         if (sevenPairsTenpai)
             score -= 1320;
+        if (currentPlan.ForbidsMelds)
+            score -= 6000;
 
         var reasons = new List<string>
         {
@@ -276,6 +307,8 @@ public sealed class NeijiangReactionDecisionEngine
             $"碰后活张 {followUp.LiveUkeire}",
             $"碰后首打危险 {discardRisk.Risk}",
         };
+        if (currentPlan.ForbidsMelds)
+            reasons.Add($"七对路线：{currentPlan.PrimaryRoute} 禁止碰牌，碰牌会破坏七对");
         if (sevenPairsTenpai) reasons.Add("七对已听，碰牌会破坏听牌，优先过牌");
         if (reDiscardsClaimedTile) reasons.Add("碰后最优首打仍是同张，直接改碰属于无效副露");
         if (reDiscardsClaimedTile && state.Hand18[reactionTileType] >= 3)
@@ -324,6 +357,7 @@ public sealed class NeijiangReactionDecisionEngine
         NeijiangBeliefSnapshot belief,
         int reactionTileType,
         FollowUpSummary currentFollowUp,
+        NeijiangRoutePlanResult currentPlan,
         int roundStage,
         int threatLevel,
         double maxReadyPosterior,
@@ -374,6 +408,8 @@ public sealed class NeijiangReactionDecisionEngine
         if (discardRisk.Risk >= 56) score -= 42;
         if (roundStage >= 2 && followUp.Shanten > 0) score -= 24;
         if (maxReadyPosterior >= 0.62 && followUp.Shanten > 0) score -= 12;
+        if (currentPlan.ForbidsGangs)
+            score -= 6000;
 
         var reasons = new List<string>
         {
@@ -382,6 +418,8 @@ public sealed class NeijiangReactionDecisionEngine
             $"杠后首打危险 {discardRisk.Risk}",
             "杠牌只在不拖慢成叫时考虑"
         };
+        if (currentPlan.ForbidsGangs)
+            reasons.Add($"七对路线：{currentPlan.PrimaryRoute} 禁止杠牌，杠牌会破坏七对");
         if (followUp.Shanten <= 0) reasons.Add("杠后仍保持成叫");
         if (followUp.Shanten > currentFollowUp.Shanten) reasons.Add("杠牌会拖慢速度，直接降权");
         if (isMeldedGang && followUp.Shanten <= currentFollowUp.Shanten && !sevenPairsLikely)

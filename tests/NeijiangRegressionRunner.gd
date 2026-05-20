@@ -2151,8 +2151,8 @@ func _test_neijiang_ai_rejects_late_bao_jiao_after_opening():
 		_make_player_neijiang(3, []),
 	])
 	game_state.players[1]["discards"] = [_make_tile(495, "tong", 1)]
-	if bool(game_state._should_ai_bao_jiao(1)):
-		return "expected late-stage bao jiao to be rejected after opening"
+	if bool(game_state.can_human_bao_jiao(1)):
+		return "expected late-stage bao jiao legality to be rejected after opening"
 	return true
 
 

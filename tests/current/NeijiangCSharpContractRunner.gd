@@ -12,9 +12,15 @@ func _run() -> void:
 	var failures: Array[String] = []
 	_run_test("csharp_action_tile_matches_godot_recommended_tile", _test_csharp_action_tile_matches_godot_recommended_tile, failures)
 	_run_test("csharp_candidate_reasons_survive_godot_mapping", _test_csharp_candidate_reasons_survive_godot_mapping, failures)
+	_run_test("csharp_route_plan_survives_godot_mapping", _test_csharp_route_plan_survives_godot_mapping, failures)
 	_run_test("self_action_gang_subtype_survives_godot_mapping", _test_self_action_gang_subtype_survives_godot_mapping, failures)
 	_run_test("native_runtime_async_reaction_returns_result", _test_native_runtime_async_reaction_returns_result, failures)
 	_run_test("native_runtime_mobile_compact_discard_returns_action_candidate", _test_native_runtime_mobile_compact_discard_returns_action_candidate, failures)
+	_run_test("ai_manager_sync_hell_challenge_preserves_pressure_diagnostics", _test_ai_manager_sync_hell_challenge_preserves_pressure_diagnostics, failures)
+	_run_test("ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction", _test_ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction, failures)
+	_run_test("ai_manager_uses_native_async_hell_challenge_discard_path", _test_ai_manager_uses_native_async_hell_challenge_discard_path, failures)
+	_run_test("ai_manager_sync_hell_challenge_reaction_blocks_human", _test_ai_manager_sync_hell_challenge_reaction_blocks_human, failures)
+	_run_test("ai_manager_async_hell_challenge_reaction_blocks_human", _test_ai_manager_async_hell_challenge_reaction_blocks_human, failures)
 	_run_test("ai_manager_uses_native_async_reaction_path", _test_ai_manager_uses_native_async_reaction_path, failures)
 	_run_test("ai_manager_reuses_duplicate_native_reaction_request", _test_ai_manager_reuses_duplicate_native_reaction_request, failures)
 	if failures.is_empty():
@@ -94,6 +100,45 @@ func _test_csharp_candidate_reasons_survive_godot_mapping():
 		return "expected C# reasons to survive mapping, got %s" % [recommended]
 	if not Array(recommended.get("risk_reasons", [])).has("现物偏安全"):
 		return "expected C# risk reasons to survive mapping, got %s" % [recommended]
+	return true
+
+
+func _test_csharp_route_plan_survives_godot_mapping():
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	var player_state := {
+		"seat": 0,
+		"hand_tiles": [_make_tile(1, "tiao", 2)],
+	}
+	var csharp_result := {
+		"action": "discard",
+		"tileType": 1,
+		"routePlan": {
+			"primaryRoute": "暗七对",
+			"constraints": ["forbid_melds", "forbid_gangs", "preserve_pairs"],
+			"routeWeights": {"暗七对": 920, "平胡": 640},
+			"reasons": ["七对路线：碰杠会破坏七对，优先门清推进"],
+		},
+		"candidates": [
+			{
+				"tileType": 1,
+				"score": 1000,
+				"routePlanPrimary": "暗七对",
+				"routePlanScore": 360,
+				"reasons": ["路线规划：暗七对"],
+			},
+		],
+	}
+	var analysis: Dictionary = ai_manager._build_csharp_discard_analysis(player_state, csharp_result, null, ai_manager.csharp_bridge, "contract_test")
+	var route_plan: Dictionary = analysis.get("route_plan", {})
+	if str(route_plan.get("primaryRoute", "")) != "暗七对":
+		return "expected top-level C# routePlan to survive mapping, got %s" % [analysis]
+	var recommended: Dictionary = analysis.get("recommended", {})
+	if str(recommended.get("route_plan_primary", "")) != "暗七对":
+		return "expected candidate route_plan_primary=暗七对, got %s" % [recommended]
+	if int(recommended.get("route_plan_score", 0)) != 360:
+		return "expected candidate route_plan_score=360, got %s" % [recommended]
+	if str(recommended.get("csharp_route_plan_primary", "")) != "暗七对":
+		return "expected mirrored csharp_route_plan_primary=暗七对, got %s" % [recommended]
 	return true
 
 
@@ -217,6 +262,9 @@ func _test_native_runtime_mobile_compact_discard_returns_action_candidate():
 			return "expected mobileSpeedMode=true, got %s" % [result]
 		if not bool(result.get("compactResult", false)):
 			return "expected compactResult=true, got %s" % [result]
+		var route_plan: Dictionary = result.get("routePlan", {})
+		if str(route_plan.get("primaryRoute", "")).is_empty():
+			return "expected compact native discard routePlan.primaryRoute, got %s" % [result]
 		var candidates: Array = result.get("candidates", [])
 		if candidates.is_empty() or candidates.size() > 4:
 			return "expected 1-4 compact candidates, got %s" % [candidates]
@@ -224,6 +272,8 @@ func _test_native_runtime_mobile_compact_discard_returns_action_candidate():
 		var has_action_candidate := false
 		for candidate in candidates:
 			var candidate_dict: Dictionary = candidate
+			if str(candidate_dict.get("routePlanPrimary", "")).is_empty():
+				return "expected compact candidate routePlanPrimary, got %s" % [candidate_dict]
 			if int(candidate_dict.get("tileType", -1)) == action_tile:
 				has_action_candidate = true
 				break
@@ -234,6 +284,187 @@ func _test_native_runtime_mobile_compact_discard_returns_action_candidate():
 			return "expected compact belief summary marker, got %s" % [belief_summary]
 		return true
 	return "timed out waiting for native compact discard result"
+
+
+func _test_ai_manager_uses_native_async_hell_challenge_discard_path():
+	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null:
+		return "expected native C# runtime autoload"
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	ai_manager.set_native_csharp_runtime(runtime)
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var fixture := _build_hell_challenge_fixture()
+	var request_id := ai_manager.start_turn_analysis_background(
+		fixture.get("player_state", {}),
+		fixture.get("table_state", {}),
+		rules,
+		null,
+		null,
+		null,
+		false,
+		fixture.get("hell_payload", {})
+	)
+	if request_id <= 0:
+		return "expected AIManager native async hell challenge request id"
+	for _attempt in range(400):
+		if ai_manager.pump_async_requests() > 0:
+			var snapshot: Dictionary = ai_manager.latest_turn_snapshot
+			var analysis: Dictionary = snapshot.get("analysis", {})
+			var recommended: Dictionary = analysis.get("recommended", {})
+			if str(snapshot.get("active_backend", "")) != "hell_challenge_direct_async":
+				return "expected hell challenge async backend, got %s" % [snapshot]
+			if str(analysis.get("backend_mode", "")) != "hell_challenge_direct_async":
+				return "expected mapped hell challenge backend_mode, got %s" % [analysis]
+			if int(recommended.get("csharp_tile_type", -1)) == 5:
+				return "expected direct hell challenge to avoid feeding human peng tile 5, got %s" % [recommended]
+			var native: Dictionary = analysis.get("csharp_result", {})
+			if str(native.get("category", "")) != "hell_challenge_direct":
+				return "expected native category hell_challenge_direct, got %s" % [native]
+			if int(native.get("humanPressureLevel", 0)) != 4:
+				return "expected leading human pressure level 4, got %s" % [native]
+			if str(native.get("teamRole", "")) != "lead_suppressor":
+				return "expected async hell challenge team role lead_suppressor, got %s" % [native]
+			if int(native.get("teamPressureBonus", 0)) <= 0:
+				return "expected async hell challenge team pressure bonus, got %s" % [native]
+			if bool(native.get("oracleFeedsHumanPeng", true)):
+				return "expected selected direct discard not to feed human peng, got %s" % [native]
+			return true
+		OS.delay_msec(10)
+	return "timed out waiting for AIManager native async hell challenge discard"
+
+
+func _test_ai_manager_sync_hell_challenge_preserves_pressure_diagnostics():
+	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null:
+		return "expected native C# runtime autoload"
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	ai_manager.set_native_csharp_runtime(runtime)
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var fixture := _build_hell_challenge_fixture()
+	var analysis: Dictionary = ai_manager.analyze_hell_challenge_discard(
+		fixture.get("player_state", {}),
+		fixture.get("table_state", {}),
+		rules,
+		fixture.get("hell_payload", {})
+	)
+	if str(analysis.get("backend_mode", "")) != "hell_challenge_direct":
+		return "expected sync hell challenge backend, got %s" % [analysis]
+	var recommended: Dictionary = analysis.get("recommended", {})
+	if int(recommended.get("csharp_tile_type", -1)) == 5:
+		return "expected sync direct hell challenge to avoid feeding human peng tile 5, got %s" % [recommended]
+	var native: Dictionary = analysis.get("csharp_result", {})
+	if str(native.get("category", "")) != "hell_challenge_direct":
+		return "expected compact native category hell_challenge_direct, got %s" % [native]
+	if int(native.get("humanPressureLevel", 0)) != 4:
+		return "expected compact native pressure level 4, got %s" % [native]
+	if str(native.get("teamRole", "")) != "lead_suppressor":
+		return "expected compact native team role lead_suppressor, got %s" % [native]
+	if int(native.get("teamPressureBonus", 0)) <= 0:
+		return "expected compact native team pressure bonus, got %s" % [native]
+	if not _array_contains_substring(native.get("teamPlanSummary", []), "三家协作"):
+		return "expected compact native team plan summary to mention 三家协作, got %s" % [native]
+	if bool(native.get("oracleFeedsHumanPeng", true)):
+		return "expected compact native selected discard not to feed human peng, got %s" % [native]
+	if Array(native.get("reasons", [])).is_empty():
+		return "expected compact native direct reasons to survive mapping, got %s" % [native]
+	return true
+
+
+func _test_ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction():
+	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null:
+		return "expected native C# runtime autoload"
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	ai_manager.set_native_csharp_runtime(runtime)
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var fixture := _build_hell_challenge_peng_interaction_fixture()
+	var analysis: Dictionary = ai_manager.analyze_hell_challenge_discard(
+		fixture.get("player_state", {}),
+		fixture.get("table_state", {}),
+		rules,
+		fixture.get("hell_payload", {})
+	)
+	if str(analysis.get("backend_mode", "")) != "hell_challenge_direct":
+		return "expected sync hell challenge backend, got %s" % [analysis]
+	var recommended: Dictionary = analysis.get("recommended", {})
+	if int(recommended.get("csharp_tile_type", -1)) != 5:
+		return "expected ordinary peng interaction to keep live ready tile 5, got %s" % [recommended]
+	var native: Dictionary = analysis.get("csharp_result", {})
+	if not bool(native.get("oracleFeedsHumanPeng", false)):
+		return "expected selected discard to allow ordinary human peng, got %s" % [native]
+	if not bool(native.get("exactKeepsReady", false)):
+		return "expected selected ordinary peng discard to keep AI ready, got %s" % [native]
+	if not _array_contains_substring(native.get("reasons", []), "互动保真"):
+		return "expected reasons to mention 互动保真, got %s" % [native]
+	return true
+
+
+func _test_ai_manager_sync_hell_challenge_reaction_blocks_human():
+	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null:
+		return "expected native C# runtime autoload"
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	ai_manager.set_native_csharp_runtime(runtime)
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var fixture := _build_hell_challenge_reaction_fixture()
+	var analysis: Dictionary = ai_manager.analyze_hell_challenge_reaction(
+		fixture.get("candidate", {}),
+		fixture.get("player_state", {}),
+		fixture.get("table_state", {}),
+		fixture.get("discard_context", {}),
+		rules,
+		fixture.get("hell_payload", {})
+	)
+	return _assert_hell_challenge_reaction_analysis(analysis, "hell_challenge_reaction_direct")
+
+
+func _test_ai_manager_async_hell_challenge_reaction_blocks_human():
+	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null:
+		return "expected native C# runtime autoload"
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	ai_manager.set_native_csharp_runtime(runtime)
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var fixture := _build_hell_challenge_reaction_fixture()
+	var request_id := ai_manager.start_reaction_analysis_background(
+		fixture.get("candidate", {}),
+		fixture.get("player_state", {}),
+		fixture.get("table_state", {}),
+		fixture.get("discard_context", {}),
+		rules,
+		null,
+		null,
+		false,
+		fixture.get("hell_payload", {})
+	)
+	if request_id <= 0:
+		return "expected AIManager native async hell challenge reaction request id"
+	for _attempt in range(400):
+		if ai_manager.pump_async_requests() > 0:
+			var snapshot: Dictionary = ai_manager.latest_reaction_snapshot
+			if str(snapshot.get("active_backend", "")) != "hell_challenge_reaction_direct_async":
+				return "expected hell challenge reaction async backend, got %s" % [snapshot]
+			return _assert_hell_challenge_reaction_analysis(snapshot.get("analysis", {}), "hell_challenge_reaction_direct_async")
+		OS.delay_msec(10)
+	return "timed out waiting for AIManager native async hell challenge reaction"
+
+
+func _assert_hell_challenge_reaction_analysis(analysis: Dictionary, expected_backend: String):
+	if str(analysis.get("backend_mode", "")) != expected_backend:
+		return "expected backend %s, got %s" % [expected_backend, analysis]
+	if str(analysis.get("action", "")) != "peng":
+		return "expected hell challenge reaction to peng human discard, got %s" % [analysis]
+	var scores: Dictionary = analysis.get("action_scores", {})
+	if int(scores.get("team_block_human", 0)) <= 0:
+		return "expected positive team_block_human score, got %s" % [scores]
+	if int(scores.get("team_plan_pressure", 0)) <= 0:
+		return "expected positive team_plan_pressure score, got %s" % [scores]
+	var reasons: Array = analysis.get("reasons", [])
+	if not _array_contains_substring(reasons, "围剿"):
+		return "expected hell challenge reaction reasons to mention 围剿, got %s" % [reasons]
+	if not _array_contains_substring(reasons, "三家协作"):
+		return "expected hell challenge reaction reasons to mention 三家协作, got %s" % [reasons]
+	return true
 
 
 func _test_ai_manager_uses_native_async_reaction_path():
@@ -352,6 +583,155 @@ func _make_tile(id: int, suit: String, rank: int) -> Dictionary:
 		"rank": rank,
 		"display_name": "%d%s" % [rank, "条" if suit == "tiao" else "筒"],
 	}
+
+
+func _build_hell_challenge_fixture() -> Dictionary:
+	var hand_tiles := _tiles_from_types([0, 0, 0, 3, 3, 3, 5, 6, 6, 6, 10, 10, 10, 17], 100)
+	var players := []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"hand_tiles": [],
+			"discards": [],
+			"melds": [],
+			"bao_jiao": false,
+			"has_won": false,
+		})
+	var all_hands18 := [_empty18(), _empty18(), _empty18(), _empty18()]
+	all_hands18[0][5] = 2
+	var exact_wall18 := []
+	for _tile_type in range(18):
+		exact_wall18.append(1)
+	exact_wall18[5] = 3
+	exact_wall18[17] = 1
+	return {
+		"player_state": {
+			"seat": 1,
+			"hand_tiles": hand_tiles,
+		},
+		"table_state": {
+			"players": players,
+			"current_turn_seat": 1,
+			"wall_count": 18,
+			"dealer_seat": 0,
+			"reaction_pass_evidence": [],
+		},
+		"hell_payload": {
+			"allHands18": all_hands18,
+			"exactWall18": exact_wall18,
+			"currentScores": [26, 18, 4, 2],
+		},
+	}
+
+
+func _build_hell_challenge_peng_interaction_fixture() -> Dictionary:
+	var hand_tiles := _tiles_from_types([1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 16, 16, 17, 17], 100)
+	var players := []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"hand_tiles": [],
+			"discards": [],
+			"melds": [],
+			"bao_jiao": false,
+			"has_won": false,
+		})
+	var all_hands18 := [_empty18(), _empty18(), _empty18(), _empty18()]
+	all_hands18[0][5] = 2
+	var exact_wall18 := []
+	for _tile_type in range(18):
+		exact_wall18.append(0)
+	exact_wall18[16] = 3
+	exact_wall18[17] = 1
+	return {
+		"player_state": {
+			"seat": 3,
+			"hand_tiles": hand_tiles,
+		},
+		"table_state": {
+			"players": players,
+			"current_turn_seat": 3,
+			"wall_count": 18,
+			"dealer_seat": 0,
+			"reaction_pass_evidence": [],
+		},
+		"hell_payload": {
+			"allHands18": all_hands18,
+			"exactWall18": exact_wall18,
+			"currentScores": [32, 16, 8, 4],
+		},
+	}
+
+
+func _build_hell_challenge_reaction_fixture() -> Dictionary:
+	var reaction_tile := _make_tile(205, "tiao", 6)
+	var hand_tiles := _tiles_from_types([5, 5, 1, 2, 3, 6, 7, 8, 10, 11, 12, 14, 15], 100)
+	var players := []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"hand_tiles": [],
+			"discards": [],
+			"melds": [],
+			"bao_jiao": false,
+			"has_won": false,
+		})
+	var all_hands18 := [_empty18(), _empty18(), _empty18(), _empty18()]
+	all_hands18[0][4] = 1
+	all_hands18[0][6] = 1
+	all_hands18[0][7] = 1
+	var exact_wall18 := []
+	for _tile_type in range(18):
+		exact_wall18.append(1)
+	exact_wall18[5] = 2
+	return {
+		"candidate": {
+			"seat": 1,
+			"can_hu": false,
+			"can_peng": true,
+			"can_gang": false,
+		},
+		"player_state": {
+			"seat": 1,
+			"hand_tiles": hand_tiles,
+		},
+		"table_state": {
+			"players": players,
+			"current_turn_seat": 0,
+			"wall_count": 18,
+			"dealer_seat": 0,
+			"reaction_pass_evidence": [],
+		},
+		"discard_context": {
+			"source_seat": 0,
+			"tile": reaction_tile,
+			"reaction_type": "discard",
+		},
+		"hell_payload": {
+			"allHands18": all_hands18,
+			"exactWall18": exact_wall18,
+			"currentScores": [28, 8, 6, 4],
+		},
+	}
+
+
+func _tiles_from_types(tile_types: Array, id_start: int) -> Array:
+	var result: Array = []
+	var index := 0
+	for tile_type in tile_types:
+		var type_value := int(tile_type)
+		var suit := "tiao" if type_value < 9 else "tong"
+		var rank := type_value + 1 if type_value < 9 else type_value - 8
+		result.append(_make_tile(id_start + index, suit, rank))
+		index += 1
+	return result
+
+
+func _array_contains_substring(values: Array, needle: String) -> bool:
+	for value in values:
+		if str(value).contains(needle):
+			return true
+	return false
 
 
 func _empty18() -> Array:

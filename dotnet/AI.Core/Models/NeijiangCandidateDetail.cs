@@ -16,6 +16,8 @@ public sealed class NeijiangCandidateDetail
     public string StrategyTag { get; init; } = string.Empty;
     public string StrategyMode { get; init; } = string.Empty;
     public string ExplanationHint { get; init; } = string.Empty;
+    public string RoutePlanPrimary { get; init; } = string.Empty;
+    public int RoutePlanScore { get; init; }
     public IReadOnlyList<string> RoutesAfter { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> RouteLoss { get; init; } = Array.Empty<string>();
     public double TenpaiProbability { get; init; }

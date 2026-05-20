@@ -16,6 +16,8 @@ public partial class NeijiangCSharpRuntime : Node
     private readonly NeijiangAiFacade _facade = new();
     private readonly NeijiangLearningEngine _learningEngine = new();
     private readonly NeijiangHellOracleEngine _hellOracle = new();
+    private readonly NeijiangHellChallengeEngine _hellChallenge = new();
+    private readonly NeijiangHellChallengeReactionEngine _hellChallengeReaction = new();
     private readonly ConcurrentDictionary<int, Task<string>> _asyncRequests = new();
     private int _nextAsyncRequestId;
 
@@ -38,14 +40,34 @@ public partial class NeijiangCSharpRuntime : Node
         return StartAsyncRequest(() => AnalyzeDiscardJson(payloadJson));
     }
 
+    public int StartAnalyzeHellChallengeDiscardJson(string payloadJson)
+    {
+        return StartAsyncRequest(() => AnalyzeHellChallengeDiscardJson(payloadJson));
+    }
+
     public int StartAnalyzeReactionJson(string payloadJson)
     {
         return StartAsyncRequest(() => AnalyzeReactionJson(payloadJson));
     }
 
+    public int StartAnalyzeHellChallengeReactionJson(string payloadJson)
+    {
+        return StartAsyncRequest(() => AnalyzeHellChallengeReactionJson(payloadJson));
+    }
+
     public int StartAnalyzeSelfActionJson(string payloadJson)
     {
         return StartAsyncRequest(() => AnalyzeSelfActionJson(payloadJson));
+    }
+
+    public int StartAnalyzeBaoJiaoJson(string payloadJson)
+    {
+        return StartAsyncRequest(() => AnalyzeBaoJiaoJson(payloadJson));
+    }
+
+    public int StartAnalyzeDingQueJson(string payloadJson)
+    {
+        return StartAsyncRequest(() => AnalyzeDingQueJson(payloadJson));
     }
 
     public string PollAiResultJson(int requestId)
@@ -101,6 +123,23 @@ public partial class NeijiangCSharpRuntime : Node
         }
     }
 
+    public string AnalyzeHellChallengeReactionJson(string payloadJson)
+    {
+        try
+        {
+            var payload = JsonSerializer.Deserialize<HellChallengeReactionPayload>(payloadJson, JsonOptions);
+            if (payload is null)
+                return "{\"ok\":false,\"error\":\"invalid_hell_challenge_reaction_payload\"}";
+
+            var output = BuildHellChallengeReactionObject(payload);
+            return JsonSerializer.Serialize(output, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+        }
+    }
+
     public string AnalyzeSelfActionJson(string payloadJson)
     {
         try
@@ -110,6 +149,40 @@ public partial class NeijiangCSharpRuntime : Node
                 return "{\"ok\":false,\"error\":\"invalid_self_action_payload\"}";
 
             var output = BuildSelfActionObject(payload);
+            return JsonSerializer.Serialize(output, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+        }
+    }
+
+    public string AnalyzeBaoJiaoJson(string payloadJson)
+    {
+        try
+        {
+            var payload = JsonSerializer.Deserialize<BaoJiaoPayload>(payloadJson, JsonOptions);
+            if (payload is null)
+                return "{\"ok\":false,\"error\":\"invalid_bao_jiao_payload\"}";
+
+            var output = BuildBaoJiaoObject(payload);
+            return JsonSerializer.Serialize(output, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+        }
+    }
+
+    public string AnalyzeDingQueJson(string payloadJson)
+    {
+        try
+        {
+            var payload = JsonSerializer.Deserialize<DingQuePayload>(payloadJson, JsonOptions);
+            if (payload is null)
+                return "{\"ok\":false,\"error\":\"invalid_ding_que_payload\"}";
+
+            var output = BuildDingQueObject(payload);
             return JsonSerializer.Serialize(output, JsonOptions);
         }
         catch (Exception ex)
@@ -161,6 +234,28 @@ public partial class NeijiangCSharpRuntime : Node
                 actualTileType = result.ActualTileType,
                 reasons = result.Reasons
             }, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+        }
+    }
+
+    public string AnalyzeHellChallengeDiscardJson(string payloadJson)
+    {
+        try
+        {
+            var payload = JsonSerializer.Deserialize<HellChallengePayload>(payloadJson, JsonOptions);
+            if (payload is null)
+                return "{\"ok\":false,\"error\":\"invalid_hell_challenge_payload\"}";
+
+            var state = BuildState(payload);
+            var result = _hellChallenge.DecideDiscard(
+                state,
+                payload.AllHands18.Select(item => (IReadOnlyList<int>)item).ToArray(),
+                payload.ExactWall18,
+                payload.CurrentScores);
+            return JsonSerializer.Serialize(BuildHellChallengeObject(result), JsonOptions);
         }
         catch (Exception ex)
         {
@@ -226,6 +321,15 @@ public partial class NeijiangCSharpRuntime : Node
             searchUsed = result.SearchUsed,
             searchSimulations = result.SearchSimulations,
             currentRoutes = currentRoutes,
+            routePlan = new
+            {
+                primaryRoute = result.RoutePlan.PrimaryRoute,
+                secondaryRoutes = result.RoutePlan.SecondaryRoutes,
+                routeWeights = result.RoutePlan.RouteWeights,
+                constraints = result.RoutePlan.Constraints,
+                reasons = result.RoutePlan.Reasons,
+                targetSuit = result.RoutePlan.TargetSuit
+            },
             strategyProfile = strategyProfile,
             beliefSummary,
             cache = new
@@ -245,6 +349,77 @@ public partial class NeijiangCSharpRuntime : Node
         };
     }
 
+    private static object BuildHellChallengeObject(NeijiangHellOracleResult result)
+        => new
+        {
+            ok = true,
+            action = result.Action.ActionType.ToString().ToLowerInvariant(),
+            tileType = result.Action.TileType,
+            score = result.Action.Score,
+            shanten = 0,
+            ukeire = 0,
+            liveUkeire = result.ExactWallRemaining,
+            winProbability = 0.0,
+            dealInProbability = result.OracleExactDealIn ? 1.0 : 0.0,
+            searchUsed = false,
+            searchSimulations = 0,
+            currentRoutes = Array.Empty<string>(),
+            strategyProfile = new
+            {
+                mode_label = "地狱挑战",
+                round_stage = 0,
+                round_stage_label = "明牌压制",
+                threat_level = result.HumanPressureLevel,
+                reasons = result.Reasons
+            },
+            beliefSummary = new
+            {
+                compact = true,
+                ready_posteriors = Array.Empty<object>(),
+                hold_summary = new { top_holders = Array.Empty<object>() },
+                wall_summary = new { top_tiles = Array.Empty<object>() },
+                wait_summary = new { top_waiters = Array.Empty<object>() },
+                unknown_summary = new { top_tiles = Array.Empty<object>() }
+            },
+            elapsedMs = 0,
+            mobileSpeedMode = true,
+            compactResult = true,
+            backendMode = "hell_challenge_direct",
+            category = result.Category,
+            severity = result.Severity,
+            exactDealIn = result.ExactDealIn,
+            oracleExactDealIn = result.OracleExactDealIn,
+            oracleFeedsHumanHu = result.OracleFeedsHumanHu,
+            oracleFeedsHumanPeng = result.OracleFeedsHumanPeng,
+            oracleFeedsHumanGang = result.OracleFeedsHumanGang,
+            humanPressureLevel = result.HumanPressureLevel,
+            oracleDealInTargetSeats = result.OracleDealInTargetSeats,
+            exactKeepsReady = result.ExactKeepsReady,
+            exactWallRemaining = result.ExactWallRemaining,
+            teamRole = result.TeamRole,
+            teamPressureBonus = result.TeamPressureBonus,
+            teamPlanSummary = result.TeamPlanSummary,
+            reasons = result.Reasons,
+            candidates = new[]
+            {
+                new
+                {
+                    tileType = result.Action.TileType,
+                    score = result.Action.Score,
+                    shanten = 0,
+                    ukeire = 0,
+                    liveUkeire = result.ExactWallRemaining,
+                    danger = result.OracleExactDealIn ? 100 : 0,
+                    waitCount = 0,
+                    riskLabel = result.OracleExactDealIn ? "点炮" : "明牌",
+                    strategyTag = "hell_challenge",
+                    strategyMode = "地狱挑战",
+                    explanationHint = result.Action.Reason,
+                    reasons = result.Reasons
+                }
+            }
+        };
+
     private object BuildReactionObject(ReactionPayload payload)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -259,7 +434,8 @@ public partial class NeijiangCSharpRuntime : Node
             payload.CanGang,
             payload.SourceSeat,
             payload.ReactionType,
-            payload.MobileSpeedMode);
+            payload.MobileSpeedMode,
+            payload.MandatoryGang);
         stopwatch.Stop();
         var beliefMetrics = BuildBeliefMetrics(beforeBelief, NeijiangBeliefEngine.GetDiagnostics());
 
@@ -293,6 +469,54 @@ public partial class NeijiangCSharpRuntime : Node
         };
     }
 
+    private object BuildHellChallengeReactionObject(HellChallengeReactionPayload payload)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var state = BuildState(payload);
+        var result = _hellChallengeReaction.DecideReaction(
+            state,
+            payload.ReactionTileType,
+            payload.CanHu,
+            payload.CanPeng,
+            payload.CanGang,
+            payload.SourceSeat,
+            payload.ReactionType,
+            payload.AllHands18.Select(item => (IReadOnlyList<int>)item).ToArray(),
+            payload.ExactWall18,
+            payload.CurrentScores,
+            payload.MandatoryGang);
+        stopwatch.Stop();
+
+        return new
+        {
+            ok = true,
+            action = result.Action.ActionType.ToString().ToLowerInvariant(),
+            tileType = result.Action.TileType,
+            score = result.Action.Score,
+            reason = result.Action.Reason,
+            shantenAfter = result.ShantenAfter,
+            ukeireAfter = result.UkeireAfter,
+            liveUkeireAfter = result.LiveUkeireAfter,
+            currentShanten = result.CurrentShanten,
+            currentLiveUkeire = result.CurrentLiveUkeire,
+            threatLevel = result.ThreatLevel,
+            roundStage = result.RoundStage,
+            roundStageLabel = RoundStageLabel(result.RoundStage),
+            maxReadyPosterior = result.MaxReadyPosterior,
+            reasons = result.Reasons,
+            posteriorSummary = result.PosteriorSummary,
+            futureSummary = result.FutureSummary,
+            searchBonus = result.SearchBonus,
+            searchSimulations = result.SearchSimulations,
+            searchUsed = result.SearchUsed,
+            actionScores = result.ActionScores,
+            elapsedMs = stopwatch.ElapsedMilliseconds,
+            mobileSpeedMode = true,
+            teamPlanPressure = result.ActionScores.GetValueOrDefault("team_plan_pressure", 0),
+            backendMode = "hell_challenge_reaction_direct"
+        };
+    }
+
     private object BuildSelfActionObject(SelfActionPayload payload)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -304,7 +528,8 @@ public partial class NeijiangCSharpRuntime : Node
             payload.CanSelfHu,
             payload.AnGangTileTypes,
             payload.AddGangTileTypes,
-            payload.AddGangQiangGangCounts);
+            payload.AddGangQiangGangCounts,
+            payload.MandatoryGangTileTypes);
         stopwatch.Stop();
         var beliefMetrics = BuildBeliefMetrics(beforeBelief, NeijiangBeliefEngine.GetDiagnostics());
 
@@ -323,6 +548,49 @@ public partial class NeijiangCSharpRuntime : Node
             elapsedMs = stopwatch.ElapsedMilliseconds,
             beliefMetrics,
             backendMode = "csharp_native_self_action"
+        };
+    }
+
+    private object BuildBaoJiaoObject(BaoJiaoPayload payload)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var state = BuildState(payload);
+        var candidates = payload.BaoGangCandidates
+            .Select(item => new NeijiangBaoGangCandidate(item.Key, item.TileType, item.Subtype))
+            .ToArray();
+        var result = _facade.DecideBaoJiaoDeclaration(
+            state,
+            payload.TingTileTypes,
+            candidates,
+            payload.PlanScore);
+        stopwatch.Stop();
+
+        return new
+        {
+            ok = true,
+            action = result.Declare ? "bao_jiao" : "pass",
+            declare = result.Declare,
+            selectedBaoGangKeys = result.SelectedBaoGangKeys,
+            score = result.Score,
+            reasons = result.Reasons,
+            candidateScores = result.CandidateScores,
+            elapsedMs = stopwatch.ElapsedMilliseconds,
+            backendMode = "csharp_native_bao_jiao"
+        };
+    }
+
+    private object BuildDingQueObject(DingQuePayload payload)
+    {
+        var result = _facade.DecideDingQue(payload.SuitCounts, payload.ActiveSuits);
+        return new
+        {
+            ok = true,
+            action = "ding_que",
+            suit = result.Suit,
+            score = result.Score,
+            reasons = result.Reasons,
+            suitCounts = result.SuitCounts,
+            backendMode = "csharp_native_ding_que"
         };
     }
 
@@ -457,6 +725,8 @@ public partial class NeijiangCSharpRuntime : Node
             strategyTag = item.StrategyTag,
             strategyMode = item.StrategyMode,
             explanationHint = item.ExplanationHint,
+            routePlanPrimary = item.RoutePlanPrimary,
+            routePlanScore = item.RoutePlanScore,
             tenpaiProbability = item.TenpaiProbability,
             selfDrawProbability = item.SelfDrawProbability,
             winProbability = item.WinProbability,
@@ -517,6 +787,8 @@ public partial class NeijiangCSharpRuntime : Node
             strategyTag = item.StrategyTag,
             strategyMode = item.StrategyMode,
             explanationHint = item.ExplanationHint,
+            routePlanPrimary = item.RoutePlanPrimary,
+            routePlanScore = item.RoutePlanScore,
             routesAfter = item.RoutesAfter,
             routeLoss = item.RouteLoss,
             tenpaiProbability = item.TenpaiProbability,
@@ -772,6 +1044,18 @@ public partial class NeijiangCSharpRuntime : Node
         public bool CanHu { get; set; }
         public bool CanPeng { get; set; }
         public bool CanGang { get; set; }
+        public bool MandatoryGang { get; set; }
+    }
+
+    private sealed class HellChallengeReactionPayload : HellChallengePayload
+    {
+        public int ReactionTileType { get; set; }
+        public int SourceSeat { get; set; }
+        public string ReactionType { get; set; } = "discard";
+        public bool CanHu { get; set; }
+        public bool CanPeng { get; set; }
+        public bool CanGang { get; set; }
+        public bool MandatoryGang { get; set; }
     }
 
     private sealed class SelfActionPayload : DiscardPayload
@@ -780,13 +1064,38 @@ public partial class NeijiangCSharpRuntime : Node
         public List<int> AnGangTileTypes { get; set; } = new();
         public List<int> AddGangTileTypes { get; set; } = new();
         public Dictionary<int, int> AddGangQiangGangCounts { get; set; } = new();
+        public List<int> MandatoryGangTileTypes { get; set; } = new();
     }
 
-    private sealed class HellOraclePayload : DiscardPayload
+    private sealed class BaoJiaoPayload : DiscardPayload
+    {
+        public List<int> TingTileTypes { get; set; } = new();
+        public List<BaoGangCandidatePayload> BaoGangCandidates { get; set; } = new();
+        public int PlanScore { get; set; }
+    }
+
+    private sealed class BaoGangCandidatePayload
+    {
+        public string Key { get; set; } = "";
+        public int TileType { get; set; } = -1;
+        public string Subtype { get; set; } = "";
+    }
+
+    private sealed class DingQuePayload
+    {
+        public Dictionary<string, int> SuitCounts { get; set; } = new();
+        public List<string> ActiveSuits { get; set; } = new();
+    }
+
+    private class HellChallengePayload : DiscardPayload
     {
         public List<List<int>> AllHands18 { get; set; } = new();
         public List<int> ExactWall18 { get; set; } = new();
         public List<int> CurrentScores { get; set; } = new();
+    }
+
+    private sealed class HellOraclePayload : HellChallengePayload
+    {
         public int FairTileType { get; set; } = -1;
         public int ActualTileType { get; set; } = -1;
     }

@@ -18,7 +18,8 @@ func _run() -> void:
 	_run_test("neijiang_initial_deal_uses_72_tiles", _test_neijiang_initial_deal_uses_72_tiles, failures)
 	_run_test("opening_dealer_self_hu_without_last_draw_is_available", _test_opening_dealer_self_hu_without_last_draw_is_available, failures)
 	_run_test("ai_async_decisions_reject_changed_hand_signature", _test_ai_async_decisions_reject_changed_hand_signature, failures)
-	_run_test("ai_bao_jiao_discard_forces_last_draw", _test_ai_bao_jiao_discard_forces_last_draw, failures)
+	_run_test("ai_bao_jiao_discard_rejects_non_last_draw", _test_ai_bao_jiao_discard_rejects_non_last_draw, failures)
+	_run_test("ai_bao_jiao_signature_tracks_last_draw", _test_ai_bao_jiao_signature_tracks_last_draw, failures)
 	if failures.is_empty():
 		print("NEIJIANG CURRENT SMOKE OK")
 		quit(0)
@@ -311,7 +312,7 @@ func _test_ai_async_decisions_reject_changed_hand_signature():
 	return true
 
 
-func _test_ai_bao_jiao_discard_forces_last_draw():
+func _test_ai_bao_jiao_discard_rejects_non_last_draw():
 	var game_state = _build_game_state()
 	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
 	game_state.current_dealer_seat = 0
@@ -358,14 +359,63 @@ func _test_ai_bao_jiao_discard_forces_last_draw():
 		"tile_id": int(locked_tile.get("id")),
 		"hand_count": int(game_state.players[1].get("hand_count")),
 	})
-	if not ok:
-		return "expected forced last-draw discard to execute, msg=%s" % game_state.debug_last_message
+	if ok:
+		return "expected illegal bao-jiao discard to be rejected instead of frontend-forced"
 	if not _hand_contains_tile_id(game_state.players[1].get("hand_tiles", []), int(locked_tile.get("id"))):
 		return "expected locked bao-jiao tile to remain in hand"
-	if _hand_contains_tile_id(game_state.players[1].get("hand_tiles", []), int(drawn_tile.get("id"))):
-		return "expected drawn tile to be discarded"
-	if game_state.discard_pile.is_empty() or int(game_state.discard_pile[-1].get("tile", {}).get("id", -1)) != int(drawn_tile.get("id")):
-		return "expected discard pile to contain forced drawn tile, got %s" % [game_state.discard_pile]
+	if not _hand_contains_tile_id(game_state.players[1].get("hand_tiles", []), int(drawn_tile.get("id"))):
+		return "expected drawn tile to remain because frontend must not substitute C# decision"
+	if not game_state.discard_pile.is_empty():
+		return "expected no discard after rejecting illegal C# decision, got %s" % [game_state.discard_pile]
+	if str(game_state.debug_last_message).find("C#") == -1:
+		return "expected debug message to identify C# contract failure, got %s" % game_state.debug_last_message
+	return true
+
+
+func _test_ai_bao_jiao_signature_tracks_last_draw():
+	var game_state = _build_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
+	game_state.current_dealer_seat = 0
+	game_state.current_turn_seat = 1
+	game_state.wall_count = 13
+	var first_draw := _make_tile(501, "tong", 5)
+	var second_draw := _make_tile(502, "tong", 6)
+	game_state.players.clear()
+	game_state.players.append_array([
+		_make_player(0, []),
+		_make_player(1, [
+			_make_tile(503, "tiao", 2),
+			_make_tile(504, "tiao", 2),
+			_make_tile(505, "tiao", 3),
+			_make_tile(506, "tiao", 4),
+			_make_tile(507, "tiao", 5),
+			_make_tile(508, "tiao", 6),
+			_make_tile(509, "tiao", 7),
+			_make_tile(510, "tiao", 8),
+			_make_tile(511, "tong", 3),
+			_make_tile(512, "tong", 4),
+			_make_tile(513, "tong", 5),
+			_make_tile(514, "tong", 5),
+			_make_tile(515, "tong", 7),
+			first_draw,
+		]),
+		_make_player(2, []),
+		_make_player(3, []),
+	])
+	game_state.players[1]["bao_jiao"] = true
+	game_state.players[1]["bao_jiao_ting_tiles"] = [_make_tile(516, "tong", 2)]
+	game_state.players[1]["rule_marks"] = ["报叫"]
+	game_state.last_draw_tile = {"seat": 1, "tile": first_draw.duplicate(true)}
+	var first_signature: String = game_state._ai_turn_state_signature(1)
+	game_state.players[1]["hand_tiles"][13] = second_draw
+	game_state.last_draw_tile = {"seat": 1, "tile": second_draw.duplicate(true)}
+	var second_signature: String = game_state._ai_turn_state_signature(1)
+	if first_signature == second_signature:
+		return "expected bao-jiao AI turn signature to change when last_draw_tile changes"
+	if first_signature.find("draw=1:501:13") == -1:
+		return "expected first signature to include first draw identity, got %s" % first_signature
+	if second_signature.find("draw=1:502:14") == -1:
+		return "expected second signature to include second draw identity, got %s" % second_signature
 	return true
 
 

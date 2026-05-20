@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.39 - 2026-05-20
+
+- Slowed visible AI table actions with a randomized 0.5-3.0 second thinking delay for turns and reactions.
+- Kept C# AI decision quality unchanged; this release only adjusts table pacing and Android package metadata.
+
 ## 1.0.38 - 2026-05-19
 
 - Fixed hell-challenge async discard decisions so C# callback results are checked by the same oracle path as synchronous discards before the tile is played.

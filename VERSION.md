@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.38`
+Current app version: `1.0.39`
 
-`1.0.38` fixes the hell-challenge async discard oracle path, improves bao-gang dialog readability, and strengthens bao-jiao/risk regression coverage.
+`1.0.39` slows AI table actions with a randomized 0.5-3.0 second thinking delay, so computer turns and reactions feel less mechanical.
 
 ## Versioning Workflow
 

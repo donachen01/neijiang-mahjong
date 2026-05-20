@@ -8,15 +8,33 @@ public sealed class NeijiangSelfActionDecisionEngine
     private readonly NeijiangUkeireEngine _ukeire = new();
     private readonly NeijiangBeliefEngine _belief = new();
     private readonly NeijiangDangerEngine _danger = new();
+    private readonly NeijiangBaoJiaoActionEngine _baoJiaoAction = new();
+    private readonly NeijiangRoutePlanEngine _routePlan = new();
 
     public NeijiangSelfActionDecisionResult DecideSelfAction(
         NeijiangStateView state,
         bool canSelfHu,
         IReadOnlyList<int> anGangTileTypes,
         IReadOnlyList<int> addGangTileTypes,
-        IReadOnlyDictionary<int, int>? addGangQiangGangCounts = null)
+        IReadOnlyDictionary<int, int>? addGangQiangGangCounts = null,
+        IReadOnlyList<int>? mandatoryGangTileTypes = null)
     {
+        var baoJiaoDecision = _baoJiaoAction.TryDecideSelfAction(
+            state,
+            canSelfHu,
+            anGangTileTypes,
+            addGangTileTypes,
+            mandatoryGangTileTypes);
+        if (baoJiaoDecision is not null)
+            return baoJiaoDecision;
+
         var scores = new Dictionary<string, int>();
+        var mandatory = BuildMandatoryGangResult(state, anGangTileTypes, addGangTileTypes, mandatoryGangTileTypes);
+        if (mandatory is not null)
+        {
+            return mandatory;
+        }
+
         if (canSelfHu)
         {
             scores["hu"] = 100000;
@@ -33,6 +51,7 @@ public sealed class NeijiangSelfActionDecisionEngine
         var current = EvaluateBestFollowUp(state.Hand18, state.Remaining18, meldCount);
         var belief = _belief.Build(state);
         var roundStage = ResolveRoundStage(state);
+        var currentPlan = _routePlan.Evaluate(state);
         var maxReadyPosterior = belief.SeatReadyPosterior.Values.DefaultIfEmpty(0.0).Max();
         var threatLevel = ResolveThreatLevel(state, belief);
         var passScore = 20 - current.Shanten * 82 + current.LiveUkeire * 5 - roundStage * 8 + Math.Min(12, state.WallCount);
@@ -43,14 +62,16 @@ public sealed class NeijiangSelfActionDecisionEngine
             Action = new NeijiangAction(NeijiangActionType.Pass, -1, passScore, "保留当前最快成叫路径"),
             ShantenAfter = current.Shanten,
             LiveUkeireAfter = current.LiveUkeire,
-            Reasons = new[] { $"当前最快向听 {current.Shanten}", $"当前活张 {current.LiveUkeire}", "杠牌需由 C# 判断是否不拖慢成叫" },
+            Reasons = new[] { $"当前最快向听 {current.Shanten}", $"当前活张 {current.LiveUkeire}", "杠牌需由 C# 判断是否不拖慢成叫" }
+                .Concat(currentPlan.Reasons)
+                .ToArray(),
             ActionScores = scores
         };
 
         foreach (var tileType in anGangTileTypes.Where(tile => tile is >= 0 and < 18).Distinct())
         {
             if (state.Hand18[tileType] < 4) continue;
-            var candidate = EvaluateSelfGang(state, belief, tileType, "an_gang", current, meldCount, roundStage, threatLevel, maxReadyPosterior);
+            var candidate = EvaluateSelfGang(state, belief, tileType, "an_gang", current, currentPlan, meldCount, roundStage, threatLevel, maxReadyPosterior);
             scores[$"an_gang:{tileType}"] = candidate.Action.Score;
             if (candidate.Action.Score > best.Action.Score)
                 best = candidate;
@@ -60,7 +81,7 @@ public sealed class NeijiangSelfActionDecisionEngine
         {
             if (state.Hand18[tileType] < 1) continue;
             var qiangGangCount = Math.Max(0, addGangQiangGangCounts?.GetValueOrDefault(tileType, 0) ?? 0);
-            var candidate = EvaluateSelfGang(state, belief, tileType, "add_gang", current, meldCount, roundStage, threatLevel, maxReadyPosterior, qiangGangCount);
+            var candidate = EvaluateSelfGang(state, belief, tileType, "add_gang", current, currentPlan, meldCount, roundStage, threatLevel, maxReadyPosterior, qiangGangCount);
             scores[$"add_gang:{tileType}"] = candidate.Action.Score;
             if (qiangGangCount > 0 && candidate.Action.Score <= best.Action.Score)
             {
@@ -76,12 +97,70 @@ public sealed class NeijiangSelfActionDecisionEngine
         return best;
     }
 
+    private static NeijiangSelfActionDecisionResult? BuildMandatoryGangResult(
+        NeijiangStateView state,
+        IReadOnlyList<int> anGangTileTypes,
+        IReadOnlyList<int> addGangTileTypes,
+        IReadOnlyList<int>? mandatoryGangTileTypes)
+    {
+        var mandatory = mandatoryGangTileTypes?
+            .Where(tile => tile is >= 0 and < 18)
+            .Distinct()
+            .ToArray() ?? Array.Empty<int>();
+        if (mandatory.Length == 0)
+            return null;
+
+        foreach (var tileType in mandatory)
+        {
+            if (anGangTileTypes.Contains(tileType) && state.Hand18[tileType] >= 4)
+            {
+                return new NeijiangSelfActionDecisionResult
+                {
+                    Action = new NeijiangAction(NeijiangActionType.Gang, tileType, 120000, "已报杠摸到报杠牌，C#强制执行暗杠"),
+                    GangSubtype = "an_gang",
+                    ShantenAfter = -1,
+                    LiveUkeireAfter = 0,
+                    Reasons = new[] { "已报杠摸到报杠牌，C#强制执行暗杠", "前端仅传入 mandatory 标记，不再代替 C# 判定" },
+                    ActionScores = new Dictionary<string, int>
+                    {
+                        ["mandatory_gang"] = 120000,
+                        [$"an_gang:{tileType}"] = 120000,
+                        ["hu"] = 100000,
+                        ["pass"] = -100000
+                    }
+                };
+            }
+
+            if (addGangTileTypes.Contains(tileType) && state.Hand18[tileType] >= 1)
+            {
+                return new NeijiangSelfActionDecisionResult
+                {
+                    Action = new NeijiangAction(NeijiangActionType.Gang, tileType, 120000, "已报杠摸到报杠牌，C#强制执行补杠"),
+                    GangSubtype = "add_gang",
+                    ShantenAfter = -1,
+                    LiveUkeireAfter = 0,
+                    Reasons = new[] { "已报杠摸到报杠牌，C#强制执行补杠", "前端仅传入 mandatory 标记，不再代替 C# 判定" },
+                    ActionScores = new Dictionary<string, int>
+                    {
+                        ["mandatory_gang"] = 120000,
+                        [$"add_gang:{tileType}"] = 120000,
+                        ["hu"] = 100000,
+                        ["pass"] = -100000
+                    }
+                };
+            }
+        }
+
+        return null;
+    }
+
     private NeijiangSelfActionDecisionResult EvaluateSelfGang(
         NeijiangStateView state,
         NeijiangBeliefSnapshot belief,
         int tileType,
         string subtype,
         FollowUpSummary current,
+        NeijiangRoutePlanResult currentPlan,
         int meldCount,
         int roundStage,
         int threatLevel,
@@ -119,6 +198,7 @@ public sealed class NeijiangSelfActionDecisionEngine
         if (subtype == "add_gang" && roundStage >= 2 && followUp.Shanten > 0) score -= 160;
         if (subtype == "add_gang" && maxReadyPosterior >= 0.56 && followUp.Shanten > 0) score -= 120;
         if (subtype == "add_gang" && qiangGangCandidateCount > 0) score -= 260 * qiangGangCandidateCount;
+        if (currentPlan.ForbidsGangs) score -= 6000;
 
         var label = subtype == "an_gang" ? "暗杠" : "补杠";
         var reasons = new List<string>
@@ -128,6 +208,8 @@ public sealed class NeijiangSelfActionDecisionEngine
             $"{label}后首打危险 {discardRisk}",
             $"{label}税收益纳入 C# 决策"
         };
+        if (currentPlan.ForbidsGangs)
+            reasons.Add($"七对路线：{currentPlan.PrimaryRoute} 禁止{label}，杠牌会破坏七对");
         if (followUp.Shanten <= current.Shanten) reasons.Add("杠后不拖慢成叫");
         if (followUp.Shanten == 0) reasons.Add("杠后仍可下叫，优先收杠分");
         if (followUp.Shanten <= current.Shanten && followUp.LiveUkeire + 3 >= current.LiveUkeire && discardRisk < 64)

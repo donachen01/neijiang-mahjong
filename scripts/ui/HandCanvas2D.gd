@@ -50,6 +50,9 @@ const TILE_SYMBOL_DIR := "res://res/art/ui_3d_cartoon/tile_symbols"
 const USE_SELF_TILE_SURFACE := false
 const DANGER_OUTLINE := Color(0.72, 0.28, 0.24, 0.92)
 const DANGER_BANNER := Color(0.50, 0.14, 0.12, 0.92)
+const BAO_GANG_OUTLINE := Color(1.0, 0.78, 0.34, 0.96)
+const BAO_GANG_GLOW := Color(1.0, 0.72, 0.26, 0.14)
+const BAO_GANG_BADGE := Color(0.08, 0.30, 0.20, 0.94)
 const RECOMMEND_MARKER_RADIUS := 10.5
 const RECOMMEND_MARKER_BOB_SPEED := 3.2
 const RECOMMEND_MARKER_TOP := Color(1.0, 0.90, 0.48, 0.90)
@@ -101,6 +104,7 @@ func _build_configure_signature(tiles: Array, selected_id: int, new_id: int, can
 		var tile_data: Dictionary = tile
 		tile_ids.append(int(tile_data.get("id", -1)))
 	var marker_ids: Array = markers.get("danger_tile_ids", [])
+	var bao_gang_keys: Array = markers.get("bao_gang_keys", [])
 	return JSON.stringify({
 		"tiles": tile_ids,
 		"selected": selected_id,
@@ -108,6 +112,7 @@ func _build_configure_signature(tiles: Array, selected_id: int, new_id: int, can
 		"size": [int(round(canvas_size.x)), int(round(canvas_size.y))],
 		"recommended": int(markers.get("recommended_tile_id", -1)),
 		"danger": marker_ids.duplicate(),
+		"bao_gang": bao_gang_keys.duplicate(),
 		"winning": int(markers.get("winning_tile_id", -1)),
 		"winning_source": int(markers.get("winning_source_seat", -1)),
 		"left_width": int(round(float(layout_options.get("embedded_left_width", 0.0)))),
@@ -166,6 +171,7 @@ func _draw_single_tile(layout: Dictionary) -> void:
 	var is_new_draw: bool = layout["new_draw"]
 	var is_recommended: bool = layout.get("recommended", false)
 	var is_danger: bool = layout.get("danger", false)
+	var is_bao_gang: bool = layout.get("bao_gang", false)
 	var is_winning_tile: bool = layout.get("winning", false)
 	var rotation_degrees: float = float(layout.get("rotation", 0.0))
 	var pivot := front_rect.get_center()
@@ -204,6 +210,8 @@ func _draw_single_tile(layout: Dictionary) -> void:
 		_draw_danger_hint(local_front_rect)
 	if is_recommended:
 		_draw_recommended_marker(local_front_rect)
+	if is_bao_gang:
+		_draw_bao_gang_highlight(local_front_rect, local_outer_rect)
 	if is_selected:
 		_draw_selected_accent(local_front_rect, local_outer_rect)
 	if is_winning_tile:
@@ -374,6 +382,7 @@ func _rebuild_layout() -> void:
 			"new_draw": tile_id == new_draw_tile_id,
 			"recommended": int(trainer_markers.get("recommended_tile_id", -1)) == tile_id,
 			"danger": trainer_markers.get("danger_tile_ids", []).has(tile_id),
+			"bao_gang": _is_bao_gang_tile(tile),
 			"winning": index == hand_tiles.size() - 1 and int(trainer_markers.get("winning_tile_id", -1)) == tile_id,
 			"rotation": 0.0,
 			"front_rect": front_rect,
@@ -394,6 +403,33 @@ func _rebuild_layout() -> void:
 
 func _has_recommended_tile() -> bool:
 	return int(trainer_markers.get("recommended_tile_id", -1)) != -1
+
+
+func _is_bao_gang_tile(tile: Dictionary) -> bool:
+	var bao_gang_keys: Array = trainer_markers.get("bao_gang_keys", [])
+	if bao_gang_keys.is_empty() or tile.is_empty():
+		return false
+	return bao_gang_keys.has(_tile_key(tile))
+
+
+func _tile_key(tile: Dictionary) -> String:
+	return "%s_%d" % [str(tile.get("suit", "")), int(tile.get("rank", 0))]
+
+
+func _draw_bao_gang_highlight(front_rect: Rect2, outer_rect: Rect2) -> void:
+	var glow := StyleBoxFlat.new()
+	glow.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	glow.border_color = BAO_GANG_OUTLINE
+	glow.set_border_width_all(3)
+	glow.corner_radius_top_left = TILE_CORNER_RADIUS + 3
+	glow.corner_radius_top_right = TILE_CORNER_RADIUS + 3
+	glow.corner_radius_bottom_left = TILE_CORNER_RADIUS + 3
+	glow.corner_radius_bottom_right = TILE_CORNER_RADIUS + 3
+	glow.shadow_color = BAO_GANG_GLOW
+	glow.shadow_size = 8
+	glow.shadow_offset = Vector2.ZERO
+	draw_style_box(glow, outer_rect.grow(4.0))
+	_draw_banner(front_rect, "杠", BAO_GANG_BADGE)
 
 
 func _draw_recommended_marker(front_rect: Rect2) -> void:

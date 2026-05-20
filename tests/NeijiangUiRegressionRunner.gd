@@ -14,6 +14,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 
+	_run_test("ai_action_delay_is_randomized_between_half_and_three_seconds", _test_ai_action_delay_is_randomized_between_half_and_three_seconds.bind(root_node), failures)
 	_run_test("self_hu_helper_prioritizes_hu_over_discard_recommendation", _test_self_hu_helper_prioritizes_hu_over_discard_recommendation.bind(root_node), failures)
 	_run_test("selected_tile_helper_uses_csharp_candidate_details", _test_selected_tile_helper_uses_csharp_candidate_details.bind(root_node), failures)
 	_run_test("recommended_tile_helper_prioritizes_csharp_probability_details", _test_recommended_tile_helper_prioritizes_csharp_probability_details.bind(root_node), failures)
@@ -21,6 +22,9 @@ func _run() -> void:
 	_run_test("top_right_x_exit_button_is_visible", _test_top_right_x_exit_button_is_visible.bind(root_node), failures)
 	_run_test("main_controls_are_layered_by_purpose", _test_main_controls_are_layered_by_purpose.bind(root_node), failures)
 	_run_test("action_buttons_use_circular_mahjong_style", _test_action_buttons_use_circular_mahjong_style.bind(root_node), failures)
+	_run_test("bao_gang_dialog_stays_phone_readable", _test_bao_gang_dialog_stays_phone_readable.bind(root_node), failures)
+	_run_test("bao_gang_tiles_are_framed_in_self_hand", _test_bao_gang_tiles_are_framed_in_self_hand.bind(root_node), failures)
+	_run_test("ai_bao_gang_tiles_are_framed_in_opponent_hand", _test_ai_bao_gang_tiles_are_framed_in_opponent_hand.bind(root_node), failures)
 
 	root_node.queue_free()
 	if failures.is_empty():
@@ -38,6 +42,19 @@ func _run_test(name: String, callable: Callable, failures: Array[String]) -> voi
 		print("PASS %s" % name)
 		return
 	failures.append("%s -> %s" % [name, str(result)])
+
+
+func _test_ai_action_delay_is_randomized_between_half_and_three_seconds(root_node: Node):
+	root_node.call("_set_ai_action_delay_seed", 20260520)
+	var observed: Dictionary = {}
+	for _index in range(24):
+		var delay_seconds := float(root_node.call("_next_ai_action_delay_seconds"))
+		if delay_seconds < 0.5 or delay_seconds > 3.0:
+			return "expected AI action delay in [0.5, 3.0], got %.4f" % delay_seconds
+		observed[int(round(delay_seconds * 1000.0))] = true
+	if observed.size() < 2:
+		return "expected randomized AI action delays, got one repeated value"
+	return true
 
 
 func _test_self_hu_helper_prioritizes_hu_over_discard_recommendation(root_node: Node):
@@ -435,6 +452,169 @@ func _test_action_buttons_use_circular_mahjong_style(root_node: Node):
 	return true
 
 
+func _test_bao_gang_dialog_stays_phone_readable(root_node: Node):
+	root_node.call("_show_bao_gang_selection_dialog", [
+		{"key": "tiao_1", "display_name": "1条", "tile": _make_tile(9401, "tiao", 1), "subtype": "ming"},
+		{"key": "tiao_8", "display_name": "8条", "tile": _make_tile(9408, "tiao", 8), "subtype": "an"},
+		{"key": "tong_9", "display_name": "9筒", "tile": _make_tile(9509, "tong", 9), "subtype": "ming"},
+		{"key": "tong_5", "display_name": "5筒", "tile": _make_tile(9505, "tong", 5), "subtype": "ming"},
+	])
+	var dialog: ConfirmationDialog = root_node.get("bao_gang_dialog") as ConfirmationDialog
+	var content: Control = root_node.get("bao_gang_dialog_content") as Control
+	var checks: Array = root_node.get("bao_gang_option_checks")
+	if dialog == null or content == null:
+		return "missing bao gang dialog/content"
+	if dialog.get_ok_button().visible or dialog.get_cancel_button().visible:
+		return "expected bao gang dialog to hide bottom confirm/cancel buttons"
+	if dialog.min_size.x < 880.0 or dialog.min_size.y < 420.0:
+		return "expected bao gang dialog minimum size to be phone-readable, got %.1fx%.1f" % [dialog.min_size.x, dialog.min_size.y]
+	if content.custom_minimum_size.x < 820.0 or content.custom_minimum_size.y < 320.0:
+		return "expected bao gang dialog content to keep a large single panel, got %.1fx%.1f" % [content.custom_minimum_size.x, content.custom_minimum_size.y]
+	if checks.size() != 4:
+		return "expected four bao gang tile buttons, got %d" % checks.size()
+	var panel := content as Panel
+	if panel == null or panel.name != "BaoGangSurface":
+		return "expected bao gang dialog to use one table-style surface panel"
+	var close_button := panel.get_node_or_null("BaoGangCloseButton") as Button
+	if close_button == null or close_button.text != "×":
+		return "expected bao gang panel to expose a top-right close button"
+	var content_box := panel.get_node_or_null("BaoGangSurfaceMargin/BaoGangSurfaceContent") as VBoxContainer
+	if content_box == null:
+		return "expected bao gang surface content box"
+	var title := content_box.get_child(0) as Label
+	if title == null or title.get_theme_font_size("font_size") < 38:
+		return "expected large bao gang dialog title font, got %s" % [title]
+	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+	if panel_style == null:
+		return "expected bao gang surface to have custom StyleBoxFlat"
+	if panel_style.bg_color.r > 0.16 or panel_style.bg_color.g < 0.22 or panel_style.bg_color.b > 0.24:
+		return "expected bao gang surface to use deep green felt, got %s" % [panel_style.bg_color]
+	if panel_style.border_color.r < 0.55 or panel_style.border_color.g < 0.42 or panel_style.border_color.b > 0.55:
+		return "expected bao gang surface to use warm gold border, got %s" % [panel_style.border_color]
+	if panel_style.get_border_width(SIDE_LEFT) < 2:
+		return "expected bao gang surface to have visible table-style border"
+	if panel_style.corner_radius_top_left < 18:
+		return "expected bao gang surface to have rounded tabletop corners"
+	if title.get_theme_color("font_color").r < 0.85 or title.get_theme_color("font_color").g < 0.72:
+		return "expected bao gang title to use ivory/gold table text"
+	var tile_row := content_box.get_node_or_null("BaoGangTileRow") as HBoxContainer
+	if tile_row == null:
+		return "expected bao gang options to be arranged as one horizontal tile row"
+	if tile_row.get_theme_constant("separation") < 22:
+		return "expected generous spacing between bao gang tiles"
+	for check_item in checks:
+		var check := check_item as Button
+		if check == null:
+			return "expected bao gang option tile button"
+		if not check.text.strip_edges().is_empty():
+			return "expected bao gang option to render the selectable tile instead of text-only label, got text=%s" % check.text
+		if not check.toggle_mode:
+			return "expected bao gang tile button to toggle selection"
+		if check.custom_minimum_size.x < 150.0 or check.custom_minimum_size.y < 200.0:
+			return "expected bao gang selectable tile to be large, got %.1fx%.1f" % [check.custom_minimum_size.x, check.custom_minimum_size.y]
+		if not check.button_pressed:
+			return "expected bao gang options to default selected"
+		var tile_visual := _find_descendant(check, "BaoGangOptionTile") as TileVisual2D
+		if tile_visual == null:
+			return "expected bao gang tile button to contain a Mahjong tile visual"
+		if tile_visual.tile_data.is_empty():
+			return "expected bao gang tile visual to receive tile data"
+		if tile_visual.show_back:
+			return "expected bao gang selectable tile to show face, not tile back"
+		if tile_visual.tile_scale < 0.84:
+			return "expected bao gang tile visual to be larger than the old list tile, got scale %.2f" % tile_visual.tile_scale
+		if not tile_visual.is_selected or tile_visual.scale.x < 1.04:
+			return "expected default selected bao gang tile to use discard-like selected lift/scale"
+		root_node.call("_refresh_bao_gang_option_selection_visual", check, tile_visual, false)
+		if tile_visual.is_selected or tile_visual.scale.x > 1.01:
+			return "expected bao gang tile visual to clear selected effect when unchecked"
+		root_node.call("_refresh_bao_gang_option_selection_visual", check, tile_visual, true)
+		if not tile_visual.is_selected or tile_visual.scale.x < 1.04:
+			return "expected bao gang tile visual to restore selected effect when checked"
+		var check_style := check.get_theme_stylebox("normal") as StyleBoxFlat
+		if check_style == null:
+			return "expected bao gang option to have custom tabletop row style"
+		if check_style.bg_color.g < 0.20 or check_style.bg_color.a < 0.60:
+			return "expected bao gang option tile to use translucent green tabletop color"
+		if check_style.border_color.r < 0.45 or check_style.border_color.g < 0.35:
+			return "expected bao gang option tile to use warm border"
+	dialog.hide()
+	return true
+
+
+func _test_bao_gang_tiles_are_framed_in_self_hand(root_node: Node):
+	var bao_gang_tile := _make_tile(9602, "tiao", 2)
+	var normal_tile := _make_tile(9605, "tong", 5)
+	var snapshot := {
+		"current_dealer_seat": 0,
+		"human_can_discard": true,
+		"human_last_draw_tile_id": -1,
+		"rules": {"use_ding_que_phase": false},
+		"players": [
+			{
+				"seat": 0,
+				"nickname": "本家",
+				"score": 10,
+				"hand_tiles": [bao_gang_tile, normal_tile],
+				"bao_jiao": true,
+				"bao_gang_tiles": ["tiao_2"],
+				"melds": [],
+				"ding_que": "",
+			},
+		],
+	}
+	root_node.call("_update_self_area", snapshot, snapshot["players"][0]["hand_tiles"])
+	var self_hand_host: PlayerHandViewport = root_node.get("self_hand_host") as PlayerHandViewport
+	if self_hand_host == null:
+		return "missing self hand host"
+	var hand_canvas: HandCanvas2D = self_hand_host.get("hand_canvas") as HandCanvas2D
+	if hand_canvas == null:
+		return "missing self hand canvas"
+	var layouts: Array = hand_canvas.get("tile_layouts")
+	var framed_bao_gang := false
+	var framed_normal := false
+	for layout_item in layouts:
+		var layout: Dictionary = layout_item
+		if int(layout.get("tile_id", -1)) == int(bao_gang_tile["id"]):
+			framed_bao_gang = bool(layout.get("bao_gang", false))
+		if int(layout.get("tile_id", -1)) == int(normal_tile["id"]):
+			framed_normal = bool(layout.get("bao_gang", false))
+	if not framed_bao_gang:
+		return "expected self bao gang tile to be separately framed in hand layout"
+	if framed_normal:
+		return "expected non-bao-gang self tile not to be framed"
+	return true
+
+
+func _test_ai_bao_gang_tiles_are_framed_in_opponent_hand(root_node: Node):
+	var left_ui: PlayerUI = root_node.get("left_ui") as PlayerUI
+	if left_ui == null:
+		return "missing left player UI"
+	var bao_gang_tile := _make_tile(9702, "tiao", 2)
+	var normal_tile := _make_tile(9705, "tong", 5)
+	left_ui.apply_snapshot({
+		"seat": 1,
+		"nickname": "AI",
+		"score": 0,
+		"hand_count": 2,
+		"hand_tiles": [bao_gang_tile, normal_tile],
+		"bao_jiao": true,
+		"bao_gang_tiles": ["tiao_2"],
+		"melds": [],
+		"discards": [],
+	}, true, -1, -1, false)
+	var tiles: Array = []
+	_collect_nodes_by_class(left_ui, "TileVisual2D", tiles)
+	var highlighted_back_count := 0
+	for node_item in tiles:
+		var tile := node_item as TileVisual2D
+		if tile != null and tile.show_back and tile.is_selected:
+			highlighted_back_count += 1
+	if highlighted_back_count != 1:
+		return "expected exactly one hidden AI bao gang back tile to be framed, got %d" % highlighted_back_count
+	return true
+
+
 func _collect_visible_label_text(node: Node) -> String:
 	var parts: Array[String] = []
 	if node is Label:
@@ -446,6 +626,23 @@ func _collect_visible_label_text(node: Node) -> String:
 		if not child_text.is_empty():
 			parts.append(child_text)
 	return " ".join(parts)
+
+
+func _find_descendant(node: Node, node_name: String) -> Node:
+	if node.name == node_name:
+		return node
+	for child in node.get_children():
+		var found := _find_descendant(child, node_name)
+		if found != null:
+			return found
+	return null
+
+
+func _collect_nodes_by_class(node: Node, target_class_name: String, result: Array) -> void:
+	if node.get_class() == target_class_name or node.is_class(target_class_name) or (target_class_name == "TileVisual2D" and node is TileVisual2D):
+		result.append(node)
+	for child in node.get_children():
+		_collect_nodes_by_class(child, target_class_name, result)
 
 
 func _make_tile(id: int, suit: String, rank: int) -> Dictionary:

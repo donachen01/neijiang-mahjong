@@ -17,7 +17,7 @@ var options = new JsonSerializerOptions
 
 if (args.Length < 1)
 {
-    Console.Error.WriteLine("Usage: AI.Core.Cli <discard-json|reaction-json|self-action-json|host-tcp> [args]");
+    Console.Error.WriteLine("Usage: AI.Core.Cli <discard-json|reaction-json|self-action-json|bao-jiao-json|ding-que-json|host-tcp> [args]");
     return 2;
 }
 
@@ -26,6 +26,8 @@ return args[0] switch
     "discard-json" => await RunDiscardJsonAsync(args.Skip(1).ToArray(), options),
     "reaction-json" => await RunReactionJsonAsync(args.Skip(1).ToArray(), options),
     "self-action-json" => await RunSelfActionJsonAsync(args.Skip(1).ToArray(), options),
+    "bao-jiao-json" => await RunBaoJiaoJsonAsync(args.Skip(1).ToArray(), options),
+    "ding-que-json" => await RunDingQueJsonAsync(args.Skip(1).ToArray(), options),
     "learning-record" => await RunLearningRecordAsync(args.Skip(1).ToArray(), options),
     "host-tcp" => await RunHostTcpAsync(args.Skip(1).ToArray(), options),
     _ => 2
@@ -111,6 +113,62 @@ static async Task<int> RunSelfActionJsonAsync(string[] args, JsonSerializerOptio
 
     var facade = new NeijiangAiFacade();
     var output = BuildSelfActionOutput(facade, payload, options);
+    Console.WriteLine(output);
+    return 0;
+}
+
+static async Task<int> RunBaoJiaoJsonAsync(string[] args, JsonSerializerOptions options)
+{
+    if (args.Length < 1)
+    {
+        Console.Error.WriteLine("Usage: AI.Core.Cli bao-jiao-json <payload.json>");
+        return 2;
+    }
+
+    var payloadPath = args[0];
+    if (!File.Exists(payloadPath))
+    {
+        Console.Error.WriteLine($"Payload file not found: {payloadPath}");
+        return 3;
+    }
+
+    var payload = JsonSerializer.Deserialize<BaoJiaoPayload>(await File.ReadAllTextAsync(payloadPath), options);
+    if (payload is null)
+    {
+        Console.Error.WriteLine("Invalid bao jiao payload");
+        return 4;
+    }
+
+    var facade = new NeijiangAiFacade();
+    var output = BuildBaoJiaoOutput(facade, payload, options);
+    Console.WriteLine(output);
+    return 0;
+}
+
+static async Task<int> RunDingQueJsonAsync(string[] args, JsonSerializerOptions options)
+{
+    if (args.Length < 1)
+    {
+        Console.Error.WriteLine("Usage: AI.Core.Cli ding-que-json <payload.json>");
+        return 2;
+    }
+
+    var payloadPath = args[0];
+    if (!File.Exists(payloadPath))
+    {
+        Console.Error.WriteLine($"Payload file not found: {payloadPath}");
+        return 3;
+    }
+
+    var payload = JsonSerializer.Deserialize<DingQuePayload>(await File.ReadAllTextAsync(payloadPath), options);
+    if (payload is null)
+    {
+        Console.Error.WriteLine("Invalid ding que payload");
+        return 4;
+    }
+
+    var facade = new NeijiangAiFacade();
+    var output = BuildDingQueOutput(facade, payload, options);
     Console.WriteLine(output);
     return 0;
 }
@@ -324,6 +382,72 @@ static async Task HandleClientAsync(TcpClient client, NeijiangAiFacade facade, J
             continue;
         }
 
+        if (string.Equals(request.Action, "bao_jiao", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(request.Action, "bao-jiao", StringComparison.OrdinalIgnoreCase))
+        {
+            if (request.BaoJiaoPayload is null)
+            {
+                await writer.WriteLineAsync(JsonSerializer.Serialize(new HostResponse
+                {
+                    Ok = false,
+                    Error = "missing_bao_jiao_payload"
+                }, options));
+                continue;
+            }
+
+            try
+            {
+                var output = BuildBaoJiaoObject(facade, request.BaoJiaoPayload);
+                await writer.WriteLineAsync(JsonSerializer.Serialize(new HostResponse
+                {
+                    Ok = true,
+                    Result = output
+                }, options));
+            }
+            catch (Exception ex)
+            {
+                await writer.WriteLineAsync(JsonSerializer.Serialize(new HostResponse
+                {
+                    Ok = false,
+                    Error = ex.Message
+                }, options));
+            }
+            continue;
+        }
+
+        if (string.Equals(request.Action, "ding_que", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(request.Action, "ding-que", StringComparison.OrdinalIgnoreCase))
+        {
+            if (request.DingQuePayload is null)
+            {
+                await writer.WriteLineAsync(JsonSerializer.Serialize(new HostResponse
+                {
+                    Ok = false,
+                    Error = "missing_ding_que_payload"
+                }, options));
+                continue;
+            }
+
+            try
+            {
+                var output = BuildDingQueObject(facade, request.DingQuePayload);
+                await writer.WriteLineAsync(JsonSerializer.Serialize(new HostResponse
+                {
+                    Ok = true,
+                    Result = output
+                }, options));
+            }
+            catch (Exception ex)
+            {
+                await writer.WriteLineAsync(JsonSerializer.Serialize(new HostResponse
+                {
+                    Ok = false,
+                    Error = ex.Message
+                }, options));
+            }
+            continue;
+        }
+
         await writer.WriteLineAsync(JsonSerializer.Serialize(new HostResponse
         {
             Ok = false,
@@ -373,6 +497,18 @@ static string BuildSelfActionOutput(NeijiangAiFacade facade, SelfActionPayload p
     return JsonSerializer.Serialize(output, options);
 }
 
+static string BuildBaoJiaoOutput(NeijiangAiFacade facade, BaoJiaoPayload payload, JsonSerializerOptions options)
+{
+    var output = BuildBaoJiaoObject(facade, payload);
+    return JsonSerializer.Serialize(output, options);
+}
+
+static string BuildDingQueOutput(NeijiangAiFacade facade, DingQuePayload payload, JsonSerializerOptions options)
+{
+    var output = BuildDingQueObject(facade, payload);
+    return JsonSerializer.Serialize(output, options);
+}
+
 static object BuildDiscardObject(NeijiangAiFacade facade, DiscardPayload payload)
 {
     var state = BuildState(payload);
@@ -393,6 +529,15 @@ static object BuildDiscardObject(NeijiangAiFacade facade, DiscardPayload payload
         searchUsed = result.SearchUsed,
         searchSimulations = result.SearchSimulations,
         currentRoutes = currentRoutes,
+        routePlan = new
+        {
+            primaryRoute = result.RoutePlan.PrimaryRoute,
+            secondaryRoutes = result.RoutePlan.SecondaryRoutes,
+            routeWeights = result.RoutePlan.RouteWeights,
+            constraints = result.RoutePlan.Constraints,
+            reasons = result.RoutePlan.Reasons,
+            targetSuit = result.RoutePlan.TargetSuit
+        },
         strategyProfile = strategyProfile,
         beliefSummary = new
         {
@@ -473,6 +618,8 @@ static object BuildDiscardObject(NeijiangAiFacade facade, DiscardPayload payload
             strategyTag = item.StrategyTag,
             strategyMode = item.StrategyMode,
             explanationHint = item.ExplanationHint,
+            routePlanPrimary = item.RoutePlanPrimary,
+            routePlanScore = item.RoutePlanScore,
             routesAfter = item.RoutesAfter,
             routeLoss = item.RouteLoss,
             tenpaiProbability = item.TenpaiProbability,
@@ -529,7 +676,8 @@ static object BuildReactionObject(NeijiangAiFacade facade, ReactionPayload paylo
         payload.CanGang,
         payload.SourceSeat,
         payload.ReactionType,
-        payload.MobileSpeedMode);
+        payload.MobileSpeedMode,
+        payload.MandatoryGang);
     return new
     {
         action = result.Action.ActionType.ToString().ToLowerInvariant(),
@@ -564,7 +712,8 @@ static object BuildSelfActionObject(NeijiangAiFacade facade, SelfActionPayload p
         payload.CanSelfHu,
         payload.AnGangTileTypes,
         payload.AddGangTileTypes,
-        payload.AddGangQiangGangCounts);
+        payload.AddGangQiangGangCounts,
+        payload.MandatoryGangTileTypes);
     return new
     {
         action = result.Action.ActionType.ToString().ToLowerInvariant(),
@@ -577,6 +726,43 @@ static object BuildSelfActionObject(NeijiangAiFacade facade, SelfActionPayload p
         reasons = result.Reasons,
         actionScores = result.ActionScores,
         backendMode = "csharp_self_action"
+    };
+}
+
+static object BuildBaoJiaoObject(NeijiangAiFacade facade, BaoJiaoPayload payload)
+{
+    var state = BuildState(payload);
+    var candidates = payload.BaoGangCandidates
+        .Select(item => new NeijiangBaoGangCandidate(item.Key, item.TileType, item.Subtype))
+        .ToArray();
+    var result = facade.DecideBaoJiaoDeclaration(
+        state,
+        payload.TingTileTypes,
+        candidates,
+        payload.PlanScore);
+    return new
+    {
+        action = result.Declare ? "bao_jiao" : "pass",
+        declare = result.Declare,
+        selectedBaoGangKeys = result.SelectedBaoGangKeys,
+        score = result.Score,
+        reasons = result.Reasons,
+        candidateScores = result.CandidateScores,
+        backendMode = "csharp_bao_jiao"
+    };
+}
+
+static object BuildDingQueObject(NeijiangAiFacade facade, DingQuePayload payload)
+{
+    var result = facade.DecideDingQue(payload.SuitCounts, payload.ActiveSuits);
+    return new
+    {
+        action = "ding_que",
+        suit = result.Suit,
+        score = result.Score,
+        reasons = result.Reasons,
+        suitCounts = result.SuitCounts,
+        backendMode = "csharp_ding_que"
     };
 }
 
@@ -851,6 +1037,7 @@ internal sealed class ReactionPayload : DiscardPayload
     public bool CanHu { get; init; }
     public bool CanPeng { get; init; }
     public bool CanGang { get; init; }
+    public bool MandatoryGang { get; init; }
 }
 
 internal sealed class SelfActionPayload : DiscardPayload
@@ -859,6 +1046,27 @@ internal sealed class SelfActionPayload : DiscardPayload
     public List<int> AnGangTileTypes { get; init; } = new();
     public List<int> AddGangTileTypes { get; init; } = new();
     public Dictionary<int, int> AddGangQiangGangCounts { get; init; } = new();
+    public List<int> MandatoryGangTileTypes { get; init; } = new();
+}
+
+internal sealed class BaoJiaoPayload : DiscardPayload
+{
+    public List<int> TingTileTypes { get; init; } = new();
+    public List<BaoGangCandidatePayload> BaoGangCandidates { get; init; } = new();
+    public int PlanScore { get; init; }
+}
+
+internal sealed class BaoGangCandidatePayload
+{
+    public string Key { get; init; } = "";
+    public int TileType { get; init; } = -1;
+    public string Subtype { get; init; } = "";
+}
+
+internal sealed class DingQuePayload
+{
+    public Dictionary<string, int> SuitCounts { get; init; } = new();
+    public List<string> ActiveSuits { get; init; } = new();
 }
 
 internal sealed class HostRequest
@@ -867,6 +1075,8 @@ internal sealed class HostRequest
     public DiscardPayload? Payload { get; init; }
     public ReactionPayload? ReactionPayload { get; init; }
     public SelfActionPayload? SelfActionPayload { get; init; }
+    public BaoJiaoPayload? BaoJiaoPayload { get; init; }
+    public DingQuePayload? DingQuePayload { get; init; }
 }
 
 internal sealed class HostResponse

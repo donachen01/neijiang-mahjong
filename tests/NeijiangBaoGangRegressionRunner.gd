@@ -8,15 +8,44 @@ class FakeSelfActionAIManager:
 
 	var decision: Dictionary = {}
 	var self_action_call_count: int = 0
+	var last_mandatory_gang_tile_types: Array = []
 
-	func analyze_self_action(_player_state: Dictionary, _table_state: Dictionary, _rules_config, _can_self_hu: bool, _an_gang_tile_types: Array, _add_gang_tile_types: Array, _add_gang_qiang_gang_counts: Dictionary = {}) -> Dictionary:
+	func analyze_self_action(_player_state: Dictionary, _table_state: Dictionary, _rules_config, _can_self_hu: bool, _an_gang_tile_types: Array, _add_gang_tile_types: Array, _add_gang_qiang_gang_counts: Dictionary = {}, _mandatory_gang_tile_types: Array = []) -> Dictionary:
 		self_action_call_count += 1
+		last_mandatory_gang_tile_types = _mandatory_gang_tile_types.duplicate(true)
 		return decision.duplicate(true)
 
 	func has_native_csharp_runtime() -> bool:
 		return false
 
-	func start_turn_analysis_background(_player_state: Dictionary, _table_state: Dictionary, _rules_config, _ai_tuning_config, _hu_checker, _risk_analyzer, _allow_cheat: bool) -> int:
+	func start_turn_analysis_background(_player_state: Dictionary, _table_state: Dictionary, _rules_config, _ai_tuning_config, _hu_checker, _risk_analyzer, _allow_cheat: bool, _hell_payload: Dictionary = {}) -> int:
+		return 0
+
+	func pump_async_requests() -> int:
+		return 0
+
+	func get_debug_snapshot() -> Dictionary:
+		return {}
+
+
+class FakeBaoJiaoAIManager:
+	extends RefCounted
+
+	var decision: Dictionary = {}
+	var bao_jiao_call_count: int = 0
+	var last_plan: Dictionary = {}
+
+	func analyze_bao_jiao(player_state: Dictionary, _table_state: Dictionary, _rules_config, plan: Dictionary) -> Dictionary:
+		bao_jiao_call_count += 1
+		last_plan = plan.duplicate(true)
+		var result := decision.duplicate(true)
+		result["seat"] = int(player_state.get("seat", -1))
+		return result
+
+	func has_native_csharp_runtime() -> bool:
+		return true
+
+	func start_turn_analysis_background(_player_state: Dictionary, _table_state: Dictionary, _rules_config, _ai_tuning_config, _hu_checker, _risk_analyzer, _allow_cheat: bool, _hell_payload: Dictionary = {}) -> int:
 		return 0
 
 	func pump_async_requests() -> int:
@@ -59,11 +88,15 @@ func _run() -> void:
 	_run_test("csharp_self_action_exposes_gang_subtype", _test_csharp_self_action_exposes_gang_subtype, failures)
 	_run_test("game_state_executes_csharp_add_gang_subtype", _test_game_state_executes_csharp_add_gang_subtype, failures)
 	_run_test("opening_bao_jiao_queue_scans_ai_and_human_players", _test_opening_bao_jiao_queue_scans_ai_and_human_players, failures)
+	_run_test("ai_opening_bao_jiao_uses_csharp_selection", _test_ai_opening_bao_jiao_uses_csharp_selection, failures)
+	_run_test("ai_opening_bao_jiao_passes_when_csharp_declines", _test_ai_opening_bao_jiao_passes_when_csharp_declines, failures)
 	_run_test("opening_bao_jiao_can_select_triplet_bao_gang", _test_opening_bao_jiao_can_select_triplet_bao_gang, failures)
 	_run_test("bao_jiao_blocks_peng_and_non_whitelist_discard_gang", _test_bao_jiao_blocks_peng_and_non_whitelist_discard_gang, failures)
 	_run_test("bao_jiao_allows_whitelisted_discard_gang", _test_bao_jiao_allows_whitelisted_discard_gang, failures)
 	_run_test("bao_jiao_allows_only_whitelisted_an_gang", _test_bao_jiao_allows_only_whitelisted_an_gang, failures)
+	_run_test("mandatory_self_bao_gang_is_csharp_decision", _test_mandatory_self_bao_gang_is_csharp_decision, failures)
 	_run_test("ai_reaction_honors_backend_peng_when_gang_available", _test_ai_reaction_honors_backend_peng_when_gang_available, failures)
+	_run_test("mandatory_reaction_bao_gang_is_csharp_decision", _test_mandatory_reaction_bao_gang_is_csharp_decision, failures)
 	_run_test("add_gang_requires_matching_last_draw_after_peng", _test_add_gang_requires_matching_last_draw_after_peng, failures)
 	_run_test("peng_does_not_reask_self_action_for_immediate_add_gang", _test_peng_does_not_reask_self_action_for_immediate_add_gang, failures)
 	_run_test("reaction_context_defers_native_ai_until_timer", _test_reaction_context_defers_native_ai_until_timer, failures)
@@ -169,6 +202,87 @@ func _test_opening_bao_jiao_queue_scans_ai_and_human_players():
 		return "expected opening bao jiao queue to scan AI player seat 2, got %s" % [queue]
 	if queue.has(1):
 		return "expected dealer seat 1 to be excluded because dealer has 14 tiles, got %s" % [queue]
+	return true
+
+
+func _test_ai_opening_bao_jiao_uses_csharp_selection():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
+	game_state.current_dealer_seat = 1
+	game_state.current_turn_seat = 1
+	game_state.wall_count = 19
+	var fake_ai := FakeBaoJiaoAIManager.new()
+	fake_ai.decision = {
+		"action": "bao_jiao",
+		"declare": true,
+		"selected_bao_gang_keys": ["tiao_8", "tong_5"],
+		"backend_mode": "fake_csharp_bao_jiao",
+	}
+	game_state.ai_manager = fake_ai
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, []),
+		_make_player_neijiang(1, []),
+		_make_player_neijiang(2, [
+			_make_tile(601, "tiao", 1), _make_tile(602, "tiao", 1), _make_tile(603, "tiao", 1),
+			_make_tile(604, "tiao", 2), _make_tile(605, "tiao", 2), _make_tile(606, "tiao", 2),
+			_make_tile(607, "tiao", 3), _make_tile(608, "tiao", 3), _make_tile(609, "tiao", 3),
+			_make_tile(610, "tiao", 8), _make_tile(611, "tiao", 8), _make_tile(612, "tiao", 8),
+			_make_tile(613, "tong", 5),
+		]),
+		_make_player_neijiang(3, []),
+	])
+	game_state.opening_bao_jiao_pending = true
+	game_state.opening_bao_jiao_queue.clear()
+	game_state.opening_bao_jiao_queue.append(2)
+	game_state._process_opening_bao_jiao_queue()
+	if fake_ai.bao_jiao_call_count != 1:
+		return "expected AI opening bao jiao to call C# manager once, got %d" % fake_ai.bao_jiao_call_count
+	if not bool(game_state.players[2].get("bao_jiao", false)):
+		return "expected C# bao jiao decision to execute declaration"
+	var stored: Array = game_state.players[2].get("bao_gang_tiles", [])
+	if stored != ["tiao_8"]:
+		return "expected illegal C# key tong_5 to be filtered and only tiao_8 stored, got %s" % [stored]
+	if str(game_state.players[2].get("bao_jiao_backend_mode", "")) != "fake_csharp_bao_jiao":
+		return "expected backend mode marker from C# decision, got player=%s" % [game_state.players[2]]
+	return true
+
+
+func _test_ai_opening_bao_jiao_passes_when_csharp_declines():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
+	game_state.current_dealer_seat = 1
+	game_state.current_turn_seat = 1
+	game_state.wall_count = 19
+	var fake_ai := FakeBaoJiaoAIManager.new()
+	fake_ai.decision = {
+		"action": "pass",
+		"declare": false,
+		"selected_bao_gang_keys": ["tiao_8"],
+		"backend_mode": "fake_csharp_bao_jiao",
+	}
+	game_state.ai_manager = fake_ai
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, []),
+		_make_player_neijiang(1, []),
+		_make_player_neijiang(2, [
+			_make_tile(621, "tiao", 1), _make_tile(622, "tiao", 1), _make_tile(623, "tiao", 1),
+			_make_tile(624, "tiao", 2), _make_tile(625, "tiao", 2), _make_tile(626, "tiao", 2),
+			_make_tile(627, "tiao", 3), _make_tile(628, "tiao", 3), _make_tile(629, "tiao", 3),
+			_make_tile(630, "tiao", 8), _make_tile(631, "tiao", 8), _make_tile(632, "tiao", 8),
+			_make_tile(633, "tong", 5),
+		]),
+		_make_player_neijiang(3, []),
+	])
+	game_state.opening_bao_jiao_pending = true
+	game_state.opening_bao_jiao_queue.clear()
+	game_state.opening_bao_jiao_queue.append(2)
+	game_state._process_opening_bao_jiao_queue()
+	if fake_ai.bao_jiao_call_count != 1:
+		return "expected AI opening bao jiao decline to call C# manager once, got %d" % fake_ai.bao_jiao_call_count
+	if bool(game_state.players[2].get("bao_jiao", false)):
+		return "expected C# pass decision not to mark AI bao jiao"
+	if not bool(game_state.players[2].get("opening_bao_jiao_reviewed", false)):
+		return "expected C# pass decision to mark AI opening review complete"
 	return true
 
 
@@ -323,6 +437,69 @@ func _test_ai_reaction_honors_backend_peng_when_gang_available():
 	return true
 
 
+func _test_mandatory_self_bao_gang_is_csharp_decision():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
+	game_state.current_turn_seat = 0
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, [
+			_make_tile(701, "tiao", 4), _make_tile(702, "tiao", 4), _make_tile(703, "tiao", 4), _make_tile(704, "tiao", 4),
+			_make_tile(705, "tong", 2), _make_tile(706, "tong", 3), _make_tile(707, "tong", 4),
+		]),
+		_make_player_neijiang(1, []),
+		_make_player_neijiang(2, []),
+		_make_player_neijiang(3, []),
+	])
+	game_state.players[0]["bao_jiao"] = true
+	game_state.players[0]["bao_gang_tiles"] = ["tiao_4"]
+	game_state.last_draw_tile = {
+		"seat": 0,
+		"tile": game_state.players[0]["hand_tiles"][3].duplicate(true),
+	}
+	var fake_ai := FakeSelfActionAIManager.new()
+	fake_ai.decision = {
+		"action": "pass",
+		"score": 0,
+		"reasons": ["fake C# pass"],
+	}
+	game_state.ai_manager = fake_ai
+	var decision: Dictionary = game_state._build_ai_self_action_decision(0, game_state._build_player_state(0), game_state._build_table_state())
+	if fake_ai.self_action_call_count != 1:
+		return "expected mandatory bao gang to call C# self-action once, call_count=%d" % fake_ai.self_action_call_count
+	if not fake_ai.last_mandatory_gang_tile_types.has(3):
+		return "expected mandatory tiao_4 tile type 3 to be passed to C#, got %s" % [fake_ai.last_mandatory_gang_tile_types]
+	if not decision.is_empty():
+		return "expected frontend not to override fake C# pass into an_gang, got %s" % [decision]
+	return true
+
+
+func _test_mandatory_reaction_bao_gang_is_csharp_decision():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
+	game_state.current_turn_seat = 1
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, [
+			_make_tile(721, "tiao", 6), _make_tile(722, "tiao", 6), _make_tile(723, "tiao", 6),
+			_make_tile(724, "tong", 2), _make_tile(725, "tong", 3), _make_tile(726, "tong", 4),
+		]),
+		_make_player_neijiang(1, []),
+		_make_player_neijiang(2, []),
+		_make_player_neijiang(3, []),
+	])
+	game_state.players[0]["bao_jiao"] = true
+	game_state.players[0]["bao_gang_tiles"] = ["tiao_6"]
+	_set_discard_reaction(game_state, 1, _make_tile(727, "tiao", 6))
+	var candidate: Dictionary = game_state._get_reaction_candidate_for_seat(0)
+	if candidate.is_empty() or not bool(candidate.get("can_gang", false)):
+		return "expected mandatory discard gang candidate, got %s" % [candidate]
+	if not bool(candidate.get("mandatory_gang", false)):
+		return "expected candidate to carry mandatory_gang for C#, got %s" % [candidate]
+	var resolved_action := str(game_state._resolve_ai_reaction_action(0, candidate, "pass"))
+	if resolved_action != "pass":
+		return "expected frontend not to override fake C# pass into gang, got %s" % resolved_action
+	return true
+
+
 func _test_add_gang_requires_matching_last_draw_after_peng():
 	var game_state = _build_neijiang_test_game_state()
 	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
@@ -416,6 +593,8 @@ func _set_discard_reaction(game_state, source_seat: int, tile: Dictionary) -> vo
 		"winner_seats": [],
 	}
 	game_state.pending_reactions = game_state.mahjong_judge.build_reaction_candidates(game_state._build_table_state(), game_state.current_discard_context, game_state.rules)
+	if game_state.has_method("_apply_reaction_candidate_rule_flags"):
+		game_state._apply_reaction_candidate_rule_flags()
 
 
 func _build_neijiang_test_game_state():

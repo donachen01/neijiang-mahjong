@@ -10,6 +10,7 @@ public sealed class NeijiangDecisionResult
     public double DealInProbability { get; init; }
     public bool SearchUsed { get; init; }
     public int SearchSimulations { get; init; }
+    public NeijiangRoutePlanResult RoutePlan { get; init; } = new();
     public NeijiangBeliefSummary BeliefSummary { get; init; } = new();
     public IReadOnlyList<string> Reasons { get; init; } = Array.Empty<string>();
     public IReadOnlyDictionary<int, int> CandidateScores { get; init; } = new Dictionary<int, int>();

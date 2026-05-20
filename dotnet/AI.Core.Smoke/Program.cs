@@ -63,6 +63,36 @@ if (!SmokeReasonableAnGang(facade))
     return 5;
 }
 
+if (!SmokeBaoJiaoSelfHuOverridesMandatoryGang(facade))
+{
+    Console.Error.WriteLine("bao_jiao_self_hu_route_smoke_failed");
+    return 51;
+}
+
+if (!SmokeMandatorySelfBaoGangOwnedByCSharp(facade))
+{
+    Console.Error.WriteLine("mandatory_self_bao_gang_csharp_smoke_failed");
+    return 52;
+}
+
+if (!SmokeBaoJiaoDiscardHuOverridesMandatoryGang(facade))
+{
+    Console.Error.WriteLine("bao_jiao_discard_hu_route_smoke_failed");
+    return 53;
+}
+
+if (!SmokeMandatoryReactionBaoGangOwnedByCSharp(facade))
+{
+    Console.Error.WriteLine("mandatory_reaction_bao_gang_csharp_smoke_failed");
+    return 54;
+}
+
+if (!SmokeBaoJiaoRejectsNonWinningPeng(facade))
+{
+    Console.Error.WriteLine("bao_jiao_reject_peng_route_smoke_failed");
+    return 55;
+}
+
 if (!SmokeRiskCalibration())
 {
     Console.Error.WriteLine("risk_calibration_smoke_failed");
@@ -141,6 +171,90 @@ if (!SmokeHellOracleRaisesPressureWhenHumanLeads())
     return 38;
 }
 
+if (!SmokeHellChallengeDirectDoesNotNeedFairRecommendation())
+{
+    Console.Error.WriteLine("hell_challenge_direct_smoke_failed");
+    return 39;
+}
+
+if (!SmokeHellChallengeReactionBlocksHumanMomentum())
+{
+    Console.Error.WriteLine("hell_challenge_reaction_smoke_failed");
+    return 40;
+}
+
+if (!SmokeHellChallengeTeamPlanCoordinatesSeats())
+{
+    Console.Error.WriteLine("hell_challenge_team_plan_smoke_failed");
+    return 41;
+}
+
+if (!SmokeHellChallengeDiscardUsesTeamPlan())
+{
+    Console.Error.WriteLine("hell_challenge_discard_team_plan_smoke_failed");
+    return 42;
+}
+
+if (!SmokeHellChallengeReactionUsesTeamPlan())
+{
+    Console.Error.WriteLine("hell_challenge_reaction_team_plan_smoke_failed");
+    return 43;
+}
+
+if (!SmokeHellChallengePassesNonHumanMiddlePengUnlessReady())
+{
+    Console.Error.WriteLine("hell_challenge_non_human_middle_peng_restraint_smoke_failed");
+    return 433;
+}
+
+if (!SmokeHellChallengeHonorsBaoJiaoDiscardRoute())
+{
+    Console.Error.WriteLine("hell_challenge_bao_jiao_discard_route_smoke_failed");
+    return 431;
+}
+
+if (!SmokeHellChallengeHonorsBaoJiaoReactionRoute())
+{
+    Console.Error.WriteLine("hell_challenge_bao_jiao_reaction_route_smoke_failed");
+    return 432;
+}
+
+if (!SmokeHellChallengeAllowsHumanPengToKeepReady())
+{
+    Console.Error.WriteLine("hell_challenge_peng_interaction_smoke_failed");
+    return 44;
+}
+
+if (!SmokeHellChallengeAllowsMidgamePengWhenHumanNotReady())
+{
+    Console.Error.WriteLine("hell_challenge_mid_peng_interaction_smoke_failed");
+    return 441;
+}
+
+if (!SmokeHellChallengeAllowsLatePengOnlyWhenHumanReady())
+{
+    Console.Error.WriteLine("hell_challenge_late_peng_only_interaction_smoke_failed");
+    return 45;
+}
+
+if (!SmokeHellChallengePrefersDirectGangOverPeng())
+{
+    Console.Error.WriteLine("hell_challenge_direct_gang_over_peng_smoke_failed");
+    return 46;
+}
+
+if (!SmokeHellChallengeGangsWhenPengWouldRediscardClaimedTile())
+{
+    Console.Error.WriteLine("hell_challenge_peng_rediscard_same_tile_smoke_failed");
+    return 47;
+}
+
+if (!SmokeHellChallengeAllowsPengWhenGangHurtsShape())
+{
+    Console.Error.WriteLine("hell_challenge_peng_over_gang_shape_smoke_failed");
+    return 48;
+}
+
 if (!SmokeLateWallRiskRegression(facade))
 {
     Console.Error.WriteLine("late_wall_risk_regression_smoke_failed");
@@ -157,6 +271,12 @@ if (!SmokeReactionPrefersGangWhenPengWouldRediscard(facade))
 {
     Console.Error.WriteLine("reaction_peng_rediscard_gang_smoke_failed");
     return 18;
+}
+
+if (!SmokeHellChallengePengRediscardPenaltyIsDecisive())
+{
+    Console.Error.WriteLine("hell_challenge_peng_rediscard_decisive_smoke_failed");
+    return 181;
 }
 
 if (!SmokeReactionPassesWideNoSpeedPengFromSeedLive(facade))
@@ -219,6 +339,54 @@ if (!SmokeEarlyBigPairRouteKeepsPair(facade))
     return 28;
 }
 
+if (!SmokeFastReadyBeatsUnreadyBigPairRoute(facade))
+{
+    Console.Error.WriteLine("fast_ready_beats_big_pair_route_smoke_failed");
+    return 281;
+}
+
+if (!SmokeBigPairRouteDoesNotOverrideLargeScoreGap())
+{
+    Console.Error.WriteLine("big_pair_route_large_score_gap_smoke_failed");
+    return 286;
+}
+
+if (!SmokePotentialFlushPrefersOffSuitDiscard(facade))
+{
+    Console.Error.WriteLine("potential_flush_prefers_off_suit_smoke_failed");
+    return 287;
+}
+
+if (!SmokeQuadTileGetsStrongPreservationPenalty())
+{
+    Console.Error.WriteLine("quad_tile_preservation_penalty_smoke_failed");
+    return 288;
+}
+
+if (!SmokeRoutePlanDiagnosticsAreReturned(facade))
+{
+    Console.Error.WriteLine("route_plan_diagnostics_smoke_failed");
+    return 282;
+}
+
+if (!SmokeRoutePlanFivePairsForbidsCalls(facade))
+{
+    Console.Error.WriteLine("route_plan_five_pairs_forbid_calls_smoke_failed");
+    return 283;
+}
+
+if (!SmokeRoutePlanThreePairsStaysFlexible(facade))
+{
+    Console.Error.WriteLine("route_plan_three_pairs_flexible_smoke_failed");
+    return 284;
+}
+
+if (!SmokeRoutePlanSevenPairsRejectsSelfGang(facade))
+{
+    Console.Error.WriteLine("route_plan_seven_pairs_reject_self_gang_smoke_failed");
+    return 285;
+}
+
 if (!SmokeAvoidsUnnecessaryTripletBreak(facade))
 {
     Console.Error.WriteLine("avoid_unnecessary_triplet_break_smoke_failed");
@@ -247,6 +415,12 @@ if (!SmokeBaoJiaoRecommendationLocksToLastDraw(facade))
 {
     Console.Error.WriteLine("bao_jiao_recommendation_lock_smoke_failed");
     return 33;
+}
+
+if (!SmokeBaoJiaoDeclarationUsesFacade(facade))
+{
+    Console.Error.WriteLine("bao_jiao_declaration_smoke_failed");
+    return 50;
 }
 
 if (!SmokeReadyPreservesCentralBoneFromSeedLive(facade))
@@ -312,6 +486,171 @@ static bool SmokeReasonableAnGang(NeijiangAiFacade facade)
     var result = facade.DecideSelfAction(state, false, new[] { gangTile }, Array.Empty<int>());
     Console.WriteLine($"an_gang_smoke_action={result.Action.ActionType} score={result.Action.Score} pass={result.ActionScores.GetValueOrDefault("pass")}");
     return result.Action.ActionType == NeijiangActionType.Gang;
+}
+
+static bool SmokeBaoJiaoSelfHuOverridesMandatoryGang(NeijiangAiFacade facade)
+{
+    var gangTile = NeijiangTileCodec.EncodeTileType(0, 4);
+    var hand = new[]
+    {
+        gangTile,
+        gangTile,
+        gangTile,
+        gangTile,
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(1, 2),
+        NeijiangTileCodec.EncodeTileType(1, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+    };
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 8, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    state.IsBaoJiao = true;
+    state.LastDrawTileType = gangTile;
+    state.IsReady[1] = true;
+
+    var result = facade.DecideSelfAction(
+        state,
+        canSelfHu: true,
+        anGangTileTypes: new[] { gangTile },
+        addGangTileTypes: Array.Empty<int>(),
+        addGangQiangGangCounts: null,
+        mandatoryGangTileTypes: new[] { gangTile });
+    Console.WriteLine($"bao_jiao_self_hu_action={result.Action.ActionType} subtype={result.GangSubtype} tile={result.Action.TileType}");
+    return result.Action.ActionType == NeijiangActionType.Hu
+        && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
+}
+
+static bool SmokeMandatorySelfBaoGangOwnedByCSharp(NeijiangAiFacade facade)
+{
+    var gangTile = NeijiangTileCodec.EncodeTileType(0, 4);
+    var hand = new[]
+    {
+        gangTile,
+        gangTile,
+        gangTile,
+        gangTile,
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(1, 2),
+        NeijiangTileCodec.EncodeTileType(1, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+    };
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 8, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    state.IsBaoJiao = true;
+    state.LastDrawTileType = gangTile;
+    state.IsReady[1] = true;
+
+    var result = facade.DecideSelfAction(
+        state,
+        canSelfHu: false,
+        anGangTileTypes: new[] { gangTile },
+        addGangTileTypes: Array.Empty<int>(),
+        addGangQiangGangCounts: null,
+        mandatoryGangTileTypes: new[] { gangTile });
+    Console.WriteLine($"mandatory_self_bao_gang_action={result.Action.ActionType} subtype={result.GangSubtype} tile={result.Action.TileType}");
+    return result.Action.ActionType == NeijiangActionType.Gang
+        && result.Action.TileType == gangTile
+        && result.GangSubtype == "an_gang"
+        && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
+}
+
+static bool SmokeBaoJiaoDiscardHuOverridesMandatoryGang(NeijiangAiFacade facade)
+{
+    var tile = NeijiangTileCodec.EncodeTileType(0, 6);
+    var hand = new[]
+    {
+        tile,
+        tile,
+        tile,
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 5),
+    };
+    var state = NeijiangStateCodec.FromRaw(2, 0, 0, 8, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    state.IsBaoJiao = true;
+    state.IsReady[2] = true;
+
+    var result = facade.DecideReaction(
+        state,
+        tile,
+        canHu: true,
+        canPeng: false,
+        canGang: true,
+        sourceSeat: 0,
+        reactionType: "discard",
+        forceLightweight: false,
+        mandatoryGang: true);
+    Console.WriteLine($"bao_jiao_discard_hu_action={result.Action.ActionType} tile={result.Action.TileType}");
+    return result.Action.ActionType == NeijiangActionType.Hu
+        && result.Action.TileType == tile
+        && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
+}
+
+static bool SmokeMandatoryReactionBaoGangOwnedByCSharp(NeijiangAiFacade facade)
+{
+    var tile = NeijiangTileCodec.EncodeTileType(0, 6);
+    var hand = new[]
+    {
+        tile,
+        tile,
+        tile,
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 5),
+    };
+    var state = NeijiangStateCodec.FromRaw(2, 0, 0, 8, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    state.IsBaoJiao = true;
+    state.IsReady[2] = true;
+
+    var result = facade.DecideReaction(
+        state,
+        tile,
+        canHu: false,
+        canPeng: false,
+        canGang: true,
+        sourceSeat: 0,
+        reactionType: "discard",
+        forceLightweight: false,
+        mandatoryGang: true);
+    Console.WriteLine($"mandatory_reaction_bao_gang_action={result.Action.ActionType} tile={result.Action.TileType}");
+    return result.Action.ActionType == NeijiangActionType.Gang
+        && result.Action.TileType == tile
+        && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
+}
+
+static bool SmokeBaoJiaoRejectsNonWinningPeng(NeijiangAiFacade facade)
+{
+    var tile = NeijiangTileCodec.EncodeTileType(1, 2);
+    var hand = new[]
+    {
+        tile,
+        tile,
+        NeijiangTileCodec.EncodeTileType(0, 1),
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 5),
+    };
+    var state = NeijiangStateCodec.FromRaw(2, 0, 0, 8, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    state.IsBaoJiao = true;
+    state.IsReady[2] = true;
+
+    var result = facade.DecideReaction(
+        state,
+        tile,
+        canHu: false,
+        canPeng: true,
+        canGang: false,
+        sourceSeat: 0,
+        reactionType: "discard",
+        forceLightweight: false,
+        mandatoryGang: false);
+    Console.WriteLine($"bao_jiao_reject_peng_action={result.Action.ActionType} scores={string.Join(",", result.ActionScores.Select(item => $"{item.Key}:{item.Value}"))}");
+    return result.Action.ActionType == NeijiangActionType.Pass
+        && result.ActionScores.GetValueOrDefault("peng", 0) < result.ActionScores.GetValueOrDefault("pass", int.MinValue)
+        && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
 }
 
 static bool SmokeBeliefReuseWithinReaction(NeijiangAiFacade facade)
@@ -454,6 +793,170 @@ static bool SmokeEarlyBigPairRouteKeepsPair(NeijiangAiFacade facade)
         && (threeTong.RoutesAfter.Contains("对对胡") || fiveTong.RoutesAfter.Contains("对对胡"));
 }
 
+static bool SmokeFastReadyBeatsUnreadyBigPairRoute(NeijiangAiFacade facade)
+{
+    var hand18 = NeijiangTileCodec.BuildCount18(new[] { 0, 0, 1, 1, 2, 2, 4, 5, 6, 10, 11, 12, 13, 14 });
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 16, hand18, new int[18]);
+    var result = facade.DecideDiscard(state);
+    var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
+    var unreadyCandidates = result.Candidates.Where(candidate => candidate.Shanten > 0).ToArray();
+    Console.WriteLine($"fast_ready_priority_tile={result.Action.TileType} shanten={selected.Shanten} wait={selected.WaitCount} reasons={string.Join('|', selected.Reasons)} top={string.Join(',', result.Candidates.Take(5).Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.WaitCount}"))}");
+    return selected.Shanten <= 0
+        && selected.WaitCount > 0
+        && unreadyCandidates.Length > 0
+        && selected.Reasons.Any(reason => reason.Contains("能下叫先下叫", StringComparison.Ordinal));
+}
+
+static bool SmokeBigPairRouteDoesNotOverrideLargeScoreGap()
+{
+    var method = typeof(NeijiangDecisionEngine).GetMethod(
+        "IsBetterDiscardCandidate",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    if (method is null)
+        return false;
+
+    var bigRouteButLowScore = new NeijiangCandidateDetail
+    {
+        TileType = 2,
+        Score = 1000,
+        Shanten = 1,
+        Danger = 74,
+        LiveUkeire = 3,
+        WaitCount = 0,
+        RoutesAfter = new[] { "七对" }
+    };
+    var ordinaryButClearlyBetter = new NeijiangCandidateDetail
+    {
+        TileType = 10,
+        Score = 3200,
+        Shanten = 1,
+        Danger = 18,
+        LiveUkeire = 10,
+        WaitCount = 0,
+        RoutesAfter = Array.Empty<string>()
+    };
+
+    var prefersBigRoute = (bool?)method.Invoke(null, new object[] { bigRouteButLowScore, ordinaryButClearlyBetter, 1 }) ?? true;
+    Console.WriteLine($"big_pair_route_gap_prefers_big={prefersBigRoute} big={bigRouteButLowScore.Score}/{bigRouteButLowScore.Danger} ordinary={ordinaryButClearlyBetter.Score}/{ordinaryButClearlyBetter.Danger}");
+    return !prefersBigRoute;
+}
+
+static bool SmokePotentialFlushPrefersOffSuitDiscard(NeijiangAiFacade facade)
+{
+    var hand18 = NeijiangTileCodec.BuildCount18(new[]
+    {
+        0, 1, 2, 3, 4, 5, 6, 7, 7, 8, 8,
+        9, 13, 16
+    });
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 18, hand18, new int[18]);
+    var result = facade.DecideDiscard(state);
+    var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
+    var offSuitCandidates = result.Candidates
+        .Where(candidate => candidate.TileType >= 9)
+        .Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.RoutePlanPrimary}")
+        .ToArray();
+    var targetSuitCandidates = result.Candidates
+        .Where(candidate => candidate.TileType < 9)
+        .Take(4)
+        .Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.RoutePlanPrimary}")
+        .ToArray();
+
+    Console.WriteLine($"potential_flush_tile={result.Action.TileType} primary={result.RoutePlan.PrimaryRoute} selected_route={selected.RoutePlanPrimary} off={string.Join(',', offSuitCandidates)} target_top={string.Join(',', targetSuitCandidates)} reasons={string.Join('|', selected.Reasons)}");
+    return result.Action.TileType >= 9
+        && NeijiangRoutePlanEngine.IsFlushRoute(result.RoutePlan.PrimaryRoute)
+        && selected.Reasons.Any(reason => reason.Contains("清色路线", StringComparison.Ordinal));
+}
+
+static bool SmokeQuadTileGetsStrongPreservationPenalty()
+{
+    var method = typeof(NeijiangDecisionEngine).GetMethod(
+        "EvaluateSetPreservationAdjustment",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    if (method is null)
+        return false;
+
+    var before = new int[18];
+    before[6] = 4;
+    var after = (int[])before.Clone();
+    after[6] = 3;
+
+    var result = method.Invoke(null, new object[] { before, after, 6, 1 });
+    if (result is null)
+        return false;
+    var scoreProperty = result.GetType().GetProperty("Score");
+    var reasonsProperty = result.GetType().GetProperty("Reasons");
+    if (scoreProperty is null)
+        return false;
+
+    var score = Convert.ToDouble(scoreProperty.GetValue(result));
+    var reasons = reasonsProperty?.GetValue(result) as IEnumerable<string> ?? Array.Empty<string>();
+    Console.WriteLine($"quad_preservation_score={score:F1} reasons={string.Join('|', reasons)}");
+    return score <= -16.0
+        && reasons.Any(reason => reason.Contains("四张", StringComparison.Ordinal) || reason.Contains("归", StringComparison.Ordinal));
+}
+
+static bool SmokeRoutePlanDiagnosticsAreReturned(NeijiangAiFacade facade)
+{
+    var hand18 = NeijiangTileCodec.BuildCount18(new[] { 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 9, 10, 11, 12 });
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 17, hand18, new int[18]);
+    var result = facade.DecideDiscard(state);
+    var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
+    Console.WriteLine($"route_plan_diag primary={result.RoutePlan.PrimaryRoute} secondary={string.Join('/', result.RoutePlan.SecondaryRoutes)} selected_route={selected.RoutePlanPrimary} route_score={selected.RoutePlanScore} weights={string.Join(',', result.RoutePlan.RouteWeights.Select(item => $"{item.Key}:{item.Value}"))}");
+    return !string.IsNullOrWhiteSpace(result.RoutePlan.PrimaryRoute)
+        && result.RoutePlan.RouteWeights.Count > 0
+        && !string.IsNullOrWhiteSpace(selected.RoutePlanPrimary)
+        && selected.Reasons.Any(reason => reason.Contains("路线", StringComparison.Ordinal));
+}
+
+static bool SmokeRoutePlanFivePairsForbidsCalls(NeijiangAiFacade facade)
+{
+    var hand18 = new int[18];
+    hand18[0] = 3; // 1条 triplet: pair route plus visible gang chance.
+    hand18[1] = 2;
+    hand18[2] = 2;
+    hand18[3] = 2;
+    hand18[4] = 2;
+    hand18[5] = 1;
+    hand18[14] = 1;
+    var state = NeijiangStateCodec.FromRaw(2, 0, 2, 17, hand18, new int[18]);
+    var result = facade.DecideReaction(state, 0, false, true, true, 1, "discard");
+    Console.WriteLine($"route_plan_five_pairs_call action={result.Action.ActionType} pass={result.ActionScores.GetValueOrDefault("pass")} peng={result.ActionScores.GetValueOrDefault("peng")} gang={result.ActionScores.GetValueOrDefault("gang")} reasons={string.Join('|', result.Reasons)}");
+    return result.Action.ActionType == NeijiangActionType.Pass
+        && result.ActionScores.GetValueOrDefault("peng") < result.ActionScores.GetValueOrDefault("pass")
+        && result.ActionScores.GetValueOrDefault("gang") < result.ActionScores.GetValueOrDefault("pass")
+        && result.Reasons.Any(reason => reason.Contains("七对路线", StringComparison.Ordinal));
+}
+
+static bool SmokeRoutePlanThreePairsStaysFlexible(NeijiangAiFacade facade)
+{
+    var hand18 = NeijiangTileCodec.BuildCount18(new[] { 0, 0, 1, 1, 2, 2, 3, 4, 5, 9, 10, 11, 12, 13 });
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 17, hand18, new int[18]);
+    var result = facade.DecideDiscard(state);
+    var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
+    Console.WriteLine($"route_plan_three_pairs primary={result.RoutePlan.PrimaryRoute} selected={result.Action.TileType} selected_route={selected.RoutePlanPrimary} reasons={string.Join('|', selected.Reasons)}");
+    return result.RoutePlan.PrimaryRoute != "暗七对"
+        && result.RoutePlan.PrimaryRoute != "龙七对"
+        && selected.Reasons.Any(reason => reason.Contains("平胡", StringComparison.Ordinal) || reason.Contains("速度", StringComparison.Ordinal) || reason.Contains("下叫", StringComparison.Ordinal));
+}
+
+static bool SmokeRoutePlanSevenPairsRejectsSelfGang(NeijiangAiFacade facade)
+{
+    var hand18 = new int[18];
+    hand18[0] = 4;
+    hand18[1] = 2;
+    hand18[2] = 2;
+    hand18[3] = 2;
+    hand18[4] = 2;
+    hand18[5] = 1;
+    hand18[14] = 1;
+    var state = NeijiangStateCodec.FromRaw(2, 0, 2, 17, hand18, new int[18]);
+    var result = facade.DecideSelfAction(state, false, new[] { 0 }, Array.Empty<int>());
+    Console.WriteLine($"route_plan_self_gang action={result.Action.ActionType} pass={result.ActionScores.GetValueOrDefault("pass")} gang={result.ActionScores.GetValueOrDefault("an_gang:0")} reasons={string.Join('|', result.Reasons)}");
+    return result.Action.ActionType == NeijiangActionType.Pass
+        && result.ActionScores.GetValueOrDefault("an_gang:0") < result.ActionScores.GetValueOrDefault("pass")
+        && result.Reasons.Any(reason => reason.Contains("七对路线", StringComparison.Ordinal));
+}
+
 static bool SmokeAvoidsUnnecessaryTripletBreak(NeijiangAiFacade facade)
 {
     var hand18 = new[] { 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 1, 2, 1, 1, 3 };
@@ -541,6 +1044,37 @@ static bool SmokeReactionPrefersGangWhenPengWouldRediscard(NeijiangAiFacade faca
     Console.WriteLine($"peng_rediscard_reaction_action={result.Action.ActionType} gang={result.ActionScores.GetValueOrDefault("gang")} peng={result.ActionScores.GetValueOrDefault("peng")}");
     return result.Action.ActionType == NeijiangActionType.Gang
         && result.ActionScores.GetValueOrDefault("gang") > result.ActionScores.GetValueOrDefault("peng");
+}
+
+static bool SmokeHellChallengePengRediscardPenaltyIsDecisive()
+{
+    var aiHand = new[] { 0, 0, 0, 1, 1, 2, 0, 3, 0, 0, 1, 1, 0, 1, 2, 0, 0, 1 };
+    var state = NeijiangStateCodec.FromRaw(3, 2, 3, 16, aiHand, new int[18]);
+    var allHands = new[]
+    {
+        new[] { 1, 1, 0, 0, 1, 2, 2, 0, 1, 2, 0, 1, 2, 0, 0, 0, 0, 0 },
+        new[] { 0, 1, 0, 0, 0, 0, 1, 0, 2, 1, 0, 1, 0, 1, 1, 1, 1, 0 },
+        new[] { 0, 0, 0, 3, 0, 0, 1, 0, 0, 0, 2, 0, 1, 1, 0, 0, 0, 2 },
+        aiHand
+    };
+    var exactWall = new[] { 0, 2, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1 };
+
+    var result = new NeijiangHellChallengeReactionEngine().DecideReaction(
+        state,
+        reactionTileType: 7,
+        canHu: false,
+        canPeng: true,
+        canGang: true,
+        sourceSeat: 1,
+        reactionType: "discard",
+        allHands18: allHands,
+        exactWall18: exactWall,
+        currentScores: new[] { -1, 0, -2, 3 });
+
+    Console.WriteLine($"hell_challenge_peng_rediscard_decisive action={result.Action.ActionType} gang={result.ActionScores.GetValueOrDefault("gang", int.MinValue)} peng={result.ActionScores.GetValueOrDefault("peng", int.MinValue)} penalty={result.ActionScores.GetValueOrDefault("peng_rediscard_same_tile_penalty", 0)}");
+    return result.Action.ActionType == NeijiangActionType.Gang
+        && result.ActionScores.GetValueOrDefault("peng_rediscard_same_tile_penalty", 0) <= -5000
+        && result.ActionScores.GetValueOrDefault("gang", int.MinValue) > result.ActionScores.GetValueOrDefault("peng", int.MinValue);
 }
 
 static bool SmokeReactionPassesWideNoSpeedPengFromSeedLive(NeijiangAiFacade facade)
@@ -890,6 +1424,30 @@ static bool SmokeBaoJiaoRecommendationLocksToLastDraw(NeijiangAiFacade facade)
         && result.Candidates.Count == 1
         && result.Candidates[0].TileType == 13;
 }
+
+
+static bool SmokeBaoJiaoDeclarationUsesFacade(NeijiangAiFacade facade)
+{
+    var hand = new int[18];
+    foreach (var tile in new[] { 0, 0, 0, 1, 1, 1, 2, 2, 2, 7, 7, 7, 13 })
+        hand[tile]++;
+    var remaining = Enumerable.Repeat(3, 18).ToArray();
+    remaining[4] = 4;
+    remaining[13] = 2;
+    var state = NeijiangStateCodec.FromRaw(2, 1, 1, 19, hand, new int[18], remaining);
+    var result = facade.DecideBaoJiaoDeclaration(
+        state,
+        new[] { 4, 13 },
+        new[] { new NeijiangBaoGangCandidate("tiao_8", 7, "triplet_declare") },
+        42);
+
+    Console.WriteLine($"bao_jiao_declare={result.Declare} keys={string.Join(",", result.SelectedBaoGangKeys)} score={result.Score}");
+    return result.Declare
+        && result.SelectedBaoGangKeys.Contains("tiao_8")
+        && result.CandidateScores.ContainsKey("tiao_8")
+        && result.Reasons.Any(reason => reason.Contains("C#报叫评分"));
+}
+
 
 static bool SmokeReadyPreservesCentralBoneFromSeedLive(NeijiangAiFacade facade)
 {
@@ -1332,6 +1890,402 @@ static bool SmokeHellOracleRaisesPressureWhenHumanLeads()
         && leading.HumanPressureLevel == 4
         && leading.FairFeedsHumanPeng
         && !leading.OracleFeedsHumanPeng;
+}
+
+static bool SmokeHellChallengeDirectDoesNotNeedFairRecommendation()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 0, 0, 0, 3, 3, 3, 6, 6, 6, 10, 10, 10, 17, 5 })
+        aiHand[tile]++;
+    var visible = new int[18];
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 18, aiHand, visible);
+
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0][5] = 2;
+    var exactWall = Enumerable.Repeat(1, 18).ToArray();
+    exactWall[5] = 3;
+    exactWall[17] = 1;
+
+    var result = new NeijiangHellChallengeEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        currentScores: new[] { 26, 18, 4, 2 });
+
+    Console.WriteLine($"hell_challenge_direct_tile={result.Action.TileType} category={result.Category} pressure={result.HumanPressureLevel} feeds_human_peng={result.OracleFeedsHumanPeng}");
+    return result.Action.TileType != 5
+        && result.Category == "hell_challenge_direct"
+        && result.FairTileType == -1
+        && result.HumanPressureLevel == 4
+        && !result.OracleFeedsHumanPeng;
+}
+
+static bool SmokeHellChallengeReactionBlocksHumanMomentum()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 5, 5, 1, 2, 3, 6, 7, 8, 10, 11, 12, 14, 15 })
+        aiHand[tile]++;
+    var visible = new int[18];
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 18, aiHand, visible);
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0][4] = 1;
+    allHands[0][6] = 1;
+    allHands[0][7] = 1;
+    var exactWall = Enumerable.Repeat(1, 18).ToArray();
+    exactWall[5] = 2;
+
+    var result = new NeijiangHellChallengeReactionEngine().DecideReaction(
+        state,
+        reactionTileType: 5,
+        canHu: false,
+        canPeng: true,
+        canGang: false,
+        sourceSeat: 0,
+        reactionType: "discard",
+        allHands18: allHands,
+        exactWall18: exactWall,
+        currentScores: new[] { 28, 8, 6, 4 });
+
+    Console.WriteLine($"hell_challenge_reaction_action={result.Action.ActionType} score={result.Action.Score} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.ActionType == NeijiangActionType.Peng
+        && result.ActionScores.ContainsKey("team_block_human")
+        && result.ActionScores["team_block_human"] > 0
+        && result.Reasons.Any(reason => reason.Contains("围剿"));
+}
+
+static bool SmokeHellChallengeTeamPlanCoordinatesSeats()
+{
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 18, new int[18], new int[18]);
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    var exactWall = Enumerable.Repeat(2, 18).ToArray();
+    var currentScores = new[] { 32, 16, 8, 4 };
+
+    var plan = NeijiangHellChallengeTeamPlanner.BuildPlan(state, allHands, exactWall, currentScores);
+
+    Console.WriteLine($"hell_challenge_team_plan pressure={plan.HumanPressureLevel} seats={string.Join(",", plan.SeatPlans.Select(item => $"{item.Seat}:{item.Role}:{item.PressureBonus}"))}");
+    return plan.TargetSeat == 0
+        && plan.HumanPressureLevel == 4
+        && plan.SeatPlans.Count == 3
+        && plan.SeatPlans.Any(item => item.Seat == 1 && item.Role == "lead_suppressor" && item.PressureBonus > 0)
+        && plan.SeatPlans.Any(item => item.Seat == 2 && item.Role == "interceptor")
+        && plan.SeatPlans.Any(item => item.Seat == 3 && item.Role == "catch_up")
+        && plan.Reasons.Any(reason => reason.Contains("三家协作"));
+}
+
+static bool SmokeHellChallengeDiscardUsesTeamPlan()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 5, 5, 1, 2, 3, 6, 7, 8, 10, 11, 12, 14, 15, 16 })
+        aiHand[tile]++;
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 18, aiHand, new int[18]);
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0][5] = 2;
+    var exactWall = Enumerable.Repeat(2, 18).ToArray();
+
+    var result = new NeijiangHellChallengeEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        currentScores: new[] { 32, 16, 8, 4 });
+
+    Console.WriteLine($"hell_challenge_discard_team_plan tile={result.Action.TileType} role={result.TeamRole} bonus={result.TeamPressureBonus} reasons={string.Join("|", result.Reasons)}");
+    return result.TeamRole == "lead_suppressor"
+        && result.TeamPressureBonus > 0
+        && result.Reasons.Any(reason => reason.Contains("三家协作"));
+}
+
+static bool SmokeHellChallengeReactionUsesTeamPlan()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 5, 5, 1, 2, 3, 6, 7, 8, 10, 11, 12, 14, 15 })
+        aiHand[tile]++;
+    var state = NeijiangStateCodec.FromRaw(2, 0, 2, 18, aiHand, new int[18]);
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    var exactWall = Enumerable.Repeat(1, 18).ToArray();
+    exactWall[5] = 2;
+
+    var result = new NeijiangHellChallengeReactionEngine().DecideReaction(
+        state,
+        reactionTileType: 5,
+        canHu: false,
+        canPeng: true,
+        canGang: false,
+        sourceSeat: 0,
+        reactionType: "discard",
+        allHands18: allHands,
+        exactWall18: exactWall,
+        currentScores: new[] { 32, 16, 8, 4 });
+
+    Console.WriteLine($"hell_challenge_reaction_team_plan action={result.Action.ActionType} scores={string.Join(",", result.ActionScores.Select(item => $"{item.Key}:{item.Value}"))} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.ActionType == NeijiangActionType.Peng
+        && result.ActionScores.TryGetValue("team_plan_pressure", out var planPressure)
+        && planPressure > 0
+        && result.Reasons.Any(reason => reason.Contains("三家协作"));
+}
+
+static bool SmokeHellChallengePassesNonHumanMiddlePengUnlessReady()
+{
+    var aiHand = new[] { 0, 0, 0, 1, 1, 2, 0, 3, 0, 0, 1, 1, 0, 1, 2, 0, 0, 1 };
+    var state = NeijiangStateCodec.FromRaw(3, 2, 3, 16, aiHand, new int[18]);
+    var allHands = new[]
+    {
+        new[] { 1, 1, 0, 0, 1, 2, 2, 0, 1, 2, 0, 1, 2, 0, 0, 0, 0, 0 },
+        new[] { 0, 1, 0, 0, 0, 0, 1, 0, 2, 1, 0, 1, 0, 1, 1, 1, 1, 0 },
+        new[] { 0, 0, 0, 3, 0, 0, 1, 0, 0, 0, 2, 0, 1, 1, 0, 0, 0, 2 },
+        aiHand
+    };
+    var exactWall = new[] { 0, 2, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1 };
+
+    var result = new NeijiangHellChallengeReactionEngine().DecideReaction(
+        state,
+        reactionTileType: 5,
+        canHu: false,
+        canPeng: true,
+        canGang: false,
+        sourceSeat: 1,
+        reactionType: "discard",
+        allHands18: allHands,
+        exactWall18: exactWall,
+        currentScores: new[] { -5, 8, 8, -11 });
+
+    Console.WriteLine($"hell_challenge_non_human_middle_peng_action={result.Action.ActionType} pass={result.ActionScores.GetValueOrDefault("pass", int.MinValue)} peng={result.ActionScores.GetValueOrDefault("peng", int.MinValue)} current={result.CurrentShanten}/{result.CurrentLiveUkeire} after={result.ShantenAfter}/{result.LiveUkeireAfter} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.ActionType == NeijiangActionType.Pass
+        && result.ShantenAfter > 0
+        && result.ActionScores.GetValueOrDefault("peng", int.MaxValue) < result.ActionScores.GetValueOrDefault("pass", int.MinValue)
+        && result.ActionScores.GetValueOrDefault("middle_peng_shape_penalty", 0) <= -460;
+}
+
+static bool SmokeHellChallengeAllowsHumanPengToKeepReady()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 16, 16, 17, 17 })
+        aiHand[tile]++;
+    var state = NeijiangStateCodec.FromRaw(3, 0, 3, 18, aiHand, new int[18]);
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0][5] = 2;
+    var exactWall = Enumerable.Repeat(0, 18).ToArray();
+    exactWall[16] = 3;
+    exactWall[17] = 1;
+
+    var result = new NeijiangHellChallengeEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        currentScores: new[] { 32, 16, 8, 4 });
+
+    Console.WriteLine($"hell_challenge_peng_interaction_tile={result.Action.TileType} feeds_peng={result.OracleFeedsHumanPeng} ready={result.ExactKeepsReady} role={result.TeamRole} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.TileType == 5
+        && result.OracleFeedsHumanPeng
+        && result.ExactKeepsReady
+        && result.Reasons.Any(reason => reason.Contains("互动保真"));
+}
+
+static bool SmokeHellChallengeHonorsBaoJiaoDiscardRoute()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 16, 16, 17, 17 })
+        aiHand[tile]++;
+    var state = NeijiangStateCodec.FromRaw(3, 0, 3, 12, aiHand, new int[18]);
+    state.IsBaoJiao = true;
+    state.IsReady[3] = true;
+    state.LastDrawTileType = 17;
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0][5] = 2;
+    var exactWall = Enumerable.Repeat(0, 18).ToArray();
+    exactWall[16] = 3;
+    exactWall[17] = 1;
+
+    var result = new NeijiangHellChallengeEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        currentScores: new[] { 32, 16, 8, 4 });
+
+    Console.WriteLine($"hell_challenge_bao_jiao_discard_tile={result.Action.TileType} category={result.Category} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.TileType == 17
+        && result.Category == "bao_jiao_route"
+        && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
+}
+
+static bool SmokeHellChallengeHonorsBaoJiaoReactionRoute()
+{
+    var tile = NeijiangTileCodec.EncodeTileType(1, 2);
+    var hand = new[]
+    {
+        tile,
+        tile,
+        NeijiangTileCodec.EncodeTileType(0, 1),
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 5),
+    };
+    var state = NeijiangStateCodec.FromRaw(2, 0, 0, 8, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    state.IsBaoJiao = true;
+    state.IsReady[2] = true;
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    var exactWall = Enumerable.Repeat(1, 18).ToArray();
+
+    var result = new NeijiangHellChallengeReactionEngine().DecideReaction(
+        state,
+        reactionTileType: tile,
+        canHu: false,
+        canPeng: true,
+        canGang: false,
+        sourceSeat: 0,
+        reactionType: "discard",
+        allHands18: allHands,
+        exactWall18: exactWall,
+        currentScores: new[] { 32, 16, 8, 4 });
+
+    Console.WriteLine($"hell_challenge_bao_jiao_reaction_action={result.Action.ActionType} scores={string.Join(",", result.ActionScores.Select(item => $"{item.Key}:{item.Value}"))} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.ActionType == NeijiangActionType.Pass
+        && result.ActionScores.GetValueOrDefault("peng", 0) < result.ActionScores.GetValueOrDefault("pass", int.MinValue)
+        && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
+}
+
+static bool SmokeHellChallengeAllowsLatePengOnlyWhenHumanReady()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 16, 16, 17, 17 })
+        aiHand[tile]++;
+    var state = NeijiangStateCodec.FromRaw(3, 0, 3, 6, aiHand, new int[18]);
+    state.IsReady[0] = true;
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0][5] = 2;
+    var exactWall = Enumerable.Repeat(0, 18).ToArray();
+    exactWall[16] = 3;
+    exactWall[17] = 1;
+
+    var result = new NeijiangHellChallengeEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        currentScores: new[] { 32, 16, 8, 4 });
+
+    Console.WriteLine($"hell_challenge_late_peng_only_tile={result.Action.TileType} feeds_peng={result.OracleFeedsHumanPeng} ready={result.ExactKeepsReady} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.TileType == 5
+        && result.OracleFeedsHumanPeng
+        && !result.OracleFeedsHumanHu
+        && !result.OracleFeedsHumanGang
+        && result.ExactKeepsReady
+        && result.Reasons.Any(reason => reason.Contains("尾盘只给碰不点炮", StringComparison.Ordinal));
+}
+
+static bool SmokeHellChallengeAllowsMidgamePengWhenHumanNotReady()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 16, 16, 17, 17 })
+        aiHand[tile]++;
+    var state = NeijiangStateCodec.FromRaw(3, 0, 3, 12, aiHand, new int[18]);
+    state.IsReady[0] = false;
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0][5] = 2;
+    var exactWall = Enumerable.Repeat(0, 18).ToArray();
+    exactWall[16] = 3;
+    exactWall[17] = 1;
+
+    var result = new NeijiangHellChallengeEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        currentScores: new[] { 32, 16, 8, 4 });
+
+    Console.WriteLine($"hell_challenge_mid_peng_tile={result.Action.TileType} feeds_peng={result.OracleFeedsHumanPeng} ready={result.ExactKeepsReady} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.TileType == 5
+        && result.OracleFeedsHumanPeng
+        && !result.OracleFeedsHumanHu
+        && !result.OracleFeedsHumanGang
+        && result.ExactKeepsReady
+        && result.Reasons.Any(reason => reason.Contains("中期本家未听", StringComparison.Ordinal));
+}
+
+static bool SmokeHellChallengePrefersDirectGangOverPeng()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 7, 7, 7, 1, 2, 3, 4, 5, 6, 10, 11, 12, 14 })
+        aiHand[tile]++;
+    var state = NeijiangStateCodec.FromRaw(3, 0, 3, 13, aiHand, new int[18]);
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    var exactWall = Enumerable.Repeat(1, 18).ToArray();
+    exactWall[7] = 0;
+
+    var result = new NeijiangHellChallengeReactionEngine().DecideReaction(
+        state,
+        reactionTileType: 7,
+        canHu: false,
+        canPeng: true,
+        canGang: true,
+        sourceSeat: 0,
+        reactionType: "discard",
+        allHands18: allHands,
+        exactWall18: exactWall,
+        currentScores: new[] { 30, 12, 8, 2 });
+
+    Console.WriteLine($"hell_challenge_direct_gang_action={result.Action.ActionType} gang={result.ActionScores.GetValueOrDefault("gang", int.MinValue)} peng={result.ActionScores.GetValueOrDefault("peng", int.MinValue)} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.ActionType == NeijiangActionType.Gang
+        && result.ActionScores.GetValueOrDefault("gang", int.MinValue) > result.ActionScores.GetValueOrDefault("peng", int.MinValue)
+        && result.Reasons.Any(reason => reason.Contains("明杠", StringComparison.Ordinal));
+}
+
+static bool SmokeHellChallengeGangsWhenPengWouldRediscardClaimedTile()
+{
+    var aiHand = new[] { 0, 0, 0, 1, 1, 2, 0, 3, 0, 0, 1, 1, 0, 1, 2, 0, 0, 1 };
+    var state = NeijiangStateCodec.FromRaw(3, 2, 3, 16, aiHand, new int[18]);
+    var allHands = new[]
+    {
+        new[] { 1, 1, 0, 0, 1, 2, 2, 0, 1, 2, 0, 1, 2, 0, 0, 0, 0, 0 },
+        new[] { 0, 1, 0, 0, 0, 0, 1, 0, 2, 1, 0, 1, 0, 1, 1, 1, 1, 0 },
+        new[] { 0, 0, 0, 3, 0, 0, 1, 0, 0, 0, 2, 0, 1, 1, 0, 0, 0, 2 },
+        aiHand
+    };
+    var exactWall = new[] { 0, 2, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1 };
+
+    var result = new NeijiangHellChallengeReactionEngine().DecideReaction(
+        state,
+        reactionTileType: 7,
+        canHu: false,
+        canPeng: true,
+        canGang: true,
+        sourceSeat: 1,
+        reactionType: "discard",
+        allHands18: allHands,
+        exactWall18: exactWall,
+        currentScores: new[] { -1, 0, -2, 3 });
+
+    Console.WriteLine($"hell_challenge_peng_rediscard_tile_action={result.Action.ActionType} gang={result.ActionScores.GetValueOrDefault("gang", int.MinValue)} peng={result.ActionScores.GetValueOrDefault("peng", int.MinValue)} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.ActionType == NeijiangActionType.Gang
+        && result.ActionScores.GetValueOrDefault("peng", 0) < result.ActionScores.GetValueOrDefault("gang", 0);
+}
+
+static bool SmokeHellChallengeAllowsPengWhenGangHurtsShape()
+{
+    var aiHand = new[] { 1, 0, 1, 0, 1, 1, 2, 3, 1, 0, 0, 0, 0, 0, 0, 2, 0, 1 };
+    var state = NeijiangStateCodec.FromRaw(3, 2, 3, 9, aiHand, new int[18]);
+    var allHands = new[]
+    {
+        new[] { 0, 2, 1, 1, 1, 0, 1, 0, 2, 1, 2, 1, 0, 2, 0, 0, 0, 1 },
+        new[] { 0, 1, 0, 1, 1, 3, 0, 0, 0, 1, 0, 1, 3, 0, 2, 0, 0, 0 },
+        new[] { 0, 0, 1, 0, 0, 0, 3, 0, 0, 0, 2, 0, 1, 1, 1, 0, 1, 0 },
+        aiHand
+    };
+    var exactWall = new[] { 1, 2, 2, 1, 1, 0, 0, 0, 1, 2, 0, 2, 1, 0, 0, 2, 1, 0 };
+
+    var result = new NeijiangHellChallengeReactionEngine().DecideReaction(
+        state,
+        reactionTileType: 7,
+        canHu: false,
+        canPeng: true,
+        canGang: true,
+        sourceSeat: 2,
+        reactionType: "discard",
+        allHands18: allHands,
+        exactWall18: exactWall,
+        currentScores: new[] { 10, -2, 7, -5 });
+
+    Console.WriteLine($"hell_challenge_peng_shape_action={result.Action.ActionType} gang={result.ActionScores.GetValueOrDefault("gang", int.MinValue)} peng={result.ActionScores.GetValueOrDefault("peng", int.MinValue)} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.ActionType == NeijiangActionType.Peng
+        && result.ActionScores.GetValueOrDefault("peng", int.MinValue) > result.ActionScores.GetValueOrDefault("gang", int.MinValue);
 }
 
 static bool SmokeLateWallRiskRegression(NeijiangAiFacade facade)
