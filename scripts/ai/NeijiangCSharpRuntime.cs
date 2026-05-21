@@ -950,6 +950,9 @@ public partial class NeijiangCSharpRuntime : Node
         if (payload.HasHu is { Length: 4 }) Array.Copy(payload.HasHu, state.HasHu, 4);
         state.IsBaoJiao = payload.IsBaoJiao;
         state.LastDrawTileType = payload.LastDrawTileType;
+        state.BaoGangTileTypes = payload.BaoGangTileTypes
+            .Where(tile => tile is >= 0 and < 18)
+            .ToHashSet();
         return state;
     }
 
@@ -1128,6 +1131,7 @@ public partial class NeijiangCSharpRuntime : Node
         public bool[] HasHu { get; set; } = Array.Empty<bool>();
         public bool IsBaoJiao { get; set; }
         public int LastDrawTileType { get; set; } = -1;
+        public List<int> BaoGangTileTypes { get; set; } = new();
         public bool MobileSpeedMode { get; set; }
         public bool CompactResult { get; set; }
     }

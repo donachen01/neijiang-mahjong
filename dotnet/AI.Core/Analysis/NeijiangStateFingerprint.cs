@@ -16,6 +16,7 @@ public static class NeijiangStateFingerprint
             .Append("|phase=").Append(state.Phase)
             .Append("|selfBaoJiao=").Append(state.IsBaoJiao ? 1 : 0)
             .Append("|lastDraw=").Append(state.LastDrawTileType)
+            .Append("|baoGang=").Append(string.Join(',', state.BaoGangTileTypes.OrderBy(tile => tile)))
             .Append("|preferCsharp=").Append(preferCsharp ? 1 : 0)
             .Append("|light=").Append(forceLightweight ? 1 : 0);
 

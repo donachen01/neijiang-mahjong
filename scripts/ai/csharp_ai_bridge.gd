@@ -256,6 +256,11 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 	var last_draw: Dictionary = table_state.get("last_draw_tile", {})
 	if int(last_draw.get("seat", -1)) == self_seat:
 		last_draw_tile_type = tile_codec.tile_type(last_draw.get("tile", {}), active_suits)
+	var bao_gang_tile_types: Array[int] = []
+	for key_value in Array(self_player.get("bao_gang_tiles", [])):
+		var tile_type := _tile_type_from_key(str(key_value), active_suits)
+		if tile_type >= 0 and not bao_gang_tile_types.has(tile_type):
+			bao_gang_tile_types.append(tile_type)
 	var hand18: PackedInt32Array = tile_codec.build_count_array(hand_tiles, active_suits)
 	var visible18: PackedInt32Array = tile_codec.build_visible_count_array(players, hand_tiles, active_suits, self_seat)
 	var remaining18: PackedInt32Array = tile_codec.build_remaining_count_array(hand_tiles, players, active_suits, self_seat)
@@ -301,6 +306,7 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 		"hasHu": _byte_array_to_bool_array(has_hu),
 		"isBaoJiao": bool(self_player.get("bao_jiao", false)),
 		"lastDrawTileType": last_draw_tile_type,
+		"baoGangTileTypes": bao_gang_tile_types,
 	}
 
 
@@ -369,6 +375,13 @@ func _byte_array_to_bool_array(bytes: PackedByteArray) -> Array:
 	for value in bytes:
 		result.append(int(value) != 0)
 	return result
+
+
+func _tile_type_from_key(key: String, active_suits: Array) -> int:
+	var parts := key.split("_", false)
+	if parts.size() != 2:
+		return -1
+	return tile_codec.encode_tile(str(parts[0]), int(parts[1]), active_suits)
 
 
 func _ensure_host_connection() -> bool:

@@ -787,6 +787,9 @@ static NeijiangStateView BuildState(DiscardPayload payload)
     if (payload.HasHu is { Length: 4 }) Array.Copy(payload.HasHu, state.HasHu, 4);
     state.IsBaoJiao = payload.IsBaoJiao;
     state.LastDrawTileType = payload.LastDrawTileType;
+    state.BaoGangTileTypes = payload.BaoGangTileTypes
+        .Where(tile => tile is >= 0 and < 18)
+        .ToHashSet();
     return state;
 }
 
@@ -1025,6 +1028,7 @@ internal class DiscardPayload
     public bool[]? HasHu { get; init; }
     public bool IsBaoJiao { get; init; }
     public int LastDrawTileType { get; init; } = -1;
+    public List<int> BaoGangTileTypes { get; init; } = new();
     public bool MobileSpeedMode { get; init; }
     public bool CompactResult { get; init; }
 }

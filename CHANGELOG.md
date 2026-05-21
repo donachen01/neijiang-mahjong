@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.49 - 2026-05-21
+
+- Fixed reported bao-gang stalls by sending the declared `bao_gang_tiles` whitelist to C# as `baoGangTileTypes`.
+- C# now independently forces reported bao-gang for both self-draw gang and discard-reaction gang, even if the frontend mandatory marker is missing.
+- Added regression evidence for the two suspected stuck cases: reported self-draw an-gang and reported reaction melded gang.
+
 ## 1.0.42 - 2026-05-20
 
 - Reworked the bao-jiao AI stall fix so the frontend no longer substitutes a discard decision; it remains a legality guard and rejects illegal original-hand discards.

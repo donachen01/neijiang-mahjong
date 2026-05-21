@@ -24,11 +24,17 @@ public sealed class NeijiangReactionDecisionEngine
         bool forceLightweight = false,
         bool mandatoryGang = false)
     {
-        var baoJiaoDecision = _baoJiaoAction.TryDecideReaction(state, reactionTileType, canHu, canPeng, canGang, mandatoryGang);
+        var resolvedMandatoryGang = mandatoryGang
+            || state.IsBaoJiao
+                && canGang
+                && reactionTileType is >= 0 and < 18
+                && state.BaoGangTileTypes.Contains(reactionTileType)
+                && state.Hand18[reactionTileType] >= 3;
+        var baoJiaoDecision = _baoJiaoAction.TryDecideReaction(state, reactionTileType, canHu, canPeng, canGang, resolvedMandatoryGang);
         if (baoJiaoDecision is not null)
             return baoJiaoDecision;
 
-        if (mandatoryGang && canGang && reactionTileType is >= 0 and < 18 && state.Hand18[reactionTileType] >= 3)
+        if (resolvedMandatoryGang && canGang && reactionTileType is >= 0 and < 18 && state.Hand18[reactionTileType] >= 3)
         {
             return new NeijiangReactionDecisionResult
             {

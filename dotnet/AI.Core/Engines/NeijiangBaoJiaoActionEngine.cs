@@ -89,7 +89,8 @@ public sealed class NeijiangBaoJiaoActionEngine
             };
         }
 
-        var mandatory = BuildMandatoryGangResult(state, anGangTileTypes, addGangTileTypes, mandatoryGangTileTypes);
+        var resolvedMandatory = ResolveMandatorySelfGangTileTypes(state, anGangTileTypes, addGangTileTypes, mandatoryGangTileTypes);
+        var mandatory = BuildMandatoryGangResult(state, anGangTileTypes, addGangTileTypes, resolvedMandatory);
         if (mandatory is not null)
             return mandatory;
 
@@ -137,7 +138,8 @@ public sealed class NeijiangBaoJiaoActionEngine
             };
         }
 
-        if (mandatoryGang && canGang && reactionTileType is >= 0 and < 18 && state.Hand18[reactionTileType] >= 3)
+        var resolvedMandatoryGang = mandatoryGang || IsReportedBaoGangReaction(state, reactionTileType, canGang);
+        if (resolvedMandatoryGang && canGang && reactionTileType is >= 0 and < 18 && state.Hand18[reactionTileType] >= 3)
         {
             return new NeijiangReactionDecisionResult
             {
@@ -170,6 +172,36 @@ public sealed class NeijiangBaoJiaoActionEngine
                 ["peng"] = canPeng ? -100000 : int.MinValue / 4
             }
         };
+    }
+
+    private static IReadOnlyList<int> ResolveMandatorySelfGangTileTypes(
+        NeijiangStateView state,
+        IReadOnlyList<int> anGangTileTypes,
+        IReadOnlyList<int> addGangTileTypes,
+        IReadOnlyList<int>? mandatoryGangTileTypes)
+    {
+        var mandatory = mandatoryGangTileTypes?
+            .Where(tile => tile is >= 0 and < 18)
+            .Distinct()
+            .ToList() ?? new List<int>();
+        if (!state.IsBaoJiao || state.BaoGangTileTypes.Count == 0)
+            return mandatory;
+
+        foreach (var tileType in anGangTileTypes.Concat(addGangTileTypes).Where(tile => tile is >= 0 and < 18).Distinct())
+        {
+            if (state.BaoGangTileTypes.Contains(tileType) && !mandatory.Contains(tileType))
+                mandatory.Add(tileType);
+        }
+        return mandatory;
+    }
+
+    private static bool IsReportedBaoGangReaction(NeijiangStateView state, int reactionTileType, bool canGang)
+    {
+        return state.IsBaoJiao
+            && canGang
+            && reactionTileType is >= 0 and < 18
+            && state.BaoGangTileTypes.Contains(reactionTileType)
+            && state.Hand18[reactionTileType] >= 3;
     }
 
     private static NeijiangSelfActionDecisionResult? BuildMandatoryGangResult(

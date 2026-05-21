@@ -1,0 +1,57 @@
+{
+  "case_1_self_draw_reported_bao_gang": {
+    "description": "报叫玩家已声明 4条 报杠，自己摸进第 4 张 4条，后台必须独立判定暗杠。",
+    "seat": 1,
+    "is_ai": true,
+    "bao_jiao": true,
+    "bao_gang_tiles": ["tiao_4"],
+    "hand_tiles": [
+      "4条", "4条", "4条", "4条",
+      "1条", "2条", "3条",
+      "1筒", "2筒", "3筒", "5筒"
+    ],
+    "last_draw_tile": "4条",
+    "csharp_payload_core": {
+      "isBaoJiao": true,
+      "lastDrawTileType": 3,
+      "baoGangTileTypes": [3],
+      "mandatoryGangTileTypes": []
+    },
+    "expected_backend_action": {
+      "action": "gang",
+      "gangSubtype": "an_gang",
+      "tileType": 3
+    },
+    "godot_test": "bao_jiao_self_draw_reported_gang_is_backend_decision_without_frontend_mandatory",
+    "csharp_smoke_line": "reported_self_bao_gang_action=Gang subtype=an_gang tile=3"
+  },
+  "case_2_reaction_reported_bao_gang": {
+    "description": "报叫玩家已声明 6条 报杠，别人打出 6条，自己手里 3 张 6条，后台必须独立判定明杠。",
+    "seat": 1,
+    "is_ai": true,
+    "bao_jiao": true,
+    "bao_gang_tiles": ["tiao_6"],
+    "hand_tiles": [
+      "6条", "6条", "6条",
+      "1条", "2条", "3条",
+      "1筒", "2筒", "3筒", "5筒"
+    ],
+    "discard": {
+      "source_seat": 0,
+      "tile": "6条"
+    },
+    "csharp_payload_core": {
+      "isBaoJiao": true,
+      "reactionTileType": 5,
+      "canGang": true,
+      "mandatoryGang": false,
+      "baoGangTileTypes": [5]
+    },
+    "expected_backend_action": {
+      "action": "gang",
+      "tileType": 5
+    },
+    "godot_test": "bao_jiao_reaction_reported_gang_is_backend_decision_without_frontend_mandatory",
+    "csharp_smoke_line": "reported_reaction_bao_gang_action=Gang tile=5"
+  }
+}

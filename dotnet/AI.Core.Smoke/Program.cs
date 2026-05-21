@@ -75,6 +75,12 @@ if (!SmokeMandatorySelfBaoGangOwnedByCSharp(facade))
     return 52;
 }
 
+if (!SmokeReportedSelfBaoGangOwnedByCSharpWithoutFrontendMandatory(facade))
+{
+    Console.Error.WriteLine("reported_self_bao_gang_csharp_smoke_failed");
+    return 521;
+}
+
 if (!SmokeBaoJiaoDiscardHuOverridesMandatoryGang(facade))
 {
     Console.Error.WriteLine("bao_jiao_discard_hu_route_smoke_failed");
@@ -85,6 +91,12 @@ if (!SmokeMandatoryReactionBaoGangOwnedByCSharp(facade))
 {
     Console.Error.WriteLine("mandatory_reaction_bao_gang_csharp_smoke_failed");
     return 54;
+}
+
+if (!SmokeReportedReactionBaoGangOwnedByCSharpWithoutFrontendMandatory(facade))
+{
+    Console.Error.WriteLine("reported_reaction_bao_gang_csharp_smoke_failed");
+    return 541;
 }
 
 if (!SmokeBaoJiaoRejectsNonWinningPeng(facade))
@@ -554,6 +566,41 @@ static bool SmokeMandatorySelfBaoGangOwnedByCSharp(NeijiangAiFacade facade)
         && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
 }
 
+static bool SmokeReportedSelfBaoGangOwnedByCSharpWithoutFrontendMandatory(NeijiangAiFacade facade)
+{
+    var gangTile = NeijiangTileCodec.EncodeTileType(0, 4);
+    var hand = new[]
+    {
+        gangTile,
+        gangTile,
+        gangTile,
+        gangTile,
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(1, 2),
+        NeijiangTileCodec.EncodeTileType(1, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+    };
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 8, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    state.IsBaoJiao = true;
+    state.LastDrawTileType = gangTile;
+    state.IsReady[1] = true;
+    state.BaoGangTileTypes = new HashSet<int> { gangTile };
+
+    var result = facade.DecideSelfAction(
+        state,
+        canSelfHu: false,
+        anGangTileTypes: new[] { gangTile },
+        addGangTileTypes: Array.Empty<int>(),
+        addGangQiangGangCounts: null,
+        mandatoryGangTileTypes: Array.Empty<int>());
+    Console.WriteLine($"reported_self_bao_gang_action={result.Action.ActionType} subtype={result.GangSubtype} tile={result.Action.TileType}");
+    return result.Action.ActionType == NeijiangActionType.Gang
+        && result.Action.TileType == gangTile
+        && result.GangSubtype == "an_gang"
+        && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
+}
+
 static bool SmokeBaoJiaoDiscardHuOverridesMandatoryGang(NeijiangAiFacade facade)
 {
     var tile = NeijiangTileCodec.EncodeTileType(0, 6);
@@ -615,6 +662,40 @@ static bool SmokeMandatoryReactionBaoGangOwnedByCSharp(NeijiangAiFacade facade)
         forceLightweight: false,
         mandatoryGang: true);
     Console.WriteLine($"mandatory_reaction_bao_gang_action={result.Action.ActionType} tile={result.Action.TileType}");
+    return result.Action.ActionType == NeijiangActionType.Gang
+        && result.Action.TileType == tile
+        && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
+}
+
+static bool SmokeReportedReactionBaoGangOwnedByCSharpWithoutFrontendMandatory(NeijiangAiFacade facade)
+{
+    var tile = NeijiangTileCodec.EncodeTileType(0, 6);
+    var hand = new[]
+    {
+        tile,
+        tile,
+        tile,
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 5),
+    };
+    var state = NeijiangStateCodec.FromRaw(2, 0, 0, 8, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    state.IsBaoJiao = true;
+    state.IsReady[2] = true;
+    state.BaoGangTileTypes = new HashSet<int> { tile };
+
+    var result = facade.DecideReaction(
+        state,
+        tile,
+        canHu: false,
+        canPeng: false,
+        canGang: true,
+        sourceSeat: 0,
+        reactionType: "discard",
+        forceLightweight: false,
+        mandatoryGang: false);
+    Console.WriteLine($"reported_reaction_bao_gang_action={result.Action.ActionType} tile={result.Action.TileType}");
     return result.Action.ActionType == NeijiangActionType.Gang
         && result.Action.TileType == tile
         && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));

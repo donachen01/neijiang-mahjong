@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.42`
+Current app version: `1.0.49`
 
-`1.0.42` keeps the frontend as a rule guard and fixes bao-jiao AI stalls at the backend/bridge contract: C# hell-challenge bao-jiao decisions choose the last-draw tile type, and Godot maps that backend tile type to the actual just-drawn tile id instead of an older same-type hand tile.
+`1.0.49` makes reported bao-gang a backend-owned rule: Godot transports the declared `bao_gang_tiles` whitelist to C#, and C# independently forces the matching self-draw an-gang/add-gang or discard-reaction gang without relying only on frontend mandatory markers.
 
 ## Versioning Workflow
 

@@ -21,6 +21,7 @@ public sealed class NeijiangStateView
     public bool[] HasHu { get; init; } = new bool[4];
     public bool IsBaoJiao { get; set; }
     public int LastDrawTileType { get; set; } = -1;
+    public HashSet<int> BaoGangTileTypes { get; set; } = new();
     public int[][] PassedHu18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
     public int[][] PassedPeng18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
     public int[][] PassedGang18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
