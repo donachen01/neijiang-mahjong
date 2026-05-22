@@ -8,6 +8,7 @@ public sealed class NeijiangDecisionResult
     public int LiveUkeire { get; init; }
     public double WinProbability { get; init; }
     public double DealInProbability { get; init; }
+    public string GangSubtype { get; init; } = "";
     public bool SearchUsed { get; init; }
     public int SearchSimulations { get; init; }
     public NeijiangRoutePlanResult RoutePlan { get; init; } = new();

@@ -41,6 +41,7 @@ func _run() -> void:
 	_run_test("csharp_candidate_reasons_survive_godot_mapping", _test_csharp_candidate_reasons_survive_godot_mapping, failures)
 	_run_test("csharp_route_plan_survives_godot_mapping", _test_csharp_route_plan_survives_godot_mapping, failures)
 	_run_test("bao_jiao_csharp_tile_type_maps_to_last_draw_tile", _test_bao_jiao_csharp_tile_type_maps_to_last_draw_tile, failures)
+	_run_test("bao_jiao_reported_gang_action_survives_turn_mapping", _test_bao_jiao_reported_gang_action_survives_turn_mapping, failures)
 	_run_test("self_action_gang_subtype_survives_godot_mapping", _test_self_action_gang_subtype_survives_godot_mapping, failures)
 	_run_test("native_runtime_async_reaction_returns_result", _test_native_runtime_async_reaction_returns_result, failures)
 	_run_test("native_runtime_mobile_compact_discard_returns_action_candidate", _test_native_runtime_mobile_compact_discard_returns_action_candidate, failures)
@@ -176,6 +177,47 @@ func _test_bao_jiao_csharp_tile_type_maps_to_last_draw_tile():
 		return "expected bao-jiao mapping to use last_draw tile id, got %s" % [recommended]
 	if int(recommended_tile.get("id", -1)) == int(locked_same_type.get("id", -1)):
 		return "expected locked same-type tile to stay unselected, got %s" % [recommended]
+	return true
+
+
+func _test_bao_jiao_reported_gang_action_survives_turn_mapping():
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	var last_draw_tile := _make_tile(808, "tiao", 8)
+	var player_state := {
+		"seat": 2,
+		"bao_jiao": true,
+		"bao_gang_tiles": ["tiao_8"],
+		"hand_tiles": [
+			_make_tile(801, "tiao", 8),
+			_make_tile(802, "tiao", 8),
+			_make_tile(803, "tiao", 8),
+			last_draw_tile,
+		],
+	}
+	var table_state := {
+		"last_draw_tile": {
+			"seat": 2,
+			"tile": last_draw_tile.duplicate(true),
+		},
+	}
+	var csharp_result := {
+		"action": "gang",
+		"tileType": 7,
+		"gangSubtype": "an_gang",
+		"score": 120000,
+		"reasons": ["报叫专线：摸到报杠牌必暗杠"],
+		"candidates": [],
+	}
+	var analysis: Dictionary = ai_manager._build_csharp_discard_analysis(player_state, csharp_result, null, ai_manager.csharp_bridge, "contract_test", table_state)
+	if str(analysis.get("action", "")) != "gang":
+		return "expected turn mapping to preserve C# gang action, got %s" % [analysis]
+	if str(analysis.get("gang_subtype", "")) != "an_gang":
+		return "expected gang_subtype=an_gang, got %s" % [analysis]
+	if int(analysis.get("tile_type", -1)) != 7:
+		return "expected tile_type=7 for 8条, got %s" % [analysis]
+	var recommended_tile: Dictionary = analysis.get("recommended", {}).get("tile", {})
+	if int(recommended_tile.get("id", -1)) != int(last_draw_tile.get("id", -1)):
+		return "expected recommended tile to be last drawn 8条 id=%d, got %s" % [int(last_draw_tile.get("id", -1)), analysis]
 	return true
 
 

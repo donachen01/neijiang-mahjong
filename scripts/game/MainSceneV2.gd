@@ -1787,7 +1787,7 @@ func _update_floating_button_texts() -> void:
 		floating_ai_helper_button.visible = not floating_left_buttons_collapsed
 	if floating_opponent_hand_button != null:
 		floating_opponent_hand_button.text = "明牌 %s" % ("开" if opponent_hands_enabled else "关")
-		floating_opponent_hand_button.visible = not RELEASE_USER_BUILD_UI and not floating_left_buttons_collapsed
+		floating_opponent_hand_button.visible = not floating_left_buttons_collapsed
 	if floating_hell_mark_button != null:
 		var snapshot := game_manager.get_snapshot()
 		floating_hell_mark_button.text = "标记"
@@ -2190,8 +2190,8 @@ func _setup_left_floating_buttons() -> void:
 	if not RELEASE_USER_BUILD_UI:
 		floating_ai_tuning_button.pressed.connect(_on_top_ai_tuning_button_pressed)
 	floating_ai_helper_button.pressed.connect(_on_top_ai_helper_button_pressed)
+	floating_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
 	if not RELEASE_USER_BUILD_UI:
-		floating_opponent_hand_button.pressed.connect(_on_top_opponent_hand_button_pressed)
 		floating_hell_mark_button.pressed.connect(_on_hell_mark_button_pressed)
 	if _is_diagnostic_export_ui_enabled():
 		floating_diagnostic_export_button = _create_floating_circle_button("导")

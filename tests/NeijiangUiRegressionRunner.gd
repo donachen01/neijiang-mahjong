@@ -70,8 +70,10 @@ func _test_user_release_hides_diagnostic_and_dev_buttons(root_node: Node):
 	if tuning_button != null and bool(tuning_button.visible):
 		return "expected AI tuning button hidden in user release"
 	var opponent_button = root_node.get("floating_opponent_hand_button")
-	if opponent_button != null and bool(opponent_button.visible):
-		return "expected opponent hand debug button hidden in user release"
+	if opponent_button == null or not bool(opponent_button.visible):
+		return "expected left drawer to expose the open-hand button in user release"
+	if not str(opponent_button.text).begins_with("明牌"):
+		return "expected open-hand button label to include 明牌 status, got %s" % str(opponent_button.text)
 	var mark_button = root_node.get("floating_hell_mark_button")
 	if mark_button != null and bool(mark_button.visible):
 		return "expected hell mark button hidden in user release"
@@ -382,12 +384,14 @@ func _test_main_controls_are_layered_by_purpose(root_node: Node):
 	root_node.call("_update_floating_button_texts")
 	if not helper.visible or not preset.visible:
 		return "expected expanded AI drawer to show helper and preset controls"
-	if opponent != null and opponent.visible:
-		return "expected practical-use build to hide open-hand developer control"
+	if opponent == null or not opponent.visible:
+		return "expected practical-use build to show open-hand control in the left drawer"
 	if tuning != null and tuning.visible:
 		return "expected practical-use build to hide tuning developer control"
 	if not str(helper.text).begins_with("辅助"):
 		return "expected helper toggle label to include status, got %s" % helper.text
+	if not str(opponent.text).begins_with("明牌"):
+		return "expected open-hand toggle label to include status, got %s" % opponent.text
 	if not str(preset.text).begins_with("难度"):
 		return "expected preset control to be shown as difficulty status, got %s" % preset.text
 	if helper.custom_minimum_size.x > 190.0 or helper.custom_minimum_size.y > 64.0:

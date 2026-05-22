@@ -16,6 +16,10 @@ public sealed class NeijiangBaoJiaoActionEngine
         if (tileType is < 0 or >= 18 || state.Hand18[tileType] <= 0)
             return null;
 
+        var mandatoryGang = BuildReportedGangDiscardPathResult(state, tileType);
+        if (mandatoryGang is not null)
+            return mandatoryGang;
+
         var meldCount = state.Melds18[state.SeatIndex].Count / 3;
         var shanten = _shanten.CalcShantenAfterDiscard(state.Hand18, tileType, meldCount);
         var (ukeire, liveUkeire, improvingTiles) = _ukeire.CalcUkeire(state.Hand18, state.Remaining18, tileType, meldCount);
@@ -60,6 +64,64 @@ public sealed class NeijiangBaoJiaoActionEngine
                 }
             }
         };
+    }
+
+    private static NeijiangDecisionResult? BuildReportedGangDiscardPathResult(NeijiangStateView state, int tileType)
+    {
+        if (!state.BaoGangTileTypes.Contains(tileType))
+            return null;
+
+        var gangSubtype = "";
+        if (state.Hand18[tileType] >= 4)
+        {
+            gangSubtype = "an_gang";
+        }
+        else if (state.Hand18[tileType] >= 1 && HasExistingTripletMeld(state, tileType))
+        {
+            gangSubtype = "add_gang";
+        }
+
+        if (gangSubtype == "")
+            return null;
+
+        var label = gangSubtype == "an_gang" ? "暗杠" : "补杠";
+        var reasons = new[]
+        {
+            $"报叫专线：摸到报杠牌必{label}",
+            "C#出牌专线先判定报杠，禁止把报杠牌作为摸打牌"
+        };
+        return new NeijiangDecisionResult
+        {
+            Action = new NeijiangAction(NeijiangActionType.Gang, tileType, 140000, reasons[0]),
+            GangSubtype = gangSubtype,
+            Shanten = -1,
+            Ukeire = 0,
+            LiveUkeire = 0,
+            WinProbability = 0.0,
+            DealInProbability = 0.0,
+            Reasons = reasons,
+            CandidateScores = new Dictionary<int, int> { [tileType] = 140000 },
+        };
+    }
+
+    private static bool HasExistingTripletMeld(NeijiangStateView state, int tileType)
+    {
+        if (state.SeatIndex < 0 || state.SeatIndex >= state.Melds18.Length)
+            return false;
+
+        var matches = 0;
+        foreach (var meldTile in state.Melds18[state.SeatIndex])
+        {
+            if (meldTile != tileType)
+            {
+                matches = 0;
+                continue;
+            }
+            matches++;
+            if (matches >= 3)
+                return true;
+        }
+        return state.Melds18[state.SeatIndex].Count(tile => tile == tileType) >= 3;
     }
 
     public NeijiangSelfActionDecisionResult? TryDecideSelfAction(

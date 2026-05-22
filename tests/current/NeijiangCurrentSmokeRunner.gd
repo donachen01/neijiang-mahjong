@@ -9,11 +9,12 @@ func _init() -> void:
 
 func _run() -> void:
 	var failures: Array[String] = []
-	_run_test("startup_defaults_to_user_release_recording_off", _test_startup_defaults_to_user_release_recording_off, failures)
+	_run_test("startup_defaults_to_desktop_debug_hell_training_on", _test_startup_defaults_to_desktop_debug_hell_training_on, failures)
 	_run_test("hell_challenge_mode_executes_oracle_without_recording", _test_hell_challenge_mode_executes_oracle_without_recording, failures)
 	_run_test("hell_challenge_oracle_replaces_deal_in_discard", _test_hell_challenge_oracle_replaces_deal_in_discard, failures)
 	_run_test("hell_challenge_async_decision_applies_oracle", _test_hell_challenge_async_decision_applies_oracle, failures)
-	_run_test("user_release_skips_training_event_recording", _test_user_release_skips_training_event_recording, failures)
+	_run_test("desktop_debug_records_training_event", _test_desktop_debug_records_training_event, failures)
+	_run_test("debug_decision_trace_appends_complete_events", _test_debug_decision_trace_appends_complete_events, failures)
 	_run_test("neijiang_uses_two_suits_without_ding_que", _test_neijiang_uses_two_suits_without_ding_que, failures)
 	_run_test("neijiang_initial_deal_uses_72_tiles", _test_neijiang_initial_deal_uses_72_tiles, failures)
 	_run_test("opening_dealer_self_hu_without_last_draw_is_available", _test_opening_dealer_self_hu_without_last_draw_is_available, failures)
@@ -21,6 +22,7 @@ func _run() -> void:
 	_run_test("ai_bao_jiao_discard_rejects_non_last_draw", _test_ai_bao_jiao_discard_rejects_non_last_draw, failures)
 	_run_test("ai_bao_jiao_unreported_fourth_9tong_discards_last_draw", _test_ai_bao_jiao_unreported_fourth_9tong_discards_last_draw, failures)
 	_run_test("ai_bao_jiao_unreported_fourth_same_type_discards_last_draw", _test_ai_bao_jiao_unreported_fourth_same_type_discards_last_draw, failures)
+	_run_test("ai_bao_jiao_reported_fourth_8tiao_gangs_not_discards", _test_ai_bao_jiao_reported_fourth_8tiao_gangs_not_discards, failures)
 	_run_test("ai_bao_jiao_signature_tracks_last_draw", _test_ai_bao_jiao_signature_tracks_last_draw, failures)
 	if failures.is_empty():
 		print("NEIJIANG CURRENT SMOKE OK")
@@ -53,7 +55,7 @@ func _test_neijiang_uses_two_suits_without_ding_que():
 	return true
 
 
-func _test_startup_defaults_to_user_release_recording_off():
+func _test_startup_defaults_to_desktop_debug_hell_training_on():
 	var game_state = _build_game_state()
 	var snapshot: Dictionary = game_state.get_debug_snapshot()
 	var config: Dictionary = snapshot.get("ai_tuning_config", {})
@@ -61,8 +63,8 @@ func _test_startup_defaults_to_user_release_recording_off():
 		return "expected startup preset hell, got %s" % [config]
 	if int(snapshot.get("ai_level_index", -1)) != int(GAME_STATE_SCRIPT.AILevel.CHEATING):
 		return "expected startup ai level cheating in hell mode, got %s" % [snapshot.get("ai_level_index", -1)]
-	if bool(config.get("diagnostics_recording_enabled", false)):
-		return "expected diagnostics recording disabled for user release, got %s" % [config]
+	if not bool(config.get("diagnostics_recording_enabled", false)):
+		return "expected desktop debug diagnostics recording enabled for hell training, got %s" % [config]
 	if bool(config.get("auto_learning_enabled", true)):
 		return "expected auto learning recording disabled for user release, got %s" % [config]
 	if not bool(config.get("hell_ai_can_see_wall", false)):
@@ -72,18 +74,19 @@ func _test_startup_defaults_to_user_release_recording_off():
 	if not bool(config.get("hell_execute_oracle_action", false)):
 		return "expected hell challenge to execute oracle action, got %s" % [config]
 	var hell: Dictionary = snapshot.get("hell_training", {})
-	if bool(hell.get("enabled", false)):
-		return "expected hell diagnostics disabled for user release, got %s" % [hell]
+	if not bool(hell.get("enabled", false)):
+		return "expected hell diagnostics enabled for desktop debug training, got %s" % [hell]
 	if not bool(hell.get("challenge_enabled", false)):
 		return "expected hell challenge to be enabled independent of diagnostics, got %s" % [hell]
+	var output_dirs: Dictionary = hell.get("output_dirs", {})
+	if not str(output_dirs.get("training", "")).begins_with("res://测试数据统计/hell_training"):
+		return "expected project hell_training output dir, got %s" % [output_dirs]
 	var recording: Dictionary = snapshot.get("ai_analysis_recording", {})
-	if bool(recording.get("enabled", false)):
-		return "expected ai analysis recording disabled for user release, got %s" % [recording]
+	if not bool(recording.get("enabled", false)):
+		return "expected ai analysis recording enabled for desktop debug, got %s" % [recording]
 	var export_result: Dictionary = game_state.export_diagnostic_package(false)
-	if bool(export_result.get("ok", false)):
-		return "expected diagnostic export disabled for user release, got %s" % [export_result]
-	if str(export_result.get("error", "")) != "diagnostic_export_disabled":
-		return "expected diagnostic_export_disabled, got %s" % [export_result]
+	if not bool(export_result.get("ok", false)):
+		return "expected diagnostic export available in desktop debug training, got %s" % [export_result]
 	return true
 
 
@@ -172,7 +175,7 @@ func _test_hell_challenge_async_decision_applies_oracle():
 	return true
 
 
-func _test_user_release_skips_training_event_recording():
+func _test_desktop_debug_records_training_event():
 	var game_state = _build_game_state()
 	game_state._record_ai_analysis_event("training_probe", {
 		"turn_diagnostic": {
@@ -181,13 +184,71 @@ func _test_user_release_skips_training_event_recording():
 		},
 	})
 	var recording: Dictionary = game_state.get_debug_snapshot().get("ai_analysis_recording", {})
-	if int(recording.get("event_count", 0)) != 0:
-		return "expected user release to skip training events, got %s" % [recording]
-	if not str(recording.get("session_id", "")).is_empty():
-		return "expected no training session id in user release, got %s" % [recording]
+	if int(recording.get("event_count", 0)) <= 0:
+		return "expected desktop debug to record training events, got %s" % [recording]
+	if str(recording.get("session_id", "")).is_empty():
+		return "expected training session id in desktop debug, got %s" % [recording]
+	var events_path := str(recording.get("events_path", ""))
+	if events_path.is_empty() or not FileAccess.file_exists(events_path):
+		return "expected ai analysis events file, got %s" % [recording]
 	var export_result: Dictionary = game_state.export_diagnostic_package(false)
-	if bool(export_result.get("ok", false)) or str(export_result.get("error", "")) != "diagnostic_export_disabled":
-		return "expected user release diagnostic export disabled, got %s" % [export_result]
+	if not bool(export_result.get("ok", false)):
+		return "expected desktop debug diagnostic export enabled, got %s" % [export_result]
+	return true
+
+
+func _test_debug_decision_trace_appends_complete_events():
+	var game_state = _build_game_state()
+	if not bool(game_state._is_debug_decision_trace_enabled()):
+		return "expected debug decision trace enabled in debug run"
+	var initial_trace: Dictionary = game_state.get_debug_snapshot().get("debug_decision_trace", {})
+	if bool(initial_trace.get("enabled", false)) != true:
+		return "expected debug snapshot to expose enabled trace, got %s" % [initial_trace]
+	game_state._record_ai_decision_trace_event("turn_analysis_ready", {
+		"seat": 1,
+		"decision": {
+			"action": "discard",
+			"analysis": {
+				"action_scores": {"discard:7": 116, "gang:7": 208},
+				"reasons": ["probe turn"],
+			},
+		},
+		"player_state": {"seat": 1, "isBaoJiao": false},
+		"table_state": {"wallCount": 13},
+	})
+	game_state._record_ai_decision_trace_event("reaction_analysis_ready", {
+		"seat": 1,
+		"decision": {
+			"decision": {
+				"action": "gang",
+				"action_scores": {"pass": 24, "peng": 212, "gang": 406},
+				"reasons": ["明杠收益明确"],
+			},
+		},
+		"candidate": {"can_gang": true, "tile": _make_tile(808, "tiao", 8)},
+	})
+	var trace: Dictionary = game_state.get_debug_snapshot().get("debug_decision_trace", {})
+	if int(trace.get("event_count", 0)) != 2:
+		return "expected two trace events, got %s" % [trace]
+	var path := str(trace.get("events_path", ""))
+	if path.is_empty():
+		return "expected events path in trace snapshot, got %s" % [trace]
+	var raw := FileAccess.get_file_as_string(path)
+	var lines := raw.split("\n", false)
+	if lines.size() != 2:
+		return "expected two jsonl lines, got %d raw=%s" % [lines.size(), raw]
+	var first = JSON.parse_string(lines[0])
+	var second = JSON.parse_string(lines[1])
+	if not (first is Dictionary) or not (second is Dictionary):
+		return "expected json objects in trace file, got %s / %s" % [first, second]
+	if str(first.get("event_type", "")) != "turn_analysis_ready":
+		return "expected first event type turn_analysis_ready, got %s" % [first]
+	if str(second.get("event_type", "")) != "reaction_analysis_ready":
+		return "expected second event type reaction_analysis_ready, got %s" % [second]
+	if int(second.get("event_index", 0)) != 2:
+		return "expected append event index 2, got %s" % [second]
+	if not Dictionary(second.get("payload", {})).has("decision"):
+		return "expected decision payload preserved, got %s" % [second]
 	return true
 
 
@@ -401,6 +462,63 @@ func _test_ai_bao_jiao_unreported_fourth_same_type_discards_last_draw():
 		"tiao_7",
 		6
 	)
+
+
+func _test_ai_bao_jiao_reported_fourth_8tiao_gangs_not_discards():
+	var tiao_8_tiles := [
+		_make_tile(801, "tiao", 8),
+		_make_tile(802, "tiao", 8),
+		_make_tile(803, "tiao", 8),
+		_make_tile(804, "tiao", 8),
+	]
+	var game_state = _build_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
+	game_state.current_dealer_seat = 0
+	game_state.current_turn_seat = 2
+	game_state.wall_count = 13
+	var last_draw_tile: Dictionary = tiao_8_tiles[3].duplicate(true)
+	game_state.players.clear()
+	game_state.players.append_array([
+		_make_player(0, []),
+		_make_player(1, []),
+		_make_player(2, [
+			_make_tile(821, "tiao", 1),
+			_make_tile(822, "tiao", 2),
+			_make_tile(823, "tiao", 4),
+			_make_tile(824, "tiao", 5),
+			_make_tile(825, "tong", 1),
+			_make_tile(826, "tong", 3),
+			_make_tile(827, "tong", 4),
+			_make_tile(828, "tong", 6),
+			_make_tile(829, "tong", 8),
+			_make_tile(830, "tong", 9),
+			tiao_8_tiles[0],
+			tiao_8_tiles[1],
+			tiao_8_tiles[2],
+			last_draw_tile,
+		]),
+		_make_player(3, []),
+	])
+	game_state.players[2]["bao_jiao"] = true
+	game_state.players[2]["bao_gang_tiles"] = ["tiao_8"]
+	game_state.players[2]["bao_jiao_ting_tiles"] = [_make_tile(831, "tong", 2)]
+	game_state.players[2]["rule_marks"] = ["报叫"]
+	game_state.last_draw_tile = {"seat": 2, "tile": last_draw_tile.duplicate(true)}
+	game_state.last_turn_context = {"seat": 2, "draw_reason": "normal_draw"}
+	var decision: Dictionary = game_state._build_ai_turn_decision()
+	if str(decision.get("action", "")) != "an_gang":
+		return "expected reported 8条 fourth draw to build an_gang decision, got %s debug=%s" % [decision, game_state.debug_last_message]
+	var ok: bool = game_state._execute_ai_turn_decision(decision)
+	if not ok:
+		return "expected an_gang execution to succeed, debug=%s decision=%s" % [game_state.debug_last_message, decision]
+	if game_state.players[2]["melds"].is_empty():
+		return "expected gang meld after reported 8条 draw, got none"
+	var meld: Dictionary = game_state.players[2]["melds"][-1]
+	if str(meld.get("gang_subtype", "")) != "an_gang":
+		return "expected an_gang meld, got %s" % [meld]
+	if not game_state.discard_pile.is_empty():
+		return "expected no discard pile entry for reported 8条 gang, got %s" % [game_state.discard_pile]
+	return true
 
 
 func _assert_bao_jiao_unreported_fourth_tile_discards_last_draw(case_name: String, four_same_tiles: Array, forbidden_bao_gang_key: String, expected_tile_type: int):

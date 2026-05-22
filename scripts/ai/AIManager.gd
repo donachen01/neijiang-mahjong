@@ -769,8 +769,21 @@ func _build_csharp_discard_analysis(player_state: Dictionary, csharp_result: Dic
 			hand_tile_by_type[tile_type] = preferred_tile_by_type[tile_type].duplicate(true)
 		elif tile_type >= 0 and not hand_tile_by_type.has(tile_type):
 			hand_tile_by_type[tile_type] = tile.duplicate(true)
+	var action := str(csharp_result.get("action", "")).strip_edges().to_lower()
+	if action == "gang":
+		return _build_csharp_turn_gang_analysis(
+			player_state,
+			csharp_result,
+			active_suits,
+			bridge_instance,
+			backend_mode,
+			hand_tile_by_type
+		)
+	var candidate_source: Array = csharp_result.get("candidates", [])
+	if candidate_source.is_empty() and action == "discard" and action_tile_type >= 0:
+		candidate_source = [_build_top_level_csharp_discard_candidate(csharp_result)]
 	var enriched: Array = []
-	for candidate in csharp_result.get("candidates", []):
+	for candidate in candidate_source:
 		var csharp_item: Dictionary = candidate
 		var tile_type := int(csharp_item.get("tileType", -1))
 		if not hand_tile_by_type.has(tile_type):
@@ -800,6 +813,82 @@ func _build_csharp_discard_analysis(player_state: Dictionary, csharp_result: Dic
 		"csharp_result": _compact_csharp_result(csharp_result) if compact_runtime_snapshots else csharp_result.duplicate(true),
 		"backend_mode": backend_mode,
 	}
+
+
+func _build_top_level_csharp_discard_candidate(csharp_result: Dictionary) -> Dictionary:
+	return {
+		"tileType": int(csharp_result.get("tileType", -1)),
+		"score": int(csharp_result.get("score", 0)),
+		"shanten": int(csharp_result.get("shanten", 0)),
+		"ukeire": int(csharp_result.get("ukeire", 0)),
+		"liveUkeire": int(csharp_result.get("liveUkeire", 0)),
+		"danger": 100 if bool(csharp_result.get("oracleExactDealIn", false)) else 0,
+		"waitCount": int(csharp_result.get("waitCount", 0)),
+		"riskLabel": str(csharp_result.get("riskLabel", "")),
+		"strategyTag": str(csharp_result.get("category", "")),
+		"strategyMode": str(csharp_result.get("backendMode", "")),
+		"explanationHint": str(Array(csharp_result.get("reasons", [])).front() if not Array(csharp_result.get("reasons", [])).is_empty() else ""),
+		"reasons": Array(csharp_result.get("reasons", [])).duplicate(true),
+	}
+
+
+func _build_csharp_turn_gang_analysis(player_state: Dictionary, csharp_result: Dictionary, active_suits: Array, bridge_instance, backend_mode: String, hand_tile_by_type: Dictionary) -> Dictionary:
+	var tile_type := int(csharp_result.get("tileType", -1))
+	if not hand_tile_by_type.has(tile_type):
+		return {}
+	var tile: Dictionary = hand_tile_by_type[tile_type].duplicate(true)
+	var gang_subtype := str(csharp_result.get("gangSubtype", csharp_result.get("gang_subtype", ""))).strip_edges()
+	if gang_subtype == "":
+		gang_subtype = _infer_csharp_turn_gang_subtype(player_state, tile_type, active_suits, bridge_instance)
+	if gang_subtype == "":
+		return {}
+	var support_option := {
+		"tile": tile.duplicate(true),
+		"tile_name": str(tile.get("display_name", "")),
+		"tile_key": "%s_%d" % [str(tile.get("suit", "")), int(tile.get("rank", 0))],
+	}
+	var csharp_item := {
+		"tileType": tile_type,
+		"score": int(csharp_result.get("score", 0)),
+		"reasons": Array(csharp_result.get("reasons", [])),
+	}
+	var recommended := _build_hybrid_option(csharp_item, support_option, active_suits, bridge_instance)
+	return {
+		"action": "gang",
+		"gang_subtype": gang_subtype,
+		"gangSubtype": gang_subtype,
+		"tile_type": tile_type,
+		"tile": tile.duplicate(true),
+		"recommended": recommended,
+		"options": [recommended],
+		"danger_tiles": [],
+		"current_routes": csharp_result.get("currentRoutes", []).duplicate(true),
+		"route_plan": csharp_result.get("routePlan", {}).duplicate(true),
+		"strategy_profile": _merge_strategy_profile({}, csharp_result.get("strategyProfile", {})),
+		"belief_summary": csharp_result.get("beliefSummary", {}).duplicate(true),
+		"csharp_result": _compact_csharp_result(csharp_result) if compact_runtime_snapshots else csharp_result.duplicate(true),
+		"backend_mode": backend_mode,
+	}
+
+
+func _infer_csharp_turn_gang_subtype(player_state: Dictionary, tile_type: int, active_suits: Array, bridge_instance) -> String:
+	var hand_count := 0
+	for tile in player_state.get("hand_tiles", []):
+		if int(bridge_instance.tile_codec.tile_type(tile, active_suits)) == tile_type:
+			hand_count += 1
+	if hand_count >= 4:
+		return "an_gang"
+	for meld in player_state.get("melds", []):
+		var meld_dict: Dictionary = meld
+		if str(meld_dict.get("type", "")) != "peng":
+			continue
+		var matches := 0
+		for meld_tile in meld_dict.get("tiles", []):
+			if int(bridge_instance.tile_codec.tile_type(meld_tile, active_suits)) == tile_type:
+				matches += 1
+		if matches >= 3 and hand_count >= 1:
+			return "add_gang"
+	return ""
 
 
 func start_turn_analysis_background(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false, hell_payload: Dictionary = {}) -> int:
@@ -1055,6 +1144,17 @@ func _build_hybrid_option(csharp_item: Dictionary, support_option: Dictionary, a
 	option["csharp_posterior_reasons"] = csharp_item.get("posteriorReasons", []).duplicate(true)
 	option["csharp_risk_reasons"] = csharp_item.get("riskReasons", option.get("risk_reasons", [])).duplicate(true)
 	option["csharp_reasons"] = csharp_item.get("reasons", []).duplicate(true)
+	option["csharp_exact_deal_in"] = bool(csharp_item.get("exactDealIn", option.get("exact_deal_in", false)))
+	option["csharp_feeds_human_hu"] = bool(csharp_item.get("feedsHumanHu", option.get("feeds_human_hu", false)))
+	option["csharp_feeds_human_peng"] = bool(csharp_item.get("feedsHumanPeng", option.get("feeds_human_peng", false)))
+	option["csharp_feeds_human_gang"] = bool(csharp_item.get("feedsHumanGang", option.get("feeds_human_gang", false)))
+	option["csharp_human_peng_threat"] = int(csharp_item.get("humanPengThreat", option.get("human_peng_threat", 0)))
+	option["csharp_human_peng_penalty"] = int(csharp_item.get("humanPengPenalty", option.get("human_peng_penalty", 0)))
+	option["csharp_tempo_peng_allowance_bonus"] = int(csharp_item.get("tempoPengAllowanceBonus", option.get("tempo_peng_allowance_bonus", 0)))
+	option["csharp_peng_only_interaction_bonus"] = int(csharp_item.get("pengOnlyInteractionBonus", option.get("peng_only_interaction_bonus", 0)))
+	option["csharp_keeps_ready"] = bool(csharp_item.get("keepsReady", option.get("keeps_ready", false)))
+	option["csharp_exact_wall_remaining"] = int(csharp_item.get("exactWallRemaining", option.get("exact_wall_remaining", 0)))
+	option["csharp_deal_in_target_seats"] = csharp_item.get("dealInTargetSeats", option.get("deal_in_target_seats", [])).duplicate(true)
 	option["fast_ting_discard_rank"] = int(csharp_item.get("fastTingDiscardRank", option.get("fast_ting_discard_rank", 99)))
 	option["score"] = int(csharp_item.get("score", option.get("score", 0)))
 	option["shanten"] = int(csharp_item.get("shanten", option.get("shanten", 8)))
@@ -1111,6 +1211,17 @@ func _build_hybrid_option(csharp_item: Dictionary, support_option: Dictionary, a
 	option["posterior_reasons"] = csharp_item.get("posteriorReasons", option.get("posterior_reasons", [])).duplicate(true)
 	option["reasons"] = csharp_item.get("reasons", option.get("reasons", [])).duplicate(true)
 	option["risk_reasons"] = csharp_item.get("riskReasons", option.get("risk_reasons", [])).duplicate(true)
+	option["exact_deal_in"] = bool(csharp_item.get("exactDealIn", option.get("exact_deal_in", false)))
+	option["feeds_human_hu"] = bool(csharp_item.get("feedsHumanHu", option.get("feeds_human_hu", false)))
+	option["feeds_human_peng"] = bool(csharp_item.get("feedsHumanPeng", option.get("feeds_human_peng", false)))
+	option["feeds_human_gang"] = bool(csharp_item.get("feedsHumanGang", option.get("feeds_human_gang", false)))
+	option["human_peng_threat"] = int(csharp_item.get("humanPengThreat", option.get("human_peng_threat", 0)))
+	option["human_peng_penalty"] = int(csharp_item.get("humanPengPenalty", option.get("human_peng_penalty", 0)))
+	option["tempo_peng_allowance_bonus"] = int(csharp_item.get("tempoPengAllowanceBonus", option.get("tempo_peng_allowance_bonus", 0)))
+	option["peng_only_interaction_bonus"] = int(csharp_item.get("pengOnlyInteractionBonus", option.get("peng_only_interaction_bonus", 0)))
+	option["keeps_ready"] = bool(csharp_item.get("keepsReady", option.get("keeps_ready", false)))
+	option["exact_wall_remaining"] = int(csharp_item.get("exactWallRemaining", option.get("exact_wall_remaining", 0)))
+	option["deal_in_target_seats"] = csharp_item.get("dealInTargetSeats", option.get("deal_in_target_seats", [])).duplicate(true)
 	return option
 
 
@@ -1147,10 +1258,11 @@ func _compact_csharp_result(csharp_result: Dictionary) -> Dictionary:
 		"fairTileType": int(csharp_result.get("fairTileType", -1)),
 		"actualTileType": int(csharp_result.get("actualTileType", -1)),
 		"teamRole": str(csharp_result.get("teamRole", "")),
-		"teamPressureBonus": int(csharp_result.get("teamPressureBonus", 0)),
-		"teamPlanSummary": csharp_result.get("teamPlanSummary", []).duplicate(true),
-		"reasons": csharp_result.get("reasons", []).duplicate(true),
-	}
+			"teamPressureBonus": int(csharp_result.get("teamPressureBonus", 0)),
+			"teamPlanSummary": csharp_result.get("teamPlanSummary", []).duplicate(true),
+			"candidates": csharp_result.get("candidates", []).duplicate(true),
+			"reasons": csharp_result.get("reasons", []).duplicate(true),
+		}
 
 
 func _merge_strategy_profile(base_profile: Dictionary, csharp_profile: Dictionary) -> Dictionary:
@@ -1475,6 +1587,10 @@ func _validate_native_discard_result(native_result: Dictionary) -> String:
 		return "empty_native_discard_result"
 	if not bool(native_result.get("ok", true)):
 		return str(native_result.get("error", "native_discard_not_ok"))
+	if str(native_result.get("action", "")).strip_edges().to_lower() == "gang":
+		if int(native_result.get("tileType", -1)) < 0:
+			return "native_discard_gang_missing_tile"
+		return ""
 	var candidates = native_result.get("candidates", [])
 	if typeof(candidates) != TYPE_ARRAY or Array(candidates).is_empty():
 		return "native_discard_missing_candidates"

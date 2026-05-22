@@ -47,6 +47,7 @@ public sealed class NeijiangHellChallengeEngine
         var bestFeedsHumanGang = false;
         var bestKeepsReady = false;
         var bestWallRemaining = 0;
+        var candidates = new List<NeijiangHellChallengeCandidate>();
 
         for (var tileType = 0; tileType < 18; tileType++)
         {
@@ -147,6 +148,26 @@ public sealed class NeijiangHellChallengeEngine
             foreach (var reason in shapeSummary.Reasons.Take(2))
                 reasons.Add(reason);
             reasons.Add($"三家协作：{seatPlan.Summary}，弃牌安全偏置 +{seatPlan.DiscardSafetyBias}");
+            candidates.Add(new NeijiangHellChallengeCandidate
+            {
+                TileType = tileType,
+                Score = score,
+                Shanten = shanten,
+                LiveUkeire = exactWallRemaining,
+                WaitCount = waitCount,
+                ExactDealIn = exactDealIn,
+                FeedsHumanHu = feedsHumanHu,
+                FeedsHumanPeng = feedsHumanPeng,
+                FeedsHumanGang = feedsHumanGang,
+                HumanPengThreat = humanPengThreat,
+                HumanPengPenalty = humanPengPenalty,
+                TempoPengAllowanceBonus = tempoPengAllowanceBonus,
+                PengOnlyInteractionBonus = pengOnlyInteractionBonus,
+                KeepsReady = keepsReady,
+                ExactWallRemaining = exactWallRemaining,
+                DealInTargetSeats = dealInTargetSeats.ToArray(),
+                Reasons = reasons.ToArray()
+            });
 
             if (score > bestScore)
             {
@@ -181,6 +202,10 @@ public sealed class NeijiangHellChallengeEngine
             OracleDealInTargetSeats = bestDealInTargetSeats,
             ExactKeepsReady = bestKeepsReady,
             ExactWallRemaining = bestWallRemaining,
+            Candidates = candidates
+                .OrderByDescending(candidate => candidate.Score)
+                .ThenBy(candidate => candidate.TileType)
+                .ToArray(),
             Reasons = bestReasons.Concat(teamPlan.Reasons).Distinct().ToArray()
         };
     }
@@ -272,6 +297,8 @@ public sealed class NeijiangHellChallengeEngine
             penalty -= 1800 + exactWallRemaining * 320;
         if (humanAlreadyReady && shantenAfterDiscard <= 1)
             penalty -= 900 + (keepsReady ? 450 : 0) + (wallCount <= 10 ? 650 : 0);
+        if (humanAlreadyReady && wallCount <= 10 && shantenAfterDiscard <= 0 && keepsReady)
+            penalty = Math.Min(penalty, 1800);
         if (!humanAlreadyReady && wallCount is >= 9 and <= 14 && shantenAfterDiscard <= 0 && humanPengThreat <= 2)
             penalty -= 950;
         if (wallCount <= 8 && shantenAfterDiscard <= 1 && humanPengThreat <= 2)
@@ -281,6 +308,8 @@ public sealed class NeijiangHellChallengeEngine
         var floor = humanPengThreat >= 3 ? 1600 : 120;
         if (humanAlreadyReady && wallCount <= 10 && shantenAfterDiscard <= 1 && keepsReady)
             floor = 420;
+        if (humanAlreadyReady && wallCount <= 10 && shantenAfterDiscard <= 0 && keepsReady && humanPengThreat <= 4)
+            floor = 0;
         if (!humanAlreadyReady && wallCount is >= 9 and <= 14 && shantenAfterDiscard <= 0 && humanPengThreat <= 2)
             floor = 180;
         return Math.Max(floor, penalty);
@@ -296,13 +325,15 @@ public sealed class NeijiangHellChallengeEngine
         int wallCount,
         int shantenAfterDiscard)
     {
-        if (!feedsHumanPeng || feedsHumanHu || feedsHumanGang || !keepsReady || humanPengThreat > 2)
+        if (!feedsHumanPeng || feedsHumanHu || feedsHumanGang || !keepsReady)
             return 0;
 
         if (wallCount >= 15)
             return 760;
         if (!humanAlreadyReady && wallCount >= 9 && shantenAfterDiscard <= 0)
             return 620;
+        if (humanAlreadyReady && wallCount <= 10 && shantenAfterDiscard <= 0)
+            return humanPengThreat >= 3 ? 1280 : 720;
         if (humanAlreadyReady && wallCount <= 10 && shantenAfterDiscard <= 1)
             return 520;
         return 0;

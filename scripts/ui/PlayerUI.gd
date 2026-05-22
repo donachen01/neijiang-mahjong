@@ -20,6 +20,11 @@ const SELF_MELD_TILE_SCALE := SELF_ROW_TILE_VISUAL_HEIGHT / TILE_VISUAL_BASE_HEI
 const SELF_MELD_TILE_STEP := 124.0
 const TOP_ROW_TILE_SCALE := 0.86
 const TOP_ROW_TILE_SEPARATION := 4
+const TOP_ROW_MAX_COMBINED_TILE_SLOTS := 18
+const TOP_ROW_MIN_TILE_SCALE := 0.56
+const TOP_ROW_MELD_TILE_SEPARATION := 2.0
+const TOP_ROW_MELD_GROUP_SEPARATION := 6
+const TOP_ROW_SLOT_PADDING := 30.0
 const SIDE_HAND_TILE_SCALE := 0.74
 const SIDE_MELD_TILE_SCALE := 1.05
 const SIDE_MELD_VERTICAL_OVERLAP := -10.0
@@ -55,6 +60,7 @@ var hand_render_signature: String = ""
 var meld_render_signature: String = ""
 var opponent_band_render_signature: String = ""
 var discard_render_signature: String = ""
+var top_row_tile_scale := TOP_ROW_TILE_SCALE
 
 
 func _ready() -> void:
@@ -381,23 +387,17 @@ func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
 		opponent_band.add_child(layout_root)
 
 		var content_gap := 28.0
-		var top_tile_size := _tile_visual_size_for_scale(TOP_ROW_TILE_SCALE)
 		var hu_width := 116.0 if has_hu else 0.0
-		var meld_width := 0.0
-		if has_melds:
-			var meld_tile_slots := 0
-			for meld in melds:
-				meld_tile_slots += (meld.get("tiles", []) as Array).size()
-			meld_width = minf(500.0, maxf(260.0, 28.0 + float(meld_tile_slots) * (top_tile_size.x + 4.0)))
-		var gap_width := (content_gap if has_melds else 0.0) + (content_gap if has_hu else 0.0)
-		var visible_hand_count := clampi(hand_count, 1, 14)
-		var natural_hand_width := top_tile_size.x + maxf(0.0, float(visible_hand_count - 1)) * (top_tile_size.x + float(TOP_ROW_TILE_SEPARATION))
-		var row_width := clampf(meld_width + natural_hand_width + hu_width + gap_width + 56.0, 1404.0, 1466.0)
+		var row_width := minf(maxf(520.0, layout_width - 16.0), 1466.0)
+		var content_width := row_width - 56.0
+		var meld_tile_slots := _top_row_meld_tile_slot_count(melds)
+		var visible_hand_count := _top_row_visible_hand_count(hand_count, meld_tile_slots)
+		top_row_tile_scale = _top_row_scale_for_capacity(melds, visible_hand_count, content_width, hu_width, has_hu, content_gap)
+		var top_tile_size := _tile_visual_size_for_scale(top_row_tile_scale)
+		var meld_width := _top_row_meld_width(melds, top_tile_size.x) if has_melds else 0.0
+		var hand_width := _top_row_hand_width(visible_hand_count, top_tile_size.x)
 		var row_height := 184.0
 		var content_x := 26.0
-		var content_width := row_width - 56.0
-		var max_hand_width := maxf(500.0, content_width - meld_width - hu_width - gap_width)
-		var hand_width := minf(max_hand_width, maxf(520.0, natural_hand_width))
 
 		var row_root := _create_fixed_slot(row_width, row_height)
 		row_root.name = "HorizontalRowRoot"
@@ -440,12 +440,12 @@ func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
 		top_hand_box.add_theme_constant_override("separation", TOP_ROW_TILE_SEPARATION)
 		top_hand_box.alignment = BoxContainer.ALIGNMENT_BEGIN
 		hand_center.add_child(top_hand_box)
-		for index in range(mini(hand_count, 14)):
+		for index in range(visible_hand_count):
 			var top_tile := TILE_SCENE.instantiate()
 			var source_tile_data: Dictionary = hand_tiles[index] if index < hand_tiles.size() else {}
 			var tile_data: Dictionary = source_tile_data if not show_back else {}
 			var is_bao_gang := _is_bao_gang_tile(player, source_tile_data)
-			top_tile.call("configure", tile_data, TOP_ROW_TILE_SCALE, show_back and tile_data.is_empty(), false, is_bao_gang)
+			top_tile.call("configure", tile_data, top_row_tile_scale, show_back and tile_data.is_empty(), false, is_bao_gang)
 			top_tile.rotation_degrees = _seat_tile_rotation_degrees()
 			top_hand_box.add_child(top_tile)
 
@@ -640,6 +640,79 @@ func _create_fixed_slot(width: float, height: float) -> Control:
 	slot.size = slot.custom_minimum_size
 	slot.clip_contents = true
 	return slot
+
+
+func _top_row_meld_tile_slot_count(melds: Array) -> int:
+	var count := 0
+	for meld in melds:
+		count += (meld.get("tiles", []) as Array).size()
+	return count
+
+
+func _top_row_visible_hand_count(hand_count: int, meld_tile_slots: int) -> int:
+	if hand_count <= 0:
+		return 0
+	var available_slots := TOP_ROW_MAX_COMBINED_TILE_SLOTS - maxi(0, meld_tile_slots)
+	return clampi(hand_count, 1, maxi(1, available_slots))
+
+
+func _top_row_scale_for_capacity(
+	melds: Array,
+	visible_hand_count: int,
+	content_width: float,
+	hu_width: float,
+	has_hu: bool,
+	content_gap: float
+) -> float:
+	var reserved_gap := (content_gap if not melds.is_empty() else 0.0) + (content_gap if has_hu else 0.0)
+	var slot_padding := (TOP_ROW_SLOT_PADDING if not melds.is_empty() else 0.0) + (TOP_ROW_SLOT_PADDING if visible_hand_count > 0 else 0.0)
+	var available_width := maxf(1.0, content_width - hu_width - reserved_gap)
+	var units := _top_row_width_units(melds, visible_hand_count)
+	if units <= 0.0:
+		return TOP_ROW_TILE_SCALE
+	var fit_scale := maxf(1.0, available_width - slot_padding) / units / TILE_VISUAL_BASE_WIDTH
+	return clampf(fit_scale, TOP_ROW_MIN_TILE_SCALE, TOP_ROW_TILE_SCALE)
+
+
+func _top_row_width_units(melds: Array, visible_hand_count: int) -> float:
+	var units := 0.0
+	for meld in melds:
+		var tiles: Array = meld.get("tiles", [])
+		if tiles.is_empty():
+			continue
+		if units > 0.0:
+			units += TOP_ROW_MELD_GROUP_SEPARATION / TILE_VISUAL_BASE_WIDTH
+		units += float(tiles.size())
+		units += TOP_ROW_MELD_TILE_SEPARATION * maxf(0.0, float(tiles.size() - 1)) / TILE_VISUAL_BASE_WIDTH
+	if visible_hand_count > 0:
+		if units > 0.0:
+			units += 28.0 / TILE_VISUAL_BASE_WIDTH
+		units += float(visible_hand_count)
+		units += float(TOP_ROW_TILE_SEPARATION) * maxf(0.0, float(visible_hand_count - 1)) / TILE_VISUAL_BASE_WIDTH
+	return units
+
+
+func _top_row_meld_width(melds: Array, tile_width: float) -> float:
+	var width := 0.0
+	var visible_groups := 0
+	for meld in melds:
+		var tiles: Array = meld.get("tiles", [])
+		if tiles.is_empty():
+			continue
+		if visible_groups > 0:
+			width += float(TOP_ROW_MELD_GROUP_SEPARATION)
+		width += tile_width * float(tiles.size())
+		width += TOP_ROW_MELD_TILE_SEPARATION * maxf(0.0, float(tiles.size() - 1))
+		visible_groups += 1
+	if width <= 0.0:
+		return 0.0
+	return ceil(width + TOP_ROW_SLOT_PADDING)
+
+
+func _top_row_hand_width(visible_hand_count: int, tile_width: float) -> float:
+	if visible_hand_count <= 0:
+		return 0.0
+	return ceil(tile_width * float(visible_hand_count) + float(TOP_ROW_TILE_SEPARATION) * maxf(0.0, float(visible_hand_count - 1)) + TOP_ROW_SLOT_PADDING)
 
 
 func _side_meld_column_height(melds: Array) -> float:
@@ -1062,7 +1135,7 @@ func _meld_tile_scale() -> float:
 	if seat_dock == SeatDock.SELF:
 		return SELF_MELD_TILE_SCALE
 	if seat_dock == SeatDock.TOP:
-		return TOP_ROW_TILE_SCALE
+		return top_row_tile_scale
 	if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT]:
 		return SIDE_MELD_TILE_SCALE
 	return 1.0

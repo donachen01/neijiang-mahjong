@@ -47,15 +47,16 @@ const AI_ASYNC_TIMEOUT_MS := 1000
 const AI_TURN_SOFT_TIMEOUT_MS := 2200
 const AI_REACTION_SOFT_TIMEOUT_MS := 2200
 const AI_REACTION_REVIEW_LIMIT := 24
-const HELL_TRAINING_DIR := "user://测试数据统计/hell_training"
-const HELL_MARKED_CASE_DIR := "user://测试数据统计/hell_marked_cases"
-const HELL_REPLAY_DIR := "user://测试数据统计/hell_replay"
+const HELL_TRAINING_DIR := "res://测试数据统计/hell_training"
+const HELL_MARKED_CASE_DIR := "res://测试数据统计/hell_marked_cases"
+const HELL_REPLAY_DIR := "res://测试数据统计/hell_replay"
 const AI_ANALYSIS_RECORDING_ENABLED := false
-const DEBUG_TRAINING_RECORDING_ENABLED := false
+const DEBUG_TRAINING_RECORDING_ENABLED := true
 const AI_LEARNING_RECORDING_ENABLED := false
 const AI_CHAIN_DEBUG_ENABLED := false
 const DIAGNOSTIC_EXPORT_ENABLED := false
 const AI_ANALYSIS_DIR := "user://ai_analysis"
+const DEBUG_DECISION_TRACE_DIR := "user://ai_decision_trace"
 const DIAGNOSTIC_EXPORT_DIR := "user://diagnostic_exports"
 const DIAGNOSTIC_DOWNLOAD_SUBDIR := "NeijiangMahjongLogs"
 const DIAGNOSTIC_MAX_DEPTH := 5
@@ -133,6 +134,9 @@ var hell_last_marked_signature: String = ""
 var ai_analysis_session_id: String = ""
 var ai_analysis_event_count: int = 0
 var latest_ai_analysis_event: Dictionary = {}
+var debug_decision_trace_session_id: String = ""
+var debug_decision_trace_event_count: int = 0
+var latest_debug_decision_trace_event: Dictionary = {}
 
 var _rng := RandomNumberGenerator.new()
 var deterministic_seed_enabled: bool = false
@@ -303,6 +307,7 @@ func get_debug_snapshot() -> Dictionary:
 		"opening_bao_jiao_queue": opening_bao_jiao_queue.duplicate(),
 		"hell_training": _build_hell_training_debug_snapshot(),
 		"ai_analysis_recording": _build_ai_analysis_recording_debug_snapshot(),
+		"debug_decision_trace": _build_debug_decision_trace_snapshot(),
 		"players": players.duplicate(true),
 	}
 
@@ -1173,6 +1178,14 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 			"player_state": player_state.duplicate(true),
 			"table_state": table_state.duplicate(true),
 		})
+		_record_ai_decision_trace_event("turn_decision_built", {
+			"seat": seat,
+			"decision": base.duplicate(true),
+			"decision_path": "self_action",
+			"self_action_diagnostic": _build_self_action_diagnostic_profile(seat, self_action),
+			"player_state": player_state.duplicate(true),
+			"table_state": table_state.duplicate(true),
+		})
 		return base
 	var analysis: Dictionary = {}
 	if ai_manager != null:
@@ -1191,6 +1204,30 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 	if selected_tile.is_empty():
 		debug_last_message = "C# AI 已返回，但推荐牌未映射到当前手牌。"
 		_record_ai_chain_debug("turn_build_map_failed seat=%d analysis=%s" % [seat, JSON.stringify(analysis).left(900)])
+		return {}
+	var analysis_action := str(analysis.get("action", "")).strip_edges().to_lower()
+	if analysis_action == "gang":
+		var gang_decision := _build_ai_turn_gang_decision_from_analysis(base, seat, analysis)
+		if not gang_decision.is_empty():
+			_record_ai_analysis_event("turn_decision_built", {
+				"seat": seat,
+				"decision": gang_decision.duplicate(true),
+				"decision_path": "turn_gang",
+				"turn_diagnostic": _build_turn_diagnostic_profile(seat, analysis, selected_tile, {}),
+				"player_state": player_state.duplicate(true),
+				"table_state": table_state.duplicate(true),
+			})
+			_record_ai_decision_trace_event("turn_decision_built", {
+				"seat": seat,
+				"decision": gang_decision.duplicate(true),
+				"decision_path": "turn_gang",
+				"turn_diagnostic": _build_turn_diagnostic_profile(seat, analysis, selected_tile, {}),
+				"player_state": player_state.duplicate(true),
+				"table_state": table_state.duplicate(true),
+			})
+			return gang_decision
+		debug_last_message = "C# AI 返回报杠动作，但当前牌面未找到可执行杠选项。"
+		_record_ai_chain_debug("turn_build_gang_map_failed seat=%d analysis=%s" % [seat, JSON.stringify(analysis).left(900)])
 		return {}
 	var hell_decision := _apply_hell_oracle_to_discard_decision(
 		base,
@@ -1218,7 +1255,39 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 		"player_state": player_state.duplicate(true),
 		"table_state": table_state.duplicate(true),
 	})
+	_record_ai_decision_trace_event("turn_decision_built", {
+		"seat": seat,
+		"decision": base.duplicate(true),
+		"decision_path": "discard",
+		"selected_tile": selected_tile.duplicate(true),
+		"turn_diagnostic": _build_turn_diagnostic_profile(seat, analysis, selected_tile, hell_oracle),
+		"player_state": player_state.duplicate(true),
+		"table_state": table_state.duplicate(true),
+	})
 	return base
+
+
+func _build_ai_turn_gang_decision_from_analysis(base: Dictionary, seat: int, analysis: Dictionary) -> Dictionary:
+	var tile_type := int(analysis.get("tile_type", analysis.get("recommended", {}).get("csharp_tile_type", -1)))
+	var gang_subtype := str(analysis.get("gang_subtype", analysis.get("gangSubtype", ""))).strip_edges()
+	var option: Dictionary = {}
+	if gang_subtype == "add_gang":
+		option = _find_option_by_tile_type(_find_all_add_gang_options(seat), tile_type, "tile")
+		if not option.is_empty():
+			var decision := base.duplicate(true)
+			decision["action"] = "add_gang"
+			decision["gang_option"] = option.duplicate(true)
+			decision["analysis"] = analysis.duplicate(true)
+			return decision
+	if gang_subtype == "an_gang" or option.is_empty():
+		option = _find_option_by_tile_type(_find_all_an_gang_options(seat), tile_type, "tiles")
+		if not option.is_empty():
+			var decision := base.duplicate(true)
+			decision["action"] = "an_gang"
+			decision["gang_option"] = option.duplicate(true)
+			decision["analysis"] = analysis.duplicate(true)
+			return decision
+	return {}
 
 
 func _build_ai_self_action_decision(seat: int, player_state: Dictionary, table_state: Dictionary) -> Dictionary:
@@ -1320,12 +1389,26 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 				"decision": decision.duplicate(true),
 				"debug_last_message": debug_last_message,
 			})
+			_record_ai_decision_trace_event("turn_action_executed", {
+				"seat": seat,
+				"action": "self_hu",
+				"executed": self_hu_ok,
+				"decision": decision.duplicate(true),
+				"debug_last_message": debug_last_message,
+			})
 			return self_hu_ok
 		"bao_jiao":
 			_record_ai_metric("bao_jiao_actions")
 			_record_hell_decision_snapshot(decision, "bao_jiao")
 			var bao_jiao_ok := execute_human_bao_jiao(seat)
 			_record_ai_analysis_event("turn_action_executed", {
+				"seat": seat,
+				"action": "bao_jiao",
+				"executed": bao_jiao_ok,
+				"decision": decision.duplicate(true),
+				"debug_last_message": debug_last_message,
+			})
+			_record_ai_decision_trace_event("turn_action_executed", {
 				"seat": seat,
 				"action": "bao_jiao",
 				"executed": bao_jiao_ok,
@@ -1344,12 +1427,26 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 				"decision": decision.duplicate(true),
 				"debug_last_message": debug_last_message,
 			})
+			_record_ai_decision_trace_event("turn_action_executed", {
+				"seat": seat,
+				"action": "an_gang",
+				"executed": an_gang_ok,
+				"decision": decision.duplicate(true),
+				"debug_last_message": debug_last_message,
+			})
 			return an_gang_ok
 		"add_gang":
 			_record_ai_metric("add_gang_attempts")
 			_record_hell_decision_snapshot(decision, "add_gang")
 			var add_gang_ok := _start_add_gang(seat, decision.get("gang_option", {}))
 			_record_ai_analysis_event("turn_action_executed", {
+				"seat": seat,
+				"action": "add_gang",
+				"executed": add_gang_ok,
+				"decision": decision.duplicate(true),
+				"debug_last_message": debug_last_message,
+			})
+			_record_ai_decision_trace_event("turn_action_executed", {
 				"seat": seat,
 				"action": "add_gang",
 				"executed": add_gang_ok,
@@ -1367,6 +1464,14 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 					debug_last_message,
 				])
 				_record_ai_analysis_event("turn_action_executed", {
+					"seat": seat,
+					"action": "discard",
+					"tile_id": requested_tile_id,
+					"executed": false,
+					"decision": decision.duplicate(true),
+					"debug_last_message": debug_last_message,
+				})
+				_record_ai_decision_trace_event("turn_action_executed", {
 					"seat": seat,
 					"action": "discard",
 					"tile_id": requested_tile_id,
@@ -1393,9 +1498,25 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 				"decision": decision.duplicate(true),
 				"debug_last_message": debug_last_message,
 			})
+			_record_ai_decision_trace_event("turn_action_executed", {
+				"seat": seat,
+				"action": "discard",
+				"tile_id": tile_id,
+				"tile_type": tile_type,
+				"executed": ok,
+				"decision": decision.duplicate(true),
+				"debug_last_message": debug_last_message,
+			})
 			return ok
 	_record_ai_chain_debug("turn_execute_unknown_action decision=%s" % JSON.stringify(decision).left(500))
 	_record_ai_analysis_event("turn_action_executed", {
+		"seat": seat,
+		"action": str(decision.get("action", "")),
+		"executed": false,
+		"decision": decision.duplicate(true),
+		"debug_last_message": "unknown_action",
+	})
+	_record_ai_decision_trace_event("turn_action_executed", {
 		"seat": seat,
 		"action": str(decision.get("action", "")),
 		"executed": false,
@@ -1470,9 +1591,29 @@ func run_ai_reaction() -> bool:
 			"executed": pass_executed,
 			"discard_context": current_discard_context.duplicate(true),
 		})
+		_record_ai_decision_trace_event("reaction_action_executed", {
+			"seat": seat,
+			"candidate": candidate.duplicate(true),
+			"decision": decision.duplicate(true),
+			"requested_action": requested_action,
+			"resolved_action": resolved_action,
+			"reaction_diagnostic": _build_reaction_diagnostic_profile(seat, candidate, decision, requested_action, resolved_action),
+			"executed": pass_executed,
+			"discard_context": current_discard_context.duplicate(true),
+		})
 		return pass_executed
 	if executed:
 		_record_ai_analysis_event("reaction_action_executed", {
+			"seat": seat,
+			"candidate": candidate.duplicate(true),
+			"decision": decision.duplicate(true),
+			"requested_action": requested_action,
+			"resolved_action": resolved_action,
+			"reaction_diagnostic": _build_reaction_diagnostic_profile(seat, candidate, decision, requested_action, resolved_action),
+			"executed": true,
+			"discard_context": current_discard_context.duplicate(true),
+		})
+		_record_ai_decision_trace_event("reaction_action_executed", {
 			"seat": seat,
 			"candidate": candidate.duplicate(true),
 			"decision": decision.duplicate(true),
@@ -1489,6 +1630,18 @@ func run_ai_reaction() -> bool:
 	]
 	var pass_ok := _pass_ai_reaction(seat)
 	_record_ai_analysis_event("reaction_action_executed", {
+		"seat": seat,
+		"candidate": candidate.duplicate(true),
+		"decision": decision.duplicate(true),
+		"requested_action": requested_action,
+		"resolved_action": resolved_action,
+		"reaction_diagnostic": _build_reaction_diagnostic_profile(seat, candidate, decision, requested_action, resolved_action),
+		"executed": false,
+		"fallback_pass_executed": pass_ok,
+		"discard_context": current_discard_context.duplicate(true),
+		"debug_last_message": debug_last_message,
+	})
+	_record_ai_decision_trace_event("reaction_action_executed", {
 		"seat": seat,
 		"candidate": candidate.duplicate(true),
 		"decision": decision.duplicate(true),
@@ -3117,6 +3270,51 @@ func _on_ai_turn_analysis_ready(request_id: int, seat_index: int, analysis: Dict
 		_clear_pending_ai_turn_request()
 		_emit_state_changed()
 		return
+	var analysis_action := str(analysis.get("action", "")).strip_edges().to_lower()
+	if analysis_action == "gang":
+		var base := {
+			"round_index": round_index,
+			"seat": seat_index,
+			"phase": int(current_phase),
+			"wall_count": wall_count,
+			"hand_count": int(players[seat_index].get("hand_count", 0)),
+			"state_signature": str(pending_ai_turn_request_meta.get("state_signature", _ai_turn_state_signature(seat_index))),
+		}
+		var gang_decision := _build_ai_turn_gang_decision_from_analysis(base, seat_index, analysis)
+		if gang_decision.is_empty():
+			debug_last_message = "后台 C# AI 返回报杠动作，但当前牌面未找到可执行杠选项。"
+			_record_ai_chain_debug("turn_async_ready_gang_unmapped id=%d seat=%d analysis=%s" % [
+				request_id,
+				seat_index,
+				JSON.stringify(analysis).left(900),
+			])
+			_clear_pending_ai_turn_request()
+			_emit_state_changed()
+			return
+		pending_ai_turn_decision = gang_decision
+		_record_ai_chain_debug("turn_async_ready_gang id=%d seat=%d action=%s subtype=%s" % [
+			request_id,
+			seat_index,
+			str(gang_decision.get("action", "")),
+			str(analysis.get("gang_subtype", "")),
+		])
+		_record_ai_analysis_event("turn_analysis_ready", {
+			"request_id": request_id,
+			"seat": seat_index,
+			"decision": pending_ai_turn_decision.duplicate(true),
+			"request_meta": pending_ai_turn_request_meta.duplicate(true),
+			"turn_diagnostic": _build_turn_diagnostic_profile(seat_index, analysis, selected_tile, {}),
+		})
+		_record_ai_decision_trace_event("turn_analysis_ready", {
+			"request_id": request_id,
+			"seat": seat_index,
+			"decision": pending_ai_turn_decision.duplicate(true),
+			"request_meta": pending_ai_turn_request_meta.duplicate(true),
+			"turn_diagnostic": _build_turn_diagnostic_profile(seat_index, analysis, selected_tile, {}),
+		})
+		_clear_pending_ai_turn_request()
+		_emit_state_changed()
+		return
 	pending_ai_turn_decision = {
 		"round_index": round_index,
 		"seat": seat_index,
@@ -3146,6 +3344,13 @@ func _on_ai_turn_analysis_ready(request_id: int, seat_index: int, analysis: Dict
 		str(selected_tile.get("display_name", selected_tile.get("id", ""))),
 	])
 	_record_ai_analysis_event("turn_analysis_ready", {
+		"request_id": request_id,
+		"seat": seat_index,
+		"decision": pending_ai_turn_decision.duplicate(true),
+		"request_meta": pending_ai_turn_request_meta.duplicate(true),
+		"turn_diagnostic": _build_turn_diagnostic_profile(seat_index, analysis, selected_tile, hell_oracle),
+	})
+	_record_ai_decision_trace_event("turn_analysis_ready", {
 		"request_id": request_id,
 		"seat": seat_index,
 		"decision": pending_ai_turn_decision.duplicate(true),
@@ -3215,6 +3420,20 @@ func _on_ai_reaction_analysis_ready(request_id: int, seat_index: int, analysis: 
 	_record_ai_analysis_event("reaction_analysis_ready", {
 		"request_id": request_id,
 		"seat": seat_index,
+		"decision": pending_ai_reaction_decision.duplicate(true),
+		"request_meta": pending_ai_reaction_request_meta.duplicate(true),
+		"reaction_diagnostic": _build_reaction_diagnostic_profile(
+			seat_index,
+			candidate,
+			analysis,
+			str(analysis.get("action", "pass")),
+			_resolve_ai_reaction_action(seat_index, candidate, str(analysis.get("action", "pass")).strip_edges().to_lower())
+		),
+	})
+	_record_ai_decision_trace_event("reaction_analysis_ready", {
+		"request_id": request_id,
+		"seat": seat_index,
+		"candidate": candidate.duplicate(true),
 		"decision": pending_ai_reaction_decision.duplicate(true),
 		"request_meta": pending_ai_reaction_request_meta.duplicate(true),
 		"reaction_diagnostic": _build_reaction_diagnostic_profile(
@@ -3905,6 +4124,17 @@ func _compact_turn_candidate_for_training(candidate: Dictionary) -> Dictionary:
 		"risk_label": str(candidate.get("risk_label", "")),
 		"strategy_tag": str(candidate.get("strategy_tag", "")),
 		"strategy_mode": str(candidate.get("strategy_mode", "")),
+		"keeps_ready": bool(candidate.get("keeps_ready", false)),
+		"exact_deal_in": bool(candidate.get("exact_deal_in", false)),
+		"feeds_human_hu": bool(candidate.get("feeds_human_hu", false)),
+		"feeds_human_peng": bool(candidate.get("feeds_human_peng", false)),
+		"feeds_human_gang": bool(candidate.get("feeds_human_gang", false)),
+		"human_peng_threat": int(candidate.get("human_peng_threat", 0)),
+		"human_peng_penalty": int(candidate.get("human_peng_penalty", 0)),
+		"tempo_peng_allowance_bonus": int(candidate.get("tempo_peng_allowance_bonus", 0)),
+		"peng_only_interaction_bonus": int(candidate.get("peng_only_interaction_bonus", 0)),
+		"exact_wall_remaining": int(candidate.get("exact_wall_remaining", 0)),
+		"deal_in_target_seats": Array(candidate.get("deal_in_target_seats", [])).duplicate(true),
 		"routes_after": Array(candidate.get("routes_after", [])).duplicate(true),
 		"route_loss": Array(candidate.get("route_loss", [])).duplicate(true),
 		"score_components": _build_candidate_score_components(candidate),
@@ -3936,6 +4166,9 @@ func _build_candidate_score_components(candidate: Dictionary) -> Dictionary:
 		"taatsu_overflow": int(candidate.get("taatsu_overflow", 0)),
 		"same_shanten_improvement_count": int(candidate.get("same_shanten_improvement_count", 0)),
 		"middle_tile_flexibility": int(candidate.get("middle_tile_flexibility", 0)),
+		"human_peng_penalty": float(candidate.get("human_peng_penalty", 0.0)),
+		"tempo_peng_allowance_bonus": float(candidate.get("tempo_peng_allowance_bonus", 0.0)),
+		"peng_only_interaction_bonus": float(candidate.get("peng_only_interaction_bonus", 0.0)),
 	}
 
 
@@ -5376,7 +5609,7 @@ func _is_hell_challenge_mode() -> bool:
 func _is_ai_analysis_recording_enabled() -> bool:
 	if not _is_runtime_recording_enabled():
 		return false
-	return AI_ANALYSIS_RECORDING_ENABLED or (DEBUG_TRAINING_RECORDING_ENABLED and OS.is_debug_build())
+	return AI_ANALYSIS_RECORDING_ENABLED or _is_debug_training_recording_enabled()
 
 
 func _is_ai_chain_debug_enabled() -> bool:
@@ -5389,10 +5622,18 @@ func _is_diagnostic_export_enabled() -> bool:
 
 func _is_runtime_recording_enabled() -> bool:
 	return AI_ANALYSIS_RECORDING_ENABLED \
-		or DEBUG_TRAINING_RECORDING_ENABLED \
+		or _is_debug_training_recording_enabled() \
 		or AI_LEARNING_RECORDING_ENABLED \
 		or DIAGNOSTIC_EXPORT_ENABLED \
 		or AI_CHAIN_DEBUG_ENABLED
+
+
+func _is_debug_training_recording_enabled() -> bool:
+	return DEBUG_TRAINING_RECORDING_ENABLED \
+		and OS.is_debug_build() \
+		and not OS.has_feature("android") \
+		and not OS.has_feature("ios") \
+		and not OS.has_feature("web")
 
 
 func _ensure_hell_training_session() -> void:
@@ -5557,19 +5798,146 @@ func _write_ai_analysis_summary() -> void:
 	})
 
 
+func _is_debug_decision_trace_enabled() -> bool:
+	return OS.is_debug_build()
+
+
+func _ensure_debug_decision_trace_session() -> void:
+	if not _is_debug_decision_trace_enabled():
+		return
+	if not debug_decision_trace_session_id.is_empty():
+		_ensure_debug_decision_trace_output_dirs()
+		return
+	debug_decision_trace_session_id = "%s_debug_%s" % [_hell_timestamp_slug(), str(OS.get_unique_id()).substr(0, 8)]
+	debug_decision_trace_event_count = 0
+	latest_debug_decision_trace_event.clear()
+	_ensure_debug_decision_trace_output_dirs()
+	_write_json_file(_debug_decision_trace_session_path(), {
+		"schema_version": 1,
+		"session_id": debug_decision_trace_session_id,
+		"created_at": Time.get_datetime_string_from_system(),
+		"app_version": str(ProjectSettings.get_setting("application/config/version", "")),
+		"recording_dir": DEBUG_DECISION_TRACE_DIR,
+		"recording_dir_absolute": ProjectSettings.globalize_path(DEBUG_DECISION_TRACE_DIR),
+		"events_path": _debug_decision_trace_events_path(),
+		"events_path_absolute": ProjectSettings.globalize_path(_debug_decision_trace_events_path()),
+		"package_name": str(ProjectSettings.get_setting("application/config/name", "")),
+		"note": "实战 AI 决策追踪：逐条 JSONL 追加，不覆盖。用于复盘后台真实输入、分值、原因和实际执行结果。",
+	})
+
+
+func _ensure_debug_decision_trace_output_dirs() -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_debug_decision_trace_session_dir()))
+
+
+func _debug_decision_trace_session_dir() -> String:
+	return "%s/%s" % [DEBUG_DECISION_TRACE_DIR, debug_decision_trace_session_id if not debug_decision_trace_session_id.is_empty() else "pending"]
+
+
+func _debug_decision_trace_session_path() -> String:
+	return "%s/session.json" % _debug_decision_trace_session_dir()
+
+
+func _debug_decision_trace_events_path() -> String:
+	return "%s/events.jsonl" % _debug_decision_trace_session_dir()
+
+
+func _build_debug_decision_trace_snapshot() -> Dictionary:
+	return {
+		"enabled": _is_debug_decision_trace_enabled(),
+		"session_id": debug_decision_trace_session_id,
+		"event_count": debug_decision_trace_event_count,
+		"latest_event": latest_debug_decision_trace_event.duplicate(true),
+		"output_dir": _debug_decision_trace_session_dir(),
+		"output_dir_absolute": ProjectSettings.globalize_path(_debug_decision_trace_session_dir()),
+		"events_path": _debug_decision_trace_events_path(),
+		"events_path_absolute": ProjectSettings.globalize_path(_debug_decision_trace_events_path()),
+	}
+
+
+func _record_ai_decision_trace_event(event_type: String, payload: Dictionary) -> void:
+	if not _is_debug_decision_trace_enabled():
+		return
+	_ensure_debug_decision_trace_session()
+	debug_decision_trace_event_count += 1
+	var event := {
+		"schema_version": 1,
+		"session_id": debug_decision_trace_session_id,
+		"event_index": debug_decision_trace_event_count,
+		"event_type": event_type,
+		"created_at": Time.get_datetime_string_from_system(),
+		"ticks_msec": Time.get_ticks_msec(),
+		"round_index": round_index,
+		"phase": int(current_phase),
+		"phase_name": _phase_debug_name(current_phase),
+		"current_turn_seat": current_turn_seat,
+		"dealer_seat": current_dealer_seat,
+		"wall_count": wall_count,
+		"discard_count": discard_pile.size(),
+		"scores": _hell_score_snapshot(),
+		"ai_metrics": ai_decision_metrics.duplicate(true),
+		"backend": _build_ai_core_debug_snapshot(),
+		"visible_state": _build_hell_visible_state_snapshot(),
+		"hidden_state": _build_hell_hidden_state_snapshot(),
+		"payload": payload.duplicate(true),
+	}
+	latest_debug_decision_trace_event = {
+		"event_index": debug_decision_trace_event_count,
+		"event_type": event_type,
+		"created_at": str(event.get("created_at", "")),
+		"round_index": round_index,
+		"phase_name": str(event.get("phase_name", "")),
+		"seat": int(payload.get("seat", -1)),
+	}
+	_append_jsonl_file(_debug_decision_trace_events_path(), event)
+	if debug_decision_trace_event_count % 20 == 0:
+		_write_debug_decision_trace_summary()
+
+
+func _write_debug_decision_trace_summary() -> void:
+	if debug_decision_trace_session_id.is_empty():
+		return
+	_write_json_file("%s/summary.json" % _debug_decision_trace_session_dir(), {
+		"schema_version": 1,
+		"session_id": debug_decision_trace_session_id,
+		"updated_at": Time.get_datetime_string_from_system(),
+		"event_count": debug_decision_trace_event_count,
+		"round_index": round_index,
+		"current_scores": _hell_score_snapshot(),
+		"ai_decision_metrics": ai_decision_metrics.duplicate(true),
+		"latest_event": latest_debug_decision_trace_event.duplicate(true),
+		"events_path": _debug_decision_trace_events_path(),
+		"events_path_absolute": ProjectSettings.globalize_path(_debug_decision_trace_events_path()),
+	})
+
+
 func _record_hell_decision_snapshot(decision: Dictionary, decision_type: String, actual_tile_type: int = -1) -> void:
 	if not _is_hell_training_mode():
 		return
 	_ensure_hell_training_session()
 	hell_training_decision_count += 1
+	var seat := int(decision.get("seat", current_turn_seat))
+	var fair_ai: Dictionary = decision.get("analysis", {}).duplicate(true)
+	var enriched_decision := decision.duplicate(true)
+	if decision_type == "discard" and not fair_ai.has("turn_diagnostic"):
+		var selected_tile: Dictionary = fair_ai.get("recommended", {}).get("tile", {})
+		if selected_tile.is_empty() and actual_tile_type >= 0:
+			selected_tile = _find_hand_tile_by_tile_type(seat, actual_tile_type)
+		fair_ai["turn_diagnostic"] = _build_turn_diagnostic_profile(
+			seat,
+			fair_ai,
+			selected_tile,
+			decision.get("hell_oracle", {}).duplicate(true)
+		)
+		enriched_decision["analysis"] = fair_ai.duplicate(true)
 	var snapshot := _build_hell_case_snapshot(
 		decision_type,
-		int(decision.get("seat", current_turn_seat)),
-		decision.get("analysis", {}).duplicate(true),
+		seat,
+		fair_ai,
 		decision.get("hell_oracle", {}).duplicate(true),
 		decision.get("actual_action", {}).duplicate(true),
 		{
-			"decision": decision.duplicate(true),
+			"decision": enriched_decision,
 			"actual_tile_type": actual_tile_type,
 		}
 	)

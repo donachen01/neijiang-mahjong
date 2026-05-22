@@ -25,5 +25,27 @@ public sealed class NeijiangHellOracleResult
     public string TeamRole { get; init; } = "";
     public int TeamPressureBonus { get; init; }
     public IReadOnlyList<string> TeamPlanSummary { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<NeijiangHellChallengeCandidate> Candidates { get; init; } = Array.Empty<NeijiangHellChallengeCandidate>();
+    public IReadOnlyList<string> Reasons { get; init; } = Array.Empty<string>();
+}
+
+public sealed class NeijiangHellChallengeCandidate
+{
+    public int TileType { get; init; }
+    public int Score { get; init; }
+    public int Shanten { get; init; }
+    public int LiveUkeire { get; init; }
+    public int WaitCount { get; init; }
+    public bool ExactDealIn { get; init; }
+    public bool FeedsHumanHu { get; init; }
+    public bool FeedsHumanPeng { get; init; }
+    public bool FeedsHumanGang { get; init; }
+    public int HumanPengThreat { get; init; }
+    public int HumanPengPenalty { get; init; }
+    public int TempoPengAllowanceBonus { get; init; }
+    public int PengOnlyInteractionBonus { get; init; }
+    public bool KeepsReady { get; init; }
+    public int ExactWallRemaining { get; init; }
+    public IReadOnlyList<int> DealInTargetSeats { get; init; } = Array.Empty<int>();
     public IReadOnlyList<string> Reasons { get; init; } = Array.Empty<string>();
 }

@@ -25,6 +25,7 @@ func _run() -> void:
 	_check_top_controls_separation(root_node, failures)
 	_check_action_helper_layer_contract(root_node, failures)
 	_check_top_integrated_row_contract(root_node, failures)
+	await _check_top_row_three_melds_fit_eighteen_slots(failures)
 	await _check_self_actual_meld_row_contract(root_node, failures)
 	_check_self_embedded_row_contract(root_node, failures)
 	_check_self_hand_fill_contract(root_node, failures)
@@ -533,6 +534,61 @@ func _check_top_integrated_row_contract(root_node: Node, failures: Array[String]
 		var hand_to_hu_gap := hu_slot.position.x - hand_slot.get_rect().end.x
 		if hand_to_hu_gap < 20.0:
 			failures.append("对家手牌和胡牌之间应留出间距，当前 %.1f" % hand_to_hu_gap)
+
+
+func _check_top_row_three_melds_fit_eighteen_slots(failures: Array[String]) -> void:
+	var top_ui := PLAYER_UI_SCENE.instantiate()
+	top_ui.set("seat_dock", 1)
+	get_root().add_child(top_ui)
+	await process_frame
+	var sample_melds := [
+		_make_meld(5100, "tong", 9, 0, 3),
+		_make_meld(5200, "tong", 8, 1, 3),
+		_make_meld(5300, "tong", 7, 3, 3),
+	]
+	var sample_player := {
+		"seat": 2,
+		"nickname": "对家",
+		"score": -14,
+		"hand_count": 9,
+		"hand_tiles": _fake_tiles(9),
+		"melds": sample_melds,
+	}
+	top_ui.call("apply_snapshot", sample_player, true, -1, -1, true)
+	await process_frame
+	await process_frame
+
+	var row_root := top_ui.find_child("HorizontalRowRoot", true, false) as Control
+	var meld_slot := top_ui.find_child("TopMeldSlot", true, false) as Control
+	var hand_slot := top_ui.find_child("TopHandSlot", true, false) as Control
+	if row_root == null or meld_slot == null or hand_slot == null:
+		failures.append("对家 3 组碰杠时必须同时保留 TopMeldSlot 和 TopHandSlot")
+		top_ui.queue_free()
+		return
+	var row_rect := row_root.get_global_rect()
+	var meld_tiles: Array[Control] = []
+	var hand_tiles: Array[Control] = []
+	_collect_tile_visual_controls(meld_slot, meld_tiles)
+	_collect_tile_visual_controls(hand_slot, hand_tiles)
+	if meld_tiles.size() != 9:
+		failures.append("对家 3 组碰杠应完整显示 9 张副露牌，当前 %d 张" % meld_tiles.size())
+	if hand_tiles.size() != 9:
+		failures.append("对家 3 组碰杠后仍应完整显示 9 张手牌，当前 %d 张" % hand_tiles.size())
+	var all_tiles := meld_tiles + hand_tiles
+	for tile in all_tiles:
+		var tile_rect := tile.get_global_rect()
+		if tile_rect.position.x < row_rect.position.x - 1.0 or tile_rect.end.x > row_rect.end.x + 1.0:
+			failures.append("对家 3 组碰杠后麻将应全部落在 18 张横排内，牌 %s 越界 %s / row %s" % [tile.name, tile_rect, row_rect])
+			break
+	var meld_bounds := _controls_global_bounds(meld_tiles)
+	var hand_bounds := _controls_global_bounds(hand_tiles)
+	if meld_bounds.size.x > meld_slot.get_global_rect().size.x + 1.0:
+		failures.append("对家 3 组碰杠副露槽被截断：牌宽 %.1f / 槽宽 %.1f" % [meld_bounds.size.x, meld_slot.get_global_rect().size.x])
+	if hand_bounds.size.x > hand_slot.get_global_rect().size.x + 1.0:
+		failures.append("对家 3 组碰杠手牌槽被截断：牌宽 %.1f / 槽宽 %.1f" % [hand_bounds.size.x, hand_slot.get_global_rect().size.x])
+	if meld_slot.position.x > 38.0:
+		failures.append("对家 3 组碰杠时应向左利用空位，当前副露槽左边 %.1f" % meld_slot.position.x)
+	top_ui.queue_free()
 
 
 func _check_self_actual_meld_row_contract(root_node: Node, failures: Array[String]) -> void:
@@ -1130,6 +1186,21 @@ func _fake_tiles(count: int) -> Array:
 			"rank": index % 9 + 1,
 		})
 	return tiles
+
+
+func _make_meld(base_id: int, suit: String, rank: int, from_seat: int, count: int) -> Dictionary:
+	var tiles: Array = []
+	for index in range(count):
+		tiles.append({
+			"id": base_id + index,
+			"suit": suit,
+			"rank": rank,
+		})
+	return {
+		"type": "peng" if count == 3 else "gang",
+		"from_seat": from_seat,
+		"tiles": tiles,
+	}
 
 
 func _children_local_bounds(children: Array) -> Rect2:

@@ -81,6 +81,12 @@ if (!SmokeReportedSelfBaoGangOwnedByCSharpWithoutFrontendMandatory(facade))
     return 521;
 }
 
+if (!SmokeReportedBaoGangDiscardPathGangsInsteadOfDiscard(facade))
+{
+    Console.Error.WriteLine("reported_bao_gang_discard_path_smoke_failed");
+    return 522;
+}
+
 if (!SmokeBaoJiaoDiscardHuOverridesMandatoryGang(facade))
 {
     Console.Error.WriteLine("bao_jiao_discard_hu_route_smoke_failed");
@@ -247,6 +253,12 @@ if (!SmokeHellChallengeAllowsLatePengOnlyWhenHumanReady())
 {
     Console.Error.WriteLine("hell_challenge_late_peng_only_interaction_smoke_failed");
     return 45;
+}
+
+if (!SmokeHellChallengeKeepsReadyWhenHumanReadyCanOnlyPeng())
+{
+    Console.Error.WriteLine("hell_challenge_ready_human_peng_only_smoke_failed");
+    return 451;
 }
 
 if (!SmokeHellChallengePrefersDirectGangOverPeng())
@@ -599,6 +611,39 @@ static bool SmokeReportedSelfBaoGangOwnedByCSharpWithoutFrontendMandatory(Neijia
         && result.Action.TileType == gangTile
         && result.GangSubtype == "an_gang"
         && result.Reasons.Any(reason => reason.Contains("报叫专线", StringComparison.Ordinal));
+}
+
+static bool SmokeReportedBaoGangDiscardPathGangsInsteadOfDiscard(NeijiangAiFacade facade)
+{
+    var gangTile = NeijiangTileCodec.EncodeTileType(0, 8);
+    var hand = new[]
+    {
+        gangTile,
+        gangTile,
+        gangTile,
+        gangTile,
+        NeijiangTileCodec.EncodeTileType(0, 1),
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 4),
+        NeijiangTileCodec.EncodeTileType(0, 5),
+        NeijiangTileCodec.EncodeTileType(1, 1),
+        NeijiangTileCodec.EncodeTileType(1, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 6),
+        NeijiangTileCodec.EncodeTileType(1, 8),
+        NeijiangTileCodec.EncodeTileType(1, 9),
+    };
+    var state = NeijiangStateCodec.FromRaw(2, 0, 2, 13, NeijiangTileCodec.BuildCount18(hand), new int[18]);
+    state.IsBaoJiao = true;
+    state.LastDrawTileType = gangTile;
+    state.IsReady[2] = true;
+    state.BaoGangTileTypes = new HashSet<int> { gangTile };
+
+    var result = facade.DecideDiscardCached(state, forceLightweight: true);
+    Console.WriteLine($"reported_bao_gang_discard_path_action={result.Action.ActionType} tile={result.Action.TileType} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.ActionType == NeijiangActionType.Gang
+        && result.Action.TileType == gangTile
+        && result.Reasons.Any(reason => reason.Contains("摸到报杠牌必", StringComparison.Ordinal));
 }
 
 static bool SmokeBaoJiaoDiscardHuOverridesMandatoryGang(NeijiangAiFacade facade)
@@ -2251,6 +2296,91 @@ static bool SmokeHellChallengeAllowsLatePengOnlyWhenHumanReady()
         && !result.OracleFeedsHumanGang
         && result.ExactKeepsReady
         && result.Reasons.Any(reason => reason.Contains("尾盘只给碰不点炮", StringComparison.Ordinal));
+}
+
+static bool SmokeHellChallengeKeepsReadyWhenHumanReadyCanOnlyPeng()
+{
+    var aiHand = NeijiangTileCodec.BuildCount18(new[]
+    {
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(0, 4),
+        NeijiangTileCodec.EncodeTileType(0, 5),
+        NeijiangTileCodec.EncodeTileType(1, 2),
+        NeijiangTileCodec.EncodeTileType(1, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 6),
+        NeijiangTileCodec.EncodeTileType(1, 8),
+    });
+    var melds = new[]
+    {
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+        new[]
+        {
+            NeijiangTileCodec.EncodeTileType(1, 1),
+            NeijiangTileCodec.EncodeTileType(1, 1),
+            NeijiangTileCodec.EncodeTileType(1, 1),
+            NeijiangTileCodec.EncodeTileType(1, 5),
+            NeijiangTileCodec.EncodeTileType(1, 5),
+            NeijiangTileCodec.EncodeTileType(1, 5),
+        },
+        Array.Empty<int>(),
+    };
+    var state = BuildMarkedDiscardState(
+        seatIndex: 2,
+        dealerSeat: 0,
+        currentSeat: 2,
+        wallCount: 5,
+        hand18: aiHand,
+        discards: new[]
+        {
+            Array.Empty<int>(),
+            Array.Empty<int>(),
+            Array.Empty<int>(),
+            Array.Empty<int>(),
+        },
+        melds: melds);
+    state.IsReady[0] = true;
+
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    allHands[0] = NeijiangTileCodec.BuildCount18(new[]
+    {
+        NeijiangTileCodec.EncodeTileType(0, 1),
+        NeijiangTileCodec.EncodeTileType(0, 2),
+        NeijiangTileCodec.EncodeTileType(0, 3),
+        NeijiangTileCodec.EncodeTileType(1, 1),
+        NeijiangTileCodec.EncodeTileType(1, 1),
+        NeijiangTileCodec.EncodeTileType(1, 1),
+        NeijiangTileCodec.EncodeTileType(1, 2),
+        NeijiangTileCodec.EncodeTileType(1, 3),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 4),
+        NeijiangTileCodec.EncodeTileType(1, 5),
+        NeijiangTileCodec.EncodeTileType(1, 8),
+        NeijiangTileCodec.EncodeTileType(1, 8),
+    });
+    allHands[2] = aiHand;
+    var exactWall = Enumerable.Repeat(0, 18).ToArray();
+    exactWall[NeijiangTileCodec.EncodeTileType(1, 6)] = 1;
+    exactWall[NeijiangTileCodec.EncodeTileType(1, 8)] = 1;
+
+    var result = new NeijiangHellChallengeEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        currentScores: new[] { -6, 0, 6, 0 });
+
+    var sixTong = NeijiangTileCodec.EncodeTileType(1, 6);
+    var eightTong = NeijiangTileCodec.EncodeTileType(1, 8);
+    Console.WriteLine($"hell_challenge_ready_human_peng_only_tile={result.Action.TileType} score={result.Action.Score} ready={result.ExactKeepsReady} feeds_hu={result.OracleFeedsHumanHu} feeds_peng={result.OracleFeedsHumanPeng} candidates={string.Join(",", result.Candidates.Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.ExactWallRemaining}/hu={candidate.FeedsHumanHu}/peng={candidate.FeedsHumanPeng}/pth={candidate.HumanPengThreat}/ppen={candidate.HumanPengPenalty}/bonus={candidate.TempoPengAllowanceBonus + candidate.PengOnlyInteractionBonus}"))} reasons={string.Join("|", result.Reasons)}");
+    return result.Action.TileType == eightTong
+        && result.ExactKeepsReady
+        && result.OracleFeedsHumanPeng
+        && !result.OracleFeedsHumanHu
+        && !result.OracleFeedsHumanGang
+        && !result.OracleDealInTargetSeats.Contains(0)
+        && NeijiangHellChallengeEngine.ResolveDealInTargetSeats(state, allHands, sixTong).Contains(0)
+        && !NeijiangHellChallengeEngine.ResolveDealInTargetSeats(state, allHands, eightTong).Contains(0);
 }
 
 static bool SmokeHellChallengeAllowsMidgamePengWhenHumanNotReady()

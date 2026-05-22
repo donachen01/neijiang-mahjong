@@ -520,6 +520,7 @@ static object BuildDiscardObject(NeijiangAiFacade facade, DiscardPayload payload
     {
         action = result.Action.ActionType.ToString().ToLowerInvariant(),
         tileType = result.Action.TileType,
+        gangSubtype = result.GangSubtype,
         score = result.Action.Score,
         shanten = result.Shanten,
         ukeire = result.Ukeire,

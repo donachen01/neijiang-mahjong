@@ -272,11 +272,12 @@ public partial class NeijiangCSharpRuntime : Node
                 humanPressureLevel = result.HumanPressureLevel,
                 oracleDealInTargetSeats = result.OracleDealInTargetSeats,
                 exactKeepsReady = result.ExactKeepsReady,
-                exactWallRemaining = result.ExactWallRemaining,
-                fairTileType = result.FairTileType,
-                actualTileType = result.ActualTileType,
-                reasons = result.Reasons
-            }, JsonOptions);
+            exactWallRemaining = result.ExactWallRemaining,
+            fairTileType = result.FairTileType,
+            actualTileType = result.ActualTileType,
+            candidates = result.Candidates.Select(BuildHellChallengeCandidateObject).ToArray(),
+            reasons = result.Reasons
+        }, JsonOptions);
         }
         catch (Exception ex)
         {
@@ -355,6 +356,7 @@ public partial class NeijiangCSharpRuntime : Node
             ok = true,
             action = result.Action.ActionType.ToString().ToLowerInvariant(),
             tileType = result.Action.TileType,
+            gangSubtype = result.GangSubtype,
             score = result.Action.Score,
             shanten = result.Shanten,
             ukeire = result.Ukeire,
@@ -443,24 +445,41 @@ public partial class NeijiangCSharpRuntime : Node
             teamPressureBonus = result.TeamPressureBonus,
             teamPlanSummary = result.TeamPlanSummary,
             reasons = result.Reasons,
-            candidates = new[]
-            {
-                new
-                {
-                    tileType = result.Action.TileType,
-                    score = result.Action.Score,
-                    shanten = 0,
-                    ukeire = 0,
-                    liveUkeire = result.ExactWallRemaining,
-                    danger = result.OracleExactDealIn ? 100 : 0,
-                    waitCount = 0,
-                    riskLabel = result.OracleExactDealIn ? "点炮" : "明牌",
-                    strategyTag = "hell_challenge",
-                    strategyMode = "地狱挑战",
-                    explanationHint = result.Action.Reason,
-                    reasons = result.Reasons
-                }
-            }
+            candidates = result.Candidates.Select(BuildHellChallengeCandidateObject).ToArray()
+        };
+
+    private static object BuildHellChallengeCandidateObject(NeijiangHellChallengeCandidate item)
+        => new
+        {
+            tileType = item.TileType,
+            score = item.Score,
+            shanten = item.Shanten,
+            ukeire = 0,
+            liveUkeire = item.LiveUkeire,
+            danger = item.ExactDealIn || item.FeedsHumanHu ? 100 : item.FeedsHumanGang ? 80 : item.FeedsHumanPeng ? 35 : 0,
+            waitCount = item.WaitCount,
+            riskLabel = item.FeedsHumanHu || item.ExactDealIn
+                ? "点炮"
+                : item.FeedsHumanGang
+                    ? "给杠"
+                    : item.FeedsHumanPeng
+                        ? "给碰"
+                        : "明牌",
+            strategyTag = "hell_challenge",
+            strategyMode = "地狱挑战",
+            explanationHint = item.Reasons.FirstOrDefault() ?? "",
+            exactDealIn = item.ExactDealIn,
+            feedsHumanHu = item.FeedsHumanHu,
+            feedsHumanPeng = item.FeedsHumanPeng,
+            feedsHumanGang = item.FeedsHumanGang,
+            humanPengThreat = item.HumanPengThreat,
+            humanPengPenalty = item.HumanPengPenalty,
+            tempoPengAllowanceBonus = item.TempoPengAllowanceBonus,
+            pengOnlyInteractionBonus = item.PengOnlyInteractionBonus,
+            keepsReady = item.KeepsReady,
+            exactWallRemaining = item.ExactWallRemaining,
+            dealInTargetSeats = item.DealInTargetSeats,
+            reasons = item.Reasons
         };
 
     private object BuildReactionObject(ReactionPayload payload)
