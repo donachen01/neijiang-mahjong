@@ -1203,55 +1203,99 @@ func _refresh_training_panel(snapshot: Dictionary) -> void:
 		if not recommended.is_empty():
 			summary_lines.append("建议先打：%s" % str(recommended.get("tile_name", "?")))
 			if recommended.has("expected_net_score") or recommended.has("csharp_expected_net_score"):
-				summary_lines.append("净分期望：%.2f（收益 %.2f / 风险 %.2f）" % [
-					float(recommended.get("expected_net_score", recommended.get("csharp_expected_net_score", 0.0))),
+				summary_lines.append("综合看这张更划算：大概能赚 %.2f，可能要冒 %.2f 的风险，算下来 %.2f" % [
 					float(recommended.get("expected_win_gain", recommended.get("csharp_expected_win_gain", 0.0))),
 					float(recommended.get("expected_deal_in_loss", recommended.get("csharp_expected_deal_in_loss", 0.0))),
+					float(recommended.get("expected_net_score", recommended.get("csharp_expected_net_score", 0.0))),
 				])
 			var reasons: Array = recommended.get("reasons", [])
 			if not reasons.is_empty():
-				summary_lines.append("理由：%s" % "；".join(reasons.slice(0, mini(3, reasons.size()))))
+				var readable_reasons: Array[String] = []
+				for reason in reasons.slice(0, mini(3, reasons.size())):
+					readable_reasons.append(_humanize_trainer_text(str(reason)))
+				summary_lines.append("原因：%s" % "；".join(readable_reasons))
 		var selected_option := _find_trainer_option_by_tile_id(trainer_hint.get("options", []), selected_tile_id)
 		if not selected_option.is_empty() and selected_tile_id != int(recommended.get("tile", {}).get("id", -1)):
 			var compare_parts: Array[String] = []
-			compare_parts.append("若改打 %s" % str(selected_option.get("tile_name", "?")))
-			compare_parts.append("向听 %d" % int(selected_option.get("shanten", 8)))
-			compare_parts.append("进张 %d" % int(selected_option.get("ukeire", 0)))
-			compare_parts.append("风险 %s" % str(selected_option.get("risk_label", "低危")))
+			compare_parts.append("如果改打 %s" % str(selected_option.get("tile_name", "?")))
+			compare_parts.append(_plain_trainer_shanten_text(int(selected_option.get("shanten", 8))))
+			compare_parts.append(_plain_trainer_ukeire_text(int(selected_option.get("ukeire", 0))))
+			compare_parts.append(_plain_trainer_risk_text(str(selected_option.get("risk_label", "低危"))))
 			if not selected_option.get("route_loss", []).is_empty():
-				compare_parts.append("会丢 %s" % "/".join(selected_option.get("route_loss", [])))
+				compare_parts.append("会把%s这条路打窄" % "、".join(selected_option.get("route_loss", [])))
 			summary_lines.append("当前选中：%s" % "；".join(compare_parts))
 		if trainer_hint.get("can_add_gang", false):
-			summary_lines.append("当前可补杠，建议先比较补杠收益与抢杠风险。")
+			summary_lines.append("现在可以补杠，先看看值不值，也要防别人抢杠。")
 		elif trainer_hint.get("can_an_gang", false):
-			summary_lines.append("当前可暗杠，建议评估补牌收益后再决定。")
+			summary_lines.append("现在可以暗杠，先看看补一张牌值不值。")
 	else:
 		summary_lines.append("当前不是你的主动出牌回合。")
 	trainer_summary_value.text = "\n".join(summary_lines)
 
 	var danger_lines: Array[String] = []
 	for item in trainer_hint.get("danger_tiles", []):
-		var line := "%s %s" % [str(item.get("tile_name", "?")), str(item.get("risk_label", "低危"))]
+		var line := "%s：%s" % [
+			str(item.get("tile_name", "?")),
+			_plain_trainer_risk_text(str(item.get("risk_label", "低危")))
+		]
 		var risk_reasons: Array = item.get("risk_reasons", [])
 		if not risk_reasons.is_empty():
-			line += " | %s" % str(risk_reasons[0])
+			line += "，%s" % _humanize_trainer_text(str(risk_reasons[0]))
 		danger_lines.append(line)
 	if danger_lines.is_empty():
-		danger_lines.append("暂无明显危险张")
-	trainer_danger_value.text = "危险张：%s" % " / ".join(danger_lines.slice(0, 2))
+		danger_lines.append("暂时没有特别危险的牌")
+	trainer_danger_value.text = "尽量少打：%s" % " / ".join(danger_lines.slice(0, 2))
 
 	var route_lines: Array[String] = []
 	var current_routes: Array = trainer_hint.get("current_routes", [])
 	if not current_routes.is_empty():
-		route_lines.append("可做番：%s" % "/".join(current_routes))
+		route_lines.append("这手牌可以往这些方向做：%s" % "、".join(current_routes))
 	if not recommended.is_empty() and not recommended.get("route_loss", []).is_empty():
-		route_lines.append("若打%s会丢：%s" % [
+		route_lines.append("如果打%s，会把这条路打掉：%s" % [
 			str(recommended.get("tile_name", "?")),
-			"/".join(recommended.get("route_loss", [])),
+			"、".join(recommended.get("route_loss", [])),
 		])
 	if route_lines.is_empty():
-		route_lines.append("当前以效率和防守为主")
+		route_lines.append("先顾摸牌顺不顺，也顾一下安全")
 	trainer_fan_value.text = "；".join(route_lines.slice(0, 2))
+
+
+func _plain_trainer_shanten_text(shanten: int) -> String:
+	if shanten <= 0:
+		return "已经听牌"
+	return "离听牌还差%d步" % shanten
+
+
+func _plain_trainer_ukeire_text(ukeire: int) -> String:
+	return "后面能接上的牌大约%d张" % maxi(0, ukeire)
+
+
+func _plain_trainer_risk_text(risk_label: String) -> String:
+	match risk_label:
+		"高危":
+			return "危险比较大"
+		"中危":
+			return "有点危险"
+		_:
+			return "相对安全"
+
+
+func _humanize_trainer_text(text: String) -> String:
+	var result := text
+	var replacements := {
+		"向听": "离听牌",
+		"活进张": "能接上的牌",
+		"进张": "能接上的牌",
+		"后验": "结合场上情况再看",
+		"压分": "会拉低收益",
+		"净分期望": "综合收益",
+		"危险度": "危险大小",
+		"听形": "听牌后的牌路",
+		"宽叫": "更容易听牌",
+	}
+	for key in replacements.keys():
+		result = result.replace(key, str(replacements[key]))
+	return result
 
 
 func _hand_contains_tile(hand_tiles: Array, tile_id: int) -> bool:

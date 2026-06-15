@@ -3269,7 +3269,7 @@ func _build_helper_secondary_choice_text(options: Array, recommended_id: int) ->
 		var suffix := ""
 		if not posterior_reasons.is_empty() and str(posterior_reasons[0]) != "后验未明显压分":
 			suffix = "｜%s" % str(posterior_reasons[0])
-		return "备选：%s｜胡率%.1f%%%s" % [
+		return "也可以考虑：%s｜胡牌机会%.1f%%%s" % [
 			str(item.get("tile_name", "?")),
 			float(item.get("win_probability", 0.0)) * 100.0,
 			suffix,
@@ -3280,7 +3280,7 @@ func _build_helper_secondary_choice_text(options: Array, recommended_id: int) ->
 func _build_helper_explanation_text(trainer_hint: Dictionary, recommended: Dictionary) -> String:
 	var forced_suit: String = str(trainer_hint.get("forced_discard_suit", ""))
 	if not forced_suit.is_empty():
-		return "优先成叫"
+		return "先把手里的牌整理到更容易听牌"
 	var csharp_probability_text := _build_helper_csharp_probability_text(recommended)
 	if not csharp_probability_text.is_empty():
 		return csharp_probability_text
@@ -3309,64 +3309,64 @@ func _build_helper_explanation_text(trainer_hint: Dictionary, recommended: Dicti
 
 	if bool(dingque_state.get("is_two_suit_table", false)):
 		if int(opponent_state.get("fast_call_count", 0)) >= 2:
-			return "两门浅墙多人提速，先稳成叫"
+			return "牌不多了，而且好几家都在提速，先让自己更快听牌"
 		if int(dingque_state.get("spread", 0)) >= 3 and _has_big_route(routes_after):
-			return "单门偏重，可保留染手上限"
+			return "这一门很多，可以继续留着冲大牌"
 		if int(opponent_state.get("flush_watch_count", 0)) >= 1 and str(top_threat_profile.get("dangerous_suit", "")) == str(tile.get("suit", "")):
-			return "有人像做%s清，先避开" % str(top_threat_profile.get("dangerous_suit_label", ""))
+			return "有人像在做%s清一色，这张先别急着打" % str(top_threat_profile.get("dangerous_suit_label", ""))
 		if int(opponent_state.get("pung_watch_count", 0)) >= 1 and rank in [2, 5, 8]:
-			return "有人像对对胡，少打2/5/8"
+			return "有人像在做对对胡，2、5、8这类牌先少打"
 		if shanten <= 1 and ukeire >= 4:
-			return "这手更利于尽快成叫"
+			return "这样打更容易尽快听牌"
 		if int(dingque_state.get("spread", 0)) <= 1:
-			return "两门均衡，先保宽叫和活张"
+			return "两门比较平均，先留更容易接牌的打法"
 
 	if bool(dingque_state.get("is_three_same", false)):
-		return "三家同缺，先快下叫"
+		return "大家缺的门差不多，先拼速度"
 	if bool(dingque_state.get("is_all_same", false)):
-		return "四家同缺，按均势打"
+		return "四家缺门都一样，先按最稳的方式打"
 	if bool(dingque_state.get("is_two_same_self_diff", false)) and _has_big_route(routes_after):
-		return "两家错缺，可冲大牌"
+		return "别人缺门和你不一样，这手可以顺着大牌方向走"
 	if int(opponent_state.get("flush_watch_count", 0)) >= 1 and str(top_threat_profile.get("dangerous_suit", "")) == str(tile.get("suit", "")):
-		return "有人像做%s清，先避开" % str(top_threat_profile.get("dangerous_suit_label", ""))
+		return "有人像在做%s清一色，这张先别急着打" % str(top_threat_profile.get("dangerous_suit_label", ""))
 	if int(opponent_state.get("pung_watch_count", 0)) >= 1 and rank in [2, 5, 8]:
-		return "有人像对对胡，少打2/5/8"
+		return "有人像在做对对胡，2、5、8这类牌先少打"
 
 	if current_routes.has("对对胡") and routes_after.has("对对胡"):
-		return "这手在做对对胡"
+		return "这手还可以继续做对对胡"
 	if current_routes.has("七对") and routes_after.has("七对"):
-		return "这手可以走七对"
+		return "这手还可以继续做七对"
 	if current_routes.has("将对") and routes_after.has("将对"):
-		return "先保留将对骨架"
+		return "先把将对的底子留住"
 	if current_routes.has("清一色") or _has_qing_route(current_routes):
 		if _has_qing_route(routes_after):
-			return "建议保清一色"
-		return "不建议拆清一色"
+			return "建议继续保清一色的路"
+		return "这时候拆清一色不划算"
 	if _has_qing_route(routes_after):
-		return "建议继续做清一色"
+		return "这手可以继续往清一色走"
 	if not route_loss.is_empty():
-		return "这张会丢番型"
+		return "这张打出去，会少一条做大牌的路"
 	if shanten <= 1 and ukeire >= 8:
-		return "这手先抢速度"
+		return "这手先抢速度更合适"
 	if shanten < 8 and ukeire >= 10:
-		return "这张进张最多"
+		return "打这张后，后面最容易摸到能接上的牌"
 	if wait_score >= 36 and ukeire >= 6:
-		return "先保留两面搭子"
+		return "先留两头都能接的顺子搭子"
 	if shape_score <= -10:
-		return "先拆孤张"
+		return "先拆掉不连不靠的单张"
 	if shape_score >= 18:
-		return "先留连张"
+		return "先留连着的牌更顺"
 	if _is_pair_tile_name(tile_name):
-		return "保留对子更灵活"
+		return "对子先留着，后面变化更多"
 	if rank in [1, 9] and risk_label in ["中危", "高危"]:
-		return "中张危险，先出边张"
+		return "中间张更危险，边张可以先出"
 	if safety_score >= 0 and (risk_label == "中危" or risk_label == "高危" or pressure_score <= -8):
-		return "这手先保安全"
+		return "这一手先安全一点更合适"
 	if not posterior_reasons.is_empty() and str(posterior_reasons[0]) != "后验未明显压分":
-		return str(posterior_reasons[0])
+		return _humanize_helper_text(str(posterior_reasons[0]))
 	if risk_label == "低危":
 		return "这张相对更安全"
-	return "这手先保宽叫和安全"
+	return "这手先留更容易听牌的路，也顾一下安全"
 
 
 func _build_helper_csharp_probability_text(option: Dictionary) -> String:
@@ -3386,27 +3386,27 @@ func _build_helper_csharp_probability_text(option: Dictionary) -> String:
 	var deal_in := float(option.get("deal_in_probability", option.get("csharp_deal_in_probability", 0.0)))
 	var defense_adjustment := float(option.get("defense_adjustment", option.get("csharp_defense_adjustment", 0.0)))
 	var shape_score := float(option.get("shape_score", option.get("csharp_shape_score", 0.0)))
-	parts.append("净分%.2f" % expected_net)
+	parts.append("综合看大概能赚%.2f" % expected_net)
 	if self_draw > 0.0:
-		parts.append("自摸%.0f%%" % (self_draw * 100.0))
+		parts.append("自摸机会%.0f%%" % (self_draw * 100.0))
 	if deal_in > 0.0:
-		parts.append("点炮%.0f%%" % (deal_in * 100.0))
+		parts.append("放炮机会%.0f%%" % (deal_in * 100.0))
 	if defense_adjustment > 0.01:
-		parts.append("防守压分%.2f" % defense_adjustment)
+		parts.append("因为要防守，收益会少%.2f" % defense_adjustment)
 	if absf(shape_score) >= 0.5:
-		parts.append("牌效%+.0f" % shape_score)
+		parts.append("牌会更顺%+.0f" % shape_score)
 	var wait_shape_label := str(option.get("wait_shape_label", option.get("csharp_wait_shape_label", "")))
 	if not wait_shape_label.is_empty() and wait_shape_label != "未成听":
-		parts.append("听形%s" % wait_shape_label)
+		parts.append("听牌后牌路%s" % wait_shape_label)
 	var limited_lookahead := float(option.get("limited_lookahead_score", option.get("csharp_limited_lookahead_score", 0.0)))
 	if absf(limited_lookahead) >= 3.0:
-		parts.append("前瞻%+.1f" % limited_lookahead)
+		parts.append("往后多看几步会%+.1f" % limited_lookahead)
 	var posterior_reasons: Array = option.get("posterior_reasons", option.get("csharp_posterior_reasons", []))
 	if not posterior_reasons.is_empty() and str(posterior_reasons[0]) != "后验未明显压分":
-		parts.append(str(posterior_reasons[0]))
+		parts.append(_humanize_helper_text(str(posterior_reasons[0])))
 	var risk_reasons: Array = option.get("risk_reasons", option.get("csharp_risk_reasons", []))
 	if not risk_reasons.is_empty():
-		parts.append(str(risk_reasons[0]))
+		parts.append(_humanize_helper_text(str(risk_reasons[0])))
 	var csharp_reasons: Array = option.get("reasons", option.get("csharp_reasons", []))
 	for reason in csharp_reasons:
 		var reason_text := str(reason)
@@ -3419,7 +3419,7 @@ func _build_helper_csharp_probability_text(option: Dictionary) -> String:
 			or reason_text.begins_with("阶段") \
 			or reason_text.begins_with("策略"):
 			continue
-		parts.append(reason_text)
+		parts.append(_humanize_helper_text(reason_text))
 		if parts.size() >= 8:
 			break
 	return "｜".join(parts.slice(0, 8))
@@ -3429,7 +3429,7 @@ func _build_helper_selected_option_reason(selected_option: Dictionary, recommend
 	var parts: Array[String] = []
 	var selected_name := str(selected_option.get("tile_name", "?"))
 	var recommended_name := str(recommended.get("tile_name", "?"))
-	parts.append("不建议打%s，推荐%s" % [selected_name, recommended_name])
+	parts.append("不建议先打%s，更建议打%s" % [selected_name, recommended_name])
 	var delta_shanten := int(selected_option.get("shanten", 8)) - int(recommended.get("shanten", 8))
 	var delta_live := int(selected_option.get("live_ukeire", 0)) - int(recommended.get("live_ukeire", 0))
 	var delta_risk := int(selected_option.get("risk", 0)) - int(recommended.get("risk", 0))
@@ -3438,27 +3438,56 @@ func _build_helper_selected_option_reason(selected_option: Dictionary, recommend
 	var selected_deal_loss := float(selected_option.get("expected_deal_in_loss", selected_option.get("csharp_expected_deal_in_loss", 0.0)))
 	var selected_risk_label := str(selected_option.get("risk_label", selected_option.get("csharp_risk_label", "")))
 	if delta_shanten > 0:
-		parts.append("向听更慢%d" % delta_shanten)
+		parts.append("会晚%d步才更接近听牌" % delta_shanten)
 	if delta_live < 0:
-		parts.append("活进张少%d" % abs(delta_live))
+		parts.append("后面能接上的牌会少%d张" % abs(delta_live))
 	if delta_risk > 0:
-		parts.append("风险高%d" % delta_risk)
+		parts.append("而且会更危险一些")
 	if delta_net > 0.01:
-		parts.append("净分低%.2f" % delta_net)
+		parts.append("综合收益会少%.2f" % delta_net)
 	if selected_win_gain > 0.0 or selected_deal_loss > 0.0:
-		parts.append("选中项收益%.2f/损失%.2f" % [selected_win_gain, selected_deal_loss])
+		parts.append("按你现在点的打法，大概能赚%.2f，也可能亏%.2f" % [selected_win_gain, selected_deal_loss])
 	if not selected_risk_label.is_empty():
-		parts.append("风险%s" % selected_risk_label)
+		parts.append(_plain_helper_risk_text(selected_risk_label))
 	var csharp_reasons: Array = selected_option.get("reasons", selected_option.get("csharp_reasons", []))
 	if not csharp_reasons.is_empty():
-		parts.append(str(csharp_reasons[0]))
+		parts.append(_humanize_helper_text(str(csharp_reasons[0])))
 	var posterior_reasons: Array = selected_option.get("posterior_reasons", selected_option.get("csharp_posterior_reasons", []))
 	if not posterior_reasons.is_empty() and str(posterior_reasons[0]) != "后验未明显压分":
-		parts.append(str(posterior_reasons[0]))
+		parts.append(_humanize_helper_text(str(posterior_reasons[0])))
 	var risk_reasons: Array = selected_option.get("risk_reasons", selected_option.get("csharp_risk_reasons", []))
 	if not risk_reasons.is_empty():
-		parts.append(str(risk_reasons[0]))
+		parts.append(_humanize_helper_text(str(risk_reasons[0])))
 	return "｜".join(parts.slice(0, 8))
+
+
+func _plain_helper_risk_text(risk_label: String) -> String:
+	match risk_label:
+		"高危":
+			return "危险比较大"
+		"中危":
+			return "有点危险"
+		_:
+			return "相对安全"
+
+
+func _humanize_helper_text(text: String) -> String:
+	var result := text
+	var replacements := {
+		"向听": "离听牌",
+		"活进张": "能接上的牌",
+		"进张": "能接上的牌",
+		"后验": "结合场上情况再看",
+		"压分": "会拉低收益",
+		"净分期望": "综合收益",
+		"危险度": "危险大小",
+		"听形": "听牌后的牌路",
+		"宽叫": "更容易听牌",
+		"搭子": "搭子",
+	}
+	for key in replacements.keys():
+		result = result.replace(key, str(replacements[key]))
+	return result
 
 
 func _has_qing_route(routes: Array) -> bool:
@@ -6667,7 +6696,7 @@ func _build_ai_live_readout_lines(snapshot: Dictionary, latest_turn_snapshot: Di
 		int(strategy_profile.get("threat_level", 0)),
 	])
 	if not top_threat_profile.is_empty() and int(top_threat_profile.get("seat", -1)) >= 0:
-		lines.append("头号威胁：%s｜疑似主攻%s｜清一色像度 %d%%｜对对像度 %d%%｜威胁分 %d" % [
+		lines.append("现在最需要防的是：%s｜看起来主做%s｜像清一色 %d%%｜像对对胡 %d%%｜危险分 %d" % [
 			_seat_name(int(top_threat_profile.get("seat", -1))),
 			str(top_threat_profile.get("dangerous_suit_label", "?")),
 			int(top_threat_profile.get("flush_probability", 0)),
@@ -6675,12 +6704,12 @@ func _build_ai_live_readout_lines(snapshot: Dictionary, latest_turn_snapshot: Di
 			int(top_threat_profile.get("threat_score", 0)),
 		])
 	else:
-		lines.append("头号威胁：暂无明显高危对手")
+		lines.append("现在还没有特别危险的对手")
 	if not recommended.is_empty():
-		lines.append("本次推荐：打%s｜向听 %d｜活进张 %d｜净分 %.2f｜听牌率 %.0f%%｜自摸率 %.0f%%｜胡牌率 %.0f%%｜点炮率 %.0f%%" % [
+		lines.append("这次建议打%s｜%s｜%s｜综合收益 %.2f｜听牌机会 %.0f%%｜自摸机会 %.0f%%｜胡牌机会 %.0f%%｜放炮机会 %.0f%%" % [
 			str(recommended.get("tile_name", "?")),
-			int(recommended.get("shanten", 8)),
-			int(recommended.get("live_ukeire", 0)),
+			_plain_debug_shanten_text(int(recommended.get("shanten", 8))),
+			_plain_debug_ukeire_text(int(recommended.get("live_ukeire", 0))),
 			float(recommended.get("expected_net_score", recommended.get("csharp_expected_net_score", 0.0))),
 			float(recommended.get("csharp_tenpai_probability", recommended.get("tenpai_probability", 0.0))) * 100.0,
 			float(recommended.get("csharp_self_draw_probability", recommended.get("self_draw_probability", 0.0))) * 100.0,
@@ -6690,7 +6719,7 @@ func _build_ai_live_readout_lines(snapshot: Dictionary, latest_turn_snapshot: Di
 	lines.append_array(_build_candidate_posterior_rank_lines(analysis))
 	lines.append_array(_build_ai_belief_summary_lines(belief_summary))
 	var danger_summary := _summarize_ai_danger_tiles(danger_tiles)
-	lines.append("危险摘要：%s" % danger_summary)
+	lines.append("尽量少打：%s" % danger_summary)
 	lines.append_array(_build_ai_reaction_debug_lines(latest_reaction_snapshot))
 	return lines
 
@@ -6699,7 +6728,7 @@ func _build_candidate_posterior_rank_lines(analysis: Dictionary) -> Array[String
 	var options: Array = analysis.get("options", [])
 	if options.is_empty():
 		return []
-	var lines: Array[String] = ["候选排序："]
+	var lines: Array[String] = ["如果换别的打，也大概是这样："]
 	var index := 1
 	for option in options.slice(0, 3):
 		var candidate: Dictionary = option
@@ -6708,20 +6737,20 @@ func _build_candidate_posterior_rank_lines(analysis: Dictionary) -> Array[String
 		var expected_loss := float(candidate.get("expected_deal_in_loss", candidate.get("csharp_expected_deal_in_loss", 0.0)))
 		var posterior_adjustment := float(candidate.get("posterior_adjustment", candidate.get("csharp_posterior_adjustment", 0.0)))
 		var posterior_reasons: Array = candidate.get("posterior_reasons", candidate.get("csharp_posterior_reasons", []))
-		var posterior_text := "后验未压分"
+		var posterior_text := "场上情况没有明显扣分"
 		if posterior_adjustment > 0.01:
-			posterior_text = "后验压分 %.2f" % posterior_adjustment
+			posterior_text = "结合场上情况，收益少 %.2f" % posterior_adjustment
 			if not posterior_reasons.is_empty():
-				posterior_text += "｜%s" % str(posterior_reasons[0])
-		lines.append("%d.%s｜向听%d｜活进张%d｜净分%.2f｜收益%.2f/损失%.2f｜风险%s｜%s" % [
+				posterior_text += "｜%s" % _humanize_helper_text(str(posterior_reasons[0]))
+		lines.append("%d. %s｜%s｜%s｜综合收益%.2f｜大概能赚%.2f/可能亏%.2f｜%s｜%s" % [
 			index,
 			str(candidate.get("tile_name", "?")),
-			int(candidate.get("shanten", 8)),
-			int(candidate.get("live_ukeire", 0)),
+			_plain_debug_shanten_text(int(candidate.get("shanten", 8))),
+			_plain_debug_ukeire_text(int(candidate.get("live_ukeire", 0))),
 			expected_net,
 			expected_win,
 			expected_loss,
-			str(candidate.get("risk_label", "低危")),
+			_plain_helper_risk_text(str(candidate.get("risk_label", "低危"))),
 			posterior_text,
 		])
 		index += 1
@@ -6730,11 +6759,11 @@ func _build_candidate_posterior_rank_lines(analysis: Dictionary) -> Array[String
 
 func _build_ai_belief_summary_lines(belief_summary: Dictionary) -> Array[String]:
 	if belief_summary.is_empty():
-		return ["后验摘要：当前后端未返回"]
+		return ["场上判断摘要：当前还没有拿到更多判断数据"]
 	var lines: Array[String] = []
 	var ready_items: Array = belief_summary.get("ready_posteriors", [])
 	if ready_items.is_empty():
-		lines.append("听牌后验：暂无")
+		lines.append("谁更像快听牌了：暂时看不出来")
 	else:
 		var ready_parts: Array[String] = []
 		for item in ready_items.slice(0, 2):
@@ -6742,29 +6771,29 @@ func _build_ai_belief_summary_lines(belief_summary: Dictionary) -> Array[String]
 			ready_parts.append("%s %.0f%%%s" % [
 				_seat_name(int(ready_item.get("seat", -1))),
 				float(ready_item.get("ready_posterior", 0.0)) * 100.0,
-				"｜已报叫" if bool(ready_item.get("is_called", false)) else "",
+				"｜已经报叫" if bool(ready_item.get("is_called", false)) else "",
 			])
-		lines.append("听牌后验：%s" % " / ".join(ready_parts))
+		lines.append("谁更像快听牌了：%s" % " / ".join(ready_parts))
 	var hold_summary: Dictionary = belief_summary.get("hold_summary", {})
 	var hold_items: Array = hold_summary.get("top_holders", [])
 	if hold_items.is_empty():
-		lines.append("持张后验：暂无")
+		lines.append("谁手里更像捏着关键牌：暂时看不出来")
 	else:
 		var hold_tile_label := str(hold_summary.get("tile_label", "?"))
 		var hold_parts: Array[String] = []
 		for item in hold_items.slice(0, 2):
 			var hold_item: Dictionary = item
-			hold_parts.append("%s %.0f%%｜牌危险 %.0f%%｜该门需求 %.0f%%" % [
+			hold_parts.append("%s %.0f%%｜这张牌危险 %.0f%%｜他对这门牌需求 %.0f%%" % [
 				_seat_name(int(hold_item.get("seat", -1))),
 				float(hold_item.get("hold_posterior", 0.0)) * 100.0,
 				float(hold_item.get("tile_danger", 0.0)) * 100.0,
 				float(hold_item.get("suit_demand", 0.0)) * 100.0,
 			])
-		lines.append("持张后验：若打%s，最像捏着它的是 %s" % [hold_tile_label, " / ".join(hold_parts)])
+		lines.append("如果打%s，谁手里更像捏着它：%s" % [hold_tile_label, " / ".join(hold_parts)])
 	var wall_summary: Dictionary = belief_summary.get("wall_summary", {})
 	var wall_items: Array = wall_summary.get("top_tiles", [])
 	if wall_items.is_empty():
-		lines.append("牌墙后验：暂无")
+		lines.append("牌墙里更可能还剩什么：暂时看不出来")
 	else:
 		var wall_parts: Array[String] = []
 		for item in wall_items.slice(0, 3):
@@ -6773,7 +6802,7 @@ func _build_ai_belief_summary_lines(belief_summary: Dictionary) -> Array[String]
 				str(wall_item.get("tile_label", "?")),
 				float(wall_item.get("posterior", 0.0)) * 100.0,
 			])
-		lines.append("牌墙后验：最像还在墙里的进张 %s｜均值 %.0f%%" % [
+		lines.append("牌墙里更可能还剩什么：%s｜平均 %.0f%%" % [
 			" / ".join(wall_parts),
 			float(wall_summary.get("average_posterior", 0.0)) * 100.0,
 		])
@@ -6784,12 +6813,12 @@ func _build_ai_belief_summary_lines(belief_summary: Dictionary) -> Array[String]
 		var wait_parts: Array[String] = []
 		for item in wait_items.slice(0, 2):
 			var wait_item: Dictionary = item
-			wait_parts.append("%s 胡%.0f%%｜不胡证据%.0f%%" % [
+			wait_parts.append("%s 胡这张概率 %.0f%%｜暂时不胡的迹象 %.0f%%" % [
 				_seat_name(int(wait_item.get("seat", -1))),
 				float(wait_item.get("wait_posterior", 0.0)) * 100.0,
 				float(wait_item.get("no_hu_evidence", 0.0)) * 100.0,
 			])
-		lines.append("胡牌后验：若打%s，%s" % [wait_tile_label, " / ".join(wait_parts)])
+		lines.append("如果打%s，谁更像能胡：%s" % [wait_tile_label, " / ".join(wait_parts)])
 	var unknown_summary: Dictionary = belief_summary.get("unknown_summary", {})
 	var unknown_items: Array = unknown_summary.get("top_tiles", [])
 	if not unknown_items.is_empty():
@@ -6800,7 +6829,7 @@ func _build_ai_belief_summary_lines(belief_summary: Dictionary) -> Array[String]
 				str(unknown_item.get("tile_label", "?")),
 				int(unknown_item.get("count", 0)),
 			])
-		lines.append("未知牌表：%s｜总%d张" % [
+		lines.append("还没露面的牌大概有：%s｜总共%d张" % [
 			" / ".join(unknown_parts),
 			int(unknown_summary.get("total_unknown", 0)),
 		])
@@ -6818,47 +6847,63 @@ func _build_ai_reaction_debug_lines(latest_reaction_snapshot: Dictionary) -> Arr
 	var action := str(analysis.get("action", "pass"))
 	var round_stage_label := str(analysis.get("round_stage_label", ""))
 	var action_scores: Dictionary = analysis.get("action_scores", {})
-	lines.append("最近响应：%s｜动作 %s｜阶段 %s" % [
+	lines.append("最近一次响应判断：%s｜动作 %s｜阶段 %s" % [
 		_seat_name(seat),
 		{"pass":"过","peng":"碰","gang":"杠","hu":"胡"}.get(action, action),
 		round_stage_label,
 	])
 	if not action_scores.is_empty():
-		lines.append("响应评分：过 %s｜碰 %s｜杠 %s" % [
+		lines.append("这几种动作大概评分：过 %s｜碰 %s｜杠 %s" % [
 			str(action_scores.get("pass", "-")),
 			str(action_scores.get("peng", "-")),
 			str(action_scores.get("gang", "-")),
 		])
 	if bool(analysis.get("search_used", false)):
-		lines.append("响应短搜索：%d 次｜修正 %.2f" % [
+		lines.append("系统额外试算了 %d 次｜最后修正 %.2f" % [
 			int(analysis.get("search_simulations", 0)),
 			float(analysis.get("search_bonus", 0.0)),
 		])
 	var posterior_summary: Array = analysis.get("posterior_summary", [])
 	if not posterior_summary.is_empty():
-		lines.append("响应后验：" + "｜".join(PackedStringArray(posterior_summary)))
+		var readable_posteriors: Array[String] = []
+		for item in posterior_summary:
+			readable_posteriors.append(_humanize_helper_text(str(item)))
+		lines.append("结合场上情况再看：" + "｜".join(PackedStringArray(readable_posteriors)))
 	var future_summary: Array = analysis.get("future_summary", [])
 	if not future_summary.is_empty():
-		lines.append("未来收益：" + "｜".join(PackedStringArray(future_summary.slice(0, 3))))
+		var readable_future: Array[String] = []
+		for item in future_summary.slice(0, 3):
+			readable_future.append(_humanize_helper_text(str(item)))
+		lines.append("后面大概会怎样：" + "｜".join(PackedStringArray(readable_future)))
 	return lines
 
 
 func _summarize_ai_danger_tiles(danger_tiles: Array) -> String:
 	if danger_tiles.is_empty():
-		return "暂无明显危险张"
+		return "暂时没有特别危险的牌"
 	var parts: Array[String] = []
 	for item in danger_tiles.slice(0, 2):
 		var danger_item: Dictionary = item
 		var reason_text := ""
 		var reasons: Array = danger_item.get("risk_reasons", danger_item.get("csharp_risk_reasons", []))
 		if not reasons.is_empty():
-			reason_text = "（%s）" % str(reasons[0])
-		parts.append("%s %d分%s" % [
+			reason_text = "（%s）" % _humanize_helper_text(str(reasons[0]))
+		parts.append("%s 危险分 %d%s" % [
 			str(danger_item.get("tile_name", "?")),
 			int(danger_item.get("risk", danger_item.get("csharp_danger", 0))),
 			reason_text,
 		])
 	return " / ".join(parts)
+
+
+func _plain_debug_shanten_text(shanten: int) -> String:
+	if shanten <= 0:
+		return "已经听牌"
+	return "离听牌还差%d步" % shanten
+
+
+func _plain_debug_ukeire_text(ukeire: int) -> String:
+	return "后面能接上的牌约%d张" % maxi(0, ukeire)
 
 
 func _center_ai_tuning_panel() -> void:
