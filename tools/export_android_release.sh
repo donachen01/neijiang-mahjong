@@ -27,6 +27,7 @@ if [[ -z "$APP_VERSION" ]]; then
 fi
 RELEASE_BASENAME="NeijiangMahjong-${APP_VERSION}-release"
 export GODOT_ANDROID_OUTPUT="$PROJECT_DIR/build/android/${RELEASE_BASENAME}-base.apk"
+mkdir -p "$PROJECT_DIR/build/android/signing"
 GODOT_BIN="${GODOT_BIN:-}"
 BUILD_TOOLS="/Users/chendong/Library/Android/sdk/build-tools/35.0.0"
 ANDROID_SOURCE_TEMPLATE="/Users/chendong/Library/Application Support/Godot/export_templates/4.6.2.stable.mono/templates/android_source.zip"
@@ -65,6 +66,11 @@ if ! "$GODOT_BIN" --version 2>/dev/null | grep -qi "mono"; then
 fi
 
 SIGNING_INFO="/Users/chendong/Documents/内江麻将工程_20260502_103823_v2/build/android/signing/release_keystore_info.txt"
+if [[ ! -f "$SIGNING_INFO" ]]; then
+  echo "Missing release signing info: $SIGNING_INFO"
+  echo "Restore the local ignored signing file before exporting a release APK."
+  exit 1
+fi
 export GODOT_ANDROID_RELEASE_KEYSTORE="$(sed -n 's/^keystore=//p' "$SIGNING_INFO")"
 export GODOT_ANDROID_RELEASE_ALIAS="$(sed -n 's/^alias=//p' "$SIGNING_INFO")"
 export GODOT_ANDROID_RELEASE_PASSWORD="$(sed -n 's/^store_password=//p' "$SIGNING_INFO")"

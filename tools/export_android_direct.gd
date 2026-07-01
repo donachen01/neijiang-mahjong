@@ -163,6 +163,14 @@ func _export_android() -> void:
 	if output_path == "":
 		output_path = "/Users/chendong/Documents/内江麻将工程_20260502_103823_v2/build/android/NeijiangMahjong-direct-debug.apk" if is_debug else "/Users/chendong/Documents/内江麻将工程_20260502_103823_v2/build/android/NeijiangMahjong-release.apk"
 
+	var output_dir := output_path.get_base_dir()
+	if output_dir != "":
+		var make_dir_result := DirAccess.make_dir_recursive_absolute(output_dir)
+		if make_dir_result != OK:
+			push_error("无法创建 Android 导出目录：%s" % output_dir)
+			quit(make_dir_result)
+			return
+
 	var result: int = platform.call("export_project", preset, is_debug, output_path, 0)
 	print("export_result=", result)
 	print("message_count=", platform.call("get_message_count"))
