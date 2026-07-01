@@ -16,7 +16,14 @@ public static class NeijiangStateCodec
         IEnumerable<IEnumerable<int>>? melds18 = null,
         IEnumerable<IEnumerable<int>>? passedHu18 = null,
         IEnumerable<IEnumerable<int>>? passedPeng18 = null,
-        IEnumerable<IEnumerable<int>>? passedGang18 = null)
+        IEnumerable<IEnumerable<int>>? passedGang18 = null,
+        IEnumerable<int>? scores = null,
+        int roundIndex = 0,
+        int totalRounds = 0,
+        int remainingRounds = 0,
+        int visibleVersion = 0,
+        int handVersion = 0,
+        int strategyContextVersion = 0)
     {
         var hand = hand18.Take(18).Concat(Enumerable.Repeat(0, 18)).Take(18).ToArray();
         var visible = visible18.Take(18).Concat(Enumerable.Repeat(0, 18)).Take(18).ToArray();
@@ -31,7 +38,14 @@ public static class NeijiangStateCodec
             WallCount = wallCount,
             Hand18 = hand,
             Visible18 = visible,
-            Remaining18 = remaining
+            Remaining18 = remaining,
+            Scores = scores?.Take(4).Concat(Enumerable.Repeat(0, 4)).Take(4).ToArray() ?? new int[4],
+            RoundIndex = roundIndex,
+            TotalRounds = totalRounds,
+            RemainingRounds = remainingRounds,
+            VisibleVersion = visibleVersion,
+            HandVersion = handVersion,
+            StrategyContextVersion = strategyContextVersion
         };
 
         if (discards18 is not null)

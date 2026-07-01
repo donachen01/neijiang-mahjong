@@ -88,6 +88,12 @@ public sealed class NeijiangRoutePlanEngine
             + features.SequencePotential * 5
             + features.RyanmenPotential * 3
             - Math.Max(0, features.PairLikeCount - 3) * 5;
+        if (features.StandardShanten <= 1)
+            score += 18;
+        else if (features.StandardShanten <= 2)
+            score += 8;
+        if (features.SequencePotential >= 5 && features.RyanmenPotential >= 2)
+            score += 10;
         if (features.PairLikeCount <= 3)
             score += 10;
         if (features.WallCount <= 10)
@@ -110,6 +116,8 @@ public sealed class NeijiangRoutePlanEngine
     {
         if (features.MeldCount > 0)
             return 0;
+        if (features.PairLikeCount <= 3)
+            return 0;
         var score = 18
             + features.PairLikeCount * 12
             + features.QuadCount * 8
@@ -117,11 +125,9 @@ public sealed class NeijiangRoutePlanEngine
             - Math.Max(0, features.SevenPairsShanten) * 10
             - features.SequencePotential * 2;
         if (features.PairLikeCount >= 5)
-            score += 24;
+            score += 52;
         else if (features.PairLikeCount == 4)
-            score += 8;
-        else if (features.PairLikeCount <= 3)
-            score -= 28;
+            score += features.SevenPairsShanten <= 2 ? 8 : -10;
         if (features.WallCount <= 8 && features.SevenPairsShanten > 0)
             score -= 10;
         return score;
@@ -139,22 +145,26 @@ public sealed class NeijiangRoutePlanEngine
 
     private static int ScoreQingYiSe(RouteFeatures features)
     {
-        var offSuitPenalty = features.OffSuitCount <= 3 ? 6 : 10;
+        var offSuitPenalty = features.OffSuitCount <= 3 ? 7 : 14;
         var score = features.TargetSuitCount * 8
             - features.OffSuitCount * offSuitPenalty
             - Math.Max(0, features.StandardShanten) * 5;
         if (features.TargetSuitCount >= 11 && features.OffSuitCount <= 3)
-            score += 58;
+            score += 82;
         else if (features.TargetSuitCount >= 10 && features.OffSuitCount <= 3)
             score += 44;
         else if (features.TargetSuitCount >= 10)
             score += 24;
         else if (features.TargetSuitCount >= 8)
-            score += 8;
+            score += features.OffSuitCount <= 4 ? 8 : -16;
+        else
+            score -= 28;
         if (features.OffSuitCount == 0)
             score += 18;
         else if (features.OffSuitCount <= 2 && features.TargetSuitCount >= 10)
             score += 10;
+        if (features.OffSuitCount >= 5)
+            score -= 22;
         if (features.WallCount <= 10 && features.OffSuitCount >= 3)
             score -= 14;
         return score;
@@ -298,15 +308,15 @@ public sealed class NeijiangRoutePlanEngine
 
     private static int RouteTieBreakRank(string route) => route switch
     {
-        "青龙七对" => 0,
-        "清七对" => 1,
-        "清对" => 2,
-        "清一色" => 3,
-        "龙七对" => 4,
-        "暗七对" => 5,
-        "大对子" => 6,
-        "平胡" => 7,
-        "卡二条平胡" => 8,
+        "清一色" => 0,
+        "清对" => 1,
+        "平胡" => 2,
+        "卡二条平胡" => 3,
+        "大对子" => 4,
+        "青龙七对" => 5,
+        "清七对" => 6,
+        "龙七对" => 7,
+        "暗七对" => 8,
         _ => 99
     };
 

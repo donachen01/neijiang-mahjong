@@ -420,7 +420,11 @@ func _test_ai_manager_uses_native_async_hell_challenge_discard_path():
 		null,
 		null,
 		false,
-		fixture.get("hell_payload", {})
+		fixture.get("hell_payload", {}),
+		false,
+		false,
+		true,
+		false
 	)
 	if request_id <= 0:
 		return "expected AIManager native async hell challenge request id"
@@ -625,7 +629,11 @@ func _assert_ai_manager_bao_jiao_unreported_fourth_discards_last_draw(use_native
 		null,
 		null,
 		false,
-		{}
+		{},
+		false,
+		false,
+		use_native_async,
+		not use_native_async
 	)
 	if request_id <= 0:
 		return "expected turn request id, status=%s" % [ai_manager.get_backend_status()]
@@ -714,7 +722,9 @@ func _test_ai_manager_async_hell_challenge_reaction_blocks_human():
 		null,
 		null,
 		false,
-		fixture.get("hell_payload", {})
+		fixture.get("hell_payload", {}),
+		true,
+		false
 	)
 	if request_id <= 0:
 		return "expected AIManager native async hell challenge reaction request id"
@@ -777,6 +787,9 @@ func _test_ai_manager_uses_native_async_reaction_path():
 		rules,
 		null,
 		null,
+		false,
+		{},
+		true,
 		false
 	)
 	if request_id <= 0:
@@ -886,6 +899,11 @@ func _test_ai_manager_preserves_pending_native_turn_request():
 		null,
 		null,
 		null,
+		false,
+		{},
+		false,
+		false,
+		true,
 		false
 	)
 	if request_id <= 0:

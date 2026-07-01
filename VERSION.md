@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.49`
+Current app version: `1.0.59`
 
-`1.0.49` makes reported bao-gang a backend-owned rule: Godot transports the declared `bao_gang_tiles` whitelist to C#, and C# independently forces the matching self-draw an-gang/add-gang or discard-reaction gang without relying only on frontend mandatory markers.
+`1.0.59` keeps the 1.0.58 realtime AI behavior, cleans old generated evidence and retired regression runners out of the source tree, and refreshes the release/test structure after system-disk cleanup.
 
 ## Versioning Workflow
 

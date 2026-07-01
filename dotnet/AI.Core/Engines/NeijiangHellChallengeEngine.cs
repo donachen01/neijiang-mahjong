@@ -47,6 +47,9 @@ public sealed class NeijiangHellChallengeEngine
         var bestFeedsHumanGang = false;
         var bestKeepsReady = false;
         var bestWallRemaining = 0;
+        var bestShanten = 8;
+        var bestWaitCount = 0;
+        var bestTier = "";
         var candidates = new List<NeijiangHellChallengeCandidate>();
 
         for (var tileType = 0; tileType < 18; tileType++)
@@ -99,14 +102,27 @@ public sealed class NeijiangHellChallengeEngine
                 && (humanAlreadyReady || state.WallCount <= 10)
                     ? 720
                     : 0;
+            var tier = ResolveHellDiscardTier(
+                shanten,
+                keepsReady,
+                waitCount,
+                exactWallRemaining,
+                exactDealIn,
+                feedsHumanHu,
+                feedsHumanGang,
+                feedsHumanPeng,
+                humanPengThreat,
+                state.WallCount);
+            var tierAdjustment = ResolveHellTierAdjustment(tier);
             var score = 0
                 - shanten * 1700
-                + liveUkeire * 92
-                + exactWallRemaining * 135
-                + waitCount * 260
-                + (keepsReady ? 780 : 0)
-                + (keepsReady && exactWallRemaining > 0 ? exactWallRemaining * 300 : 0)
+                + liveUkeire * 62
+                + exactWallRemaining * 82
+                + waitCount * 360
+                + (keepsReady ? 1100 : 0)
+                + (keepsReady && exactWallRemaining > 0 ? exactWallRemaining * 220 : 0)
                 + speedPressure
+                + tierAdjustment
                 + (int)Math.Round(shapeSummary.ShapeScore * 210.0)
                 + (feedsHumanPeng && humanPengThreat <= 1 && keepsReady && exactWallRemaining > 0 ? 900 : 0)
                 + tempoPengAllowanceBonus
@@ -120,6 +136,7 @@ public sealed class NeijiangHellChallengeEngine
             {
                 $"透视向听 {shanten}",
                 $"透视活张 {exactWallRemaining}",
+                $"牌理层级 {tier.Label}",
             };
             if (exactDealIn)
                 reasons.Add("透视：此张会点炮");
@@ -165,6 +182,9 @@ public sealed class NeijiangHellChallengeEngine
                 PengOnlyInteractionBonus = pengOnlyInteractionBonus,
                 KeepsReady = keepsReady,
                 ExactWallRemaining = exactWallRemaining,
+                Tier = tier.Label,
+                TierRank = tier.Rank,
+                TierAdjustment = tierAdjustment,
                 DealInTargetSeats = dealInTargetSeats.ToArray(),
                 Reasons = reasons.ToArray()
             });
@@ -181,6 +201,9 @@ public sealed class NeijiangHellChallengeEngine
                 bestFeedsHumanGang = feedsHumanGang;
                 bestKeepsReady = keepsReady;
                 bestWallRemaining = exactWallRemaining;
+                bestShanten = shanten;
+                bestWaitCount = waitCount;
+                bestTier = tier.Label;
             }
         }
 
@@ -202,11 +225,64 @@ public sealed class NeijiangHellChallengeEngine
             OracleDealInTargetSeats = bestDealInTargetSeats,
             ExactKeepsReady = bestKeepsReady,
             ExactWallRemaining = bestWallRemaining,
+            SelectedShanten = bestShanten,
+            SelectedLiveUkeire = bestWallRemaining,
+            SelectedWaitCount = bestWaitCount,
+            SelectedTier = bestTier,
             Candidates = candidates
                 .OrderByDescending(candidate => candidate.Score)
+                .ThenBy(candidate => candidate.TierRank)
                 .ThenBy(candidate => candidate.TileType)
                 .ToArray(),
             Reasons = bestReasons.Concat(teamPlan.Reasons).Distinct().ToArray()
+        };
+    }
+
+    private static (string Label, int Rank) ResolveHellDiscardTier(
+        int shanten,
+        bool keepsReady,
+        int waitCount,
+        int exactWallRemaining,
+        bool exactDealIn,
+        bool feedsHumanHu,
+        bool feedsHumanGang,
+        bool feedsHumanPeng,
+        int humanPengThreat,
+        int wallCount)
+    {
+        if (exactDealIn || feedsHumanHu)
+            return ("X_DANGER_HU", 90);
+        if (feedsHumanGang)
+            return ("X_DANGER_GANG", 82);
+        if (feedsHumanPeng && humanPengThreat >= 4 && wallCount > 10)
+            return ("D_FEEDS_STRONG_PENG", 70);
+        if (keepsReady && (waitCount > 0 || exactWallRemaining > 0))
+            return ("A_READY", 0);
+        if (shanten <= 1 && exactWallRemaining >= 3)
+            return ("B_ONE_AWAY_LIVE", 10);
+        if (shanten <= 1)
+            return ("B_ONE_AWAY_NARROW", 16);
+        if (shanten <= 2 && exactWallRemaining >= 12 && wallCount >= 15)
+            return ("C_WIDE_TWO_AWAY", 28);
+        if (shanten <= 2)
+            return ("C_TWO_AWAY", 34);
+        return ("D_SLOW_SHAPE", 48);
+    }
+
+    private static int ResolveHellTierAdjustment((string Label, int Rank) tier)
+    {
+        return tier.Label switch
+        {
+            "A_READY" => 3000,
+            "B_ONE_AWAY_LIVE" => 1900,
+            "B_ONE_AWAY_NARROW" => 1450,
+            "C_WIDE_TWO_AWAY" => 350,
+            "C_TWO_AWAY" => -350,
+            "D_FEEDS_STRONG_PENG" => -2400,
+            "D_SLOW_SHAPE" => -1800,
+            "X_DANGER_GANG" => -9000,
+            "X_DANGER_HU" => -30000,
+            _ => 0
         };
     }
 

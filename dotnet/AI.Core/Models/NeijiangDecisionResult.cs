@@ -13,6 +13,9 @@ public sealed class NeijiangDecisionResult
     public int SearchSimulations { get; init; }
     public NeijiangRoutePlanResult RoutePlan { get; init; } = new();
     public NeijiangBeliefSummary BeliefSummary { get; init; } = new();
+    public NeijiangAiContext? AiContext { get; init; }
+    public NeijiangDecisionExplain Explain { get; init; } = new();
+    public NeijiangDecisionPerformanceReport Performance { get; init; } = new();
     public IReadOnlyList<string> Reasons { get; init; } = Array.Empty<string>();
     public IReadOnlyDictionary<int, int> CandidateScores { get; init; } = new Dictionary<int, int>();
     public IReadOnlyList<NeijiangCandidateDetail> Candidates { get; init; } = Array.Empty<NeijiangCandidateDetail>();

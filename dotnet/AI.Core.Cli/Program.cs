@@ -601,6 +601,9 @@ static object BuildDiscardObject(NeijiangAiFacade facade, DiscardPayload payload
             hits = cacheSnapshot.Hits,
             misses = cacheSnapshot.Misses
         },
+        explain = result.Explain,
+        performance = result.Performance,
+        aiContext = BuildAiContextObject(result.AiContext),
         reasons = result.Reasons,
         candidateScores = result.CandidateScores,
         candidates = result.Candidates.Select(item => new
@@ -781,7 +784,14 @@ static NeijiangStateView BuildState(DiscardPayload payload)
         payload.Melds18,
         payload.PassedHu18,
         payload.PassedPeng18,
-        payload.PassedGang18);
+        payload.PassedGang18,
+        payload.Scores,
+        payload.RoundIndex,
+        payload.TotalRounds,
+        payload.RemainingRounds,
+        payload.VisibleVersion,
+        payload.HandVersion,
+        payload.StrategyContextVersion);
 
     if (payload.IsCalled is { Length: 4 }) Array.Copy(payload.IsCalled, state.IsCalled, 4);
     if (payload.IsReady is { Length: 4 }) Array.Copy(payload.IsReady, state.IsReady, 4);
@@ -794,8 +804,46 @@ static NeijiangStateView BuildState(DiscardPayload payload)
     return state;
 }
 
+static object BuildAiContextObject(NeijiangAiContext? context)
+{
+    if (context is null)
+        return new { enabled = false };
+    return new
+    {
+        enabled = true,
+        stage = context.Stage,
+        roundGoal = context.RoundGoal,
+        strategyMode = context.StrategyMode,
+        handAnalysis = context.HandAnalysis,
+        attackEligibility = context.AttackEligibility,
+        opponentDangerProfiles = context.OpponentDangerProfiles,
+        tileDangerMap = context.TileDangerMap,
+        scoreSituation = context.ScoreSituation,
+        riskTolerance = context.RiskTolerance,
+        updatedAtTurn = context.UpdatedAtTurn,
+        dirtyFlags = context.DirtyFlags,
+        reasonCodes = context.ReasonCodes
+    };
+}
+
 static object BuildStrategyProfile(NeijiangStateView state, NeijiangDecisionResult result)
 {
+    if (result.AiContext is not null)
+    {
+        var context = result.AiContext;
+        return new
+        {
+            mode_label = context.StrategyMode.Mode,
+            round_stage = context.Stage.StageIndex,
+            round_stage_label = context.Stage.Stage,
+            threat_level = context.OpponentDangerProfiles.Values.Select(item => item.DangerLevel).DefaultIfEmpty(0).Max(),
+            score_situation = context.ScoreSituation.Situation,
+            round_goal = context.RoundGoal.Goal,
+            risk_tolerance = context.RiskTolerance.Value,
+            attack_eligibility = context.AttackEligibility.Level,
+            reasons = context.ReasonCodes
+        };
+    }
     var roundStage = ResolveRoundStage(state);
     var handShape = AnalyzeTwoSuitShape(state);
     var threatSummaries = Enumerable.Range(0, 4)
@@ -1016,6 +1064,13 @@ internal class DiscardPayload
     public int DealerSeat { get; init; }
     public int CurrentSeat { get; init; }
     public int WallCount { get; init; }
+    public int RoundIndex { get; init; }
+    public int TotalRounds { get; init; }
+    public int RemainingRounds { get; init; }
+    public int VisibleVersion { get; init; }
+    public int HandVersion { get; init; }
+    public int StrategyContextVersion { get; init; }
+    public int[] Scores { get; init; } = Array.Empty<int>();
     public int[] Hand18 { get; init; } = Array.Empty<int>();
     public int[] Visible18 { get; init; } = Array.Empty<int>();
     public int[] Remaining18 { get; init; } = Array.Empty<int>();

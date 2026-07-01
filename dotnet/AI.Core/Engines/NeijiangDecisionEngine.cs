@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using NeijiangMahjong.AI.Core.Cache;
 using NeijiangMahjong.AI.Core.Models;
 
 namespace NeijiangMahjong.AI.Core.Engines;
@@ -17,6 +19,8 @@ public sealed class NeijiangDecisionEngine
     private readonly NeijiangLimitedLookaheadEngine _limitedLookahead = new();
     private readonly NeijiangBaoJiaoActionEngine _baoJiaoAction = new();
     private readonly NeijiangRoutePlanEngine _routePlan = new();
+    private readonly NeijiangAiContextCache _contextCache = new();
+    private readonly NeijiangDealInPolicyEvaluator _dealInPolicy = new();
 
     private sealed record NeijiangBigHandRouteAdjustment(double Score, IReadOnlyList<string> Reasons)
     {
@@ -39,12 +43,14 @@ public sealed class NeijiangDecisionEngine
 
     public NeijiangDecisionResult DecideDiscard(NeijiangStateView state, bool forceLightweight = false)
     {
+        var decisionStopwatch = Stopwatch.StartNew();
         var baoJiaoDecision = _baoJiaoAction.TryDecideDiscard(state);
         if (baoJiaoDecision is not null)
             return baoJiaoDecision;
 
         var belief = _belief.Build(state);
-        var roundStage = ResolveRoundStage(state);
+        var aiContext = _contextCache.GetOrUpdate(state, belief);
+        var roundStage = aiContext.Stage.StageIndex;
         var meldCount = state.Melds18[state.SeatIndex].Count / 3;
         var maxReadyPosterior = belief.SeatReadyPosterior.Values.DefaultIfEmpty(0.0).Max();
         var currentShanten = _shanten.CalcBestShanten(state.Hand18, meldCount);
@@ -96,7 +102,7 @@ public sealed class NeijiangDecisionEngine
                 meldCount,
                 effectiveShanten,
                 effectiveLiveUkeire,
-                forceLightweight ? 8 : 18);
+                0);
             var dangerEval = _danger.EvaluateDetail(tileType, state, belief);
             var danger = dangerEval.Risk;
             var fastTingPriority = EvaluateFastTingPriorityAdjustment(currentShanten, effectiveShanten, effectiveLiveUkeire, waitCount, roundStage, danger);
@@ -122,6 +128,16 @@ public sealed class NeijiangDecisionEngine
                 wallDrawPosterior,
                 roundStage,
                 routesAfter);
+            var strategicAdjustment = EvaluateStrategyContextAdjustment(
+                aiContext,
+                tileType,
+                effectiveShanten,
+                waitCount,
+                effectiveLiveUkeire,
+                danger,
+                expectedScore,
+                routesAfter.Count);
+            var dealInPolicy = _dealInPolicy.Evaluate(tileType, aiContext);
             var shapeValue = EstimateShapeValue(effectiveShanten, effectiveUkeire, effectiveLiveUkeire, waitCount, qualityScore, wallDrawPosterior, roundStage, routesAfter.Count, routeLoss.Length)
                 + shapeSummary.ShapeScore
                 + waitShapeSummary.WaitShapeScore
@@ -133,14 +149,16 @@ public sealed class NeijiangDecisionEngine
                 + connectedRun.Score
                 + endgamePairWait.Score
                 + readyCentralPreservation.Score
-                + setPreservation.Score;
+                + setPreservation.Score
+                + strategicAdjustment.Score
+                + dealInPolicy.AdjustmentScore / 100.0;
             var defenseAdjustment = posteriorAdjustment * ResolveDefenseAdjustmentWeight(effectiveShanten, waitCount, roundStage, maxReadyPosterior);
             var expectedValue = expectedScore.Net + shapeValue - defenseAdjustment;
             var score = (int)Math.Round(expectedValue * 100.0);
             var fastTingDiscardRank = ResolveFastRank(effectiveShanten, waitCount, effectiveLiveUkeire);
             var riskLabel = dangerEval.RiskLabel;
             var strategyTag = ResolveStrategyTag(effectiveShanten, effectiveLiveUkeire, danger, roundStage);
-            var strategyMode = ResolveStrategyMode(effectiveShanten, waitCount, danger, roundStage);
+            var strategyMode = aiContext.StrategyMode.Mode;
             var explanationHint = BuildExplanationHint(effectiveShanten, effectiveUkeire, effectiveLiveUkeire, waitCount, danger, strategyMode, riskLabel);
             var posteriorReasons = BuildPosteriorReasons(effectiveShanten, effectiveLiveUkeire, dealInProbability, maxReadyPosterior, wallDrawPosterior, state.WallCount, roundStage, posteriorAdjustment);
             var riskReasons = BuildRiskReasons(danger, riskLabel, state.WallCount, roundStage, effectiveLiveUkeire, dangerEval);
@@ -157,6 +175,8 @@ public sealed class NeijiangDecisionEngine
                 .Concat(endgamePairWait.Reasons)
                 .Concat(readyCentralPreservation.Reasons)
                 .Concat(setPreservation.Reasons)
+                .Concat(strategicAdjustment.Reasons)
+                .Concat(new[] { dealInPolicy.ReasonCode })
                 .ToArray();
             candidateScores[tileType] = score;
             candidates.Add(new NeijiangCandidateDetail
@@ -221,7 +241,7 @@ public sealed class NeijiangDecisionEngine
             });
             var challenger = candidates[^1];
             var incumbent = bestTile >= 0 ? candidates.FirstOrDefault(item => item.TileType == bestTile) : null;
-            if (IsBetterDiscardCandidate(challenger, incumbent, roundStage))
+            if (IsBetterDiscardCandidate(challenger, incumbent, roundStage, aiContext))
             {
                 bestTile = tileType;
                 bestScore = score;
@@ -233,23 +253,26 @@ public sealed class NeijiangDecisionEngine
             }
         }
 
-        candidates = candidates
-            .OrderBy(item => item.WaitCount > 0 ? 0 : 1)
-            .ThenBy(item => StrategicShantenRank(item, roundStage))
-            .ThenByDescending(item => item.Score)
-            .ThenBy(item => item.FastTingDiscardRank)
-            .ThenByDescending(item => item.WaitCount)
-            .ThenByDescending(item => item.LiveUkeire)
-            .ThenBy(item => item.Danger)
-            .ThenByDescending(item => item.WaitQualityScore)
-            .ToList();
+        candidates = SortDiscardCandidates(candidates, roundStage, aiContext);
+        if (candidates.Count > 0)
+        {
+            var sortedBestCandidate = candidates[0];
+            bestTile = sortedBestCandidate.TileType;
+            bestScore = sortedBestCandidate.Score;
+            bestShanten = sortedBestCandidate.Shanten;
+            bestUkeire = sortedBestCandidate.Ukeire;
+            bestLive = sortedBestCandidate.LiveUkeire;
+            bestSearchBonus = sortedBestCandidate.SearchBonus;
+            reasons = sortedBestCandidate.Reasons.ToList();
+        }
 
-        var searchResult = forceLightweight
-            ? _search.EvaluateTopCandidates(state, candidates, timeoutMs: 70, topK: 2, rolloutDepth: 1)
-            : _search.EvaluateTopCandidates(state, candidates);
+        var useSearch = !forceLightweight && candidates.Count <= 8 && aiContext.Stage.StageIndex <= 1;
+        var searchResult = useSearch
+            ? _search.EvaluateTopCandidates(state, candidates, timeoutMs: 45, topK: 2, rolloutDepth: 1)
+            : new NeijiangSearchResult { Used = false };
         if (searchResult.Used)
         {
-            candidates = ApplySearchBonuses(candidates, searchResult, roundStage);
+            candidates = ApplySearchBonuses(candidates, searchResult, roundStage, aiContext);
             candidateScores = candidates.ToDictionary(item => item.TileType, item => item.Score);
             var bestCandidate = candidates[0];
             bestTile = bestCandidate.TileType;
@@ -291,6 +314,20 @@ public sealed class NeijiangDecisionEngine
                 .ToList();
         }
 
+        var lateWallKeepReady = SelectLateWallKeepReadyOverride(candidates, bestTile, state);
+        if (lateWallKeepReady is not null)
+        {
+            bestTile = lateWallKeepReady.TileType;
+            bestScore = lateWallKeepReady.Score;
+            bestShanten = lateWallKeepReady.Shanten;
+            bestUkeire = lateWallKeepReady.Ukeire;
+            bestLive = lateWallKeepReady.LiveUkeire;
+            bestSearchBonus = lateWallKeepReady.SearchBonus;
+            reasons = lateWallKeepReady.Reasons
+                .Concat(new[] { "尾盘守叫：危险可接受且收益更高时优先保住有叫" })
+                .ToList();
+        }
+
         var bestCandidateSnapshot = candidates.FirstOrDefault(item => item.TileType == bestTile);
         var finalDanger = bestTile >= 0 ? _danger.EvaluateDetail(bestTile, state, belief) : new NeijiangDangerEvaluation { Risk = 0, RiskLabel = "低危" };
         var finalDealInProbability = NeijiangRiskCalibration.ToDealInProbability(finalDanger.Risk, roundStage, maxReadyPosterior);
@@ -298,10 +335,18 @@ public sealed class NeijiangDecisionEngine
         var finalSelfDrawProbability = bestCandidateSnapshot?.SelfDrawProbability ?? 0.01;
         var finalWinProbability = Math.Clamp(finalTenpaiProbability * 0.58 + finalSelfDrawProbability * 0.42, 0.01, 0.95);
         var beliefSummary = BuildBeliefSummary(state, belief, bestTile, bestCandidateSnapshot);
+        decisionStopwatch.Stop();
+        var performance = BuildPerformanceReport(decisionStopwatch.Elapsed.TotalMilliseconds, aiContext.ModulePerf);
+        var explain = BuildExplain(bestTile, bestScore, aiContext, reasons);
+        var finalReasons = reasons
+            .Concat(aiContext.ReasonCodes)
+            .Distinct()
+            .Take(12)
+            .ToArray();
 
         return new NeijiangDecisionResult
         {
-            Action = new NeijiangAction(NeijiangActionType.Discard, bestTile, bestScore, reasons.FirstOrDefault() ?? string.Empty),
+            Action = new NeijiangAction(NeijiangActionType.Discard, bestTile, bestScore, finalReasons.FirstOrDefault() ?? string.Empty),
             Shanten = bestShanten,
             Ukeire = bestUkeire,
             LiveUkeire = bestLive,
@@ -310,12 +355,125 @@ public sealed class NeijiangDecisionEngine
             SearchUsed = searchResult.Used,
             SearchSimulations = searchResult.Simulations,
             BeliefSummary = beliefSummary,
-            Reasons = reasons,
+            AiContext = aiContext,
+            Explain = explain,
+            Performance = performance,
+            Reasons = finalReasons,
             CandidateScores = candidateScores,
             Candidates = candidates,
             RoutePlan = routePlan
         };
     }
+
+    private static NeijiangSimpleAdjustment EvaluateStrategyContextAdjustment(
+        NeijiangAiContext context,
+        int tileType,
+        int shanten,
+        int waitCount,
+        int liveUkeire,
+        int danger,
+        NeijiangExpectedScore expectedScore,
+        int routeCount)
+    {
+        var score = 0.0;
+        var reasons = new List<string>();
+        var mode = context.StrategyMode.Mode;
+        var tileDanger = context.TileDangerMap.TryGetValue(tileType, out var dangerProfile)
+            ? dangerProfile.MaxDangerScore
+            : danger;
+
+        switch (mode)
+        {
+            case "attack":
+                if (shanten <= 1)
+                {
+                    score += 1.8 + Math.Min(1.4, liveUkeire * 0.08);
+                    reasons.Add("MODE_ATTACK_FAST_HAND_ADVANCE");
+                }
+                if (tileDanger >= 78)
+                {
+                    score -= 2.2;
+                    reasons.Add("MODE_ATTACK_STILL_AVOIDS_EXTREME_RISK");
+                }
+                break;
+            case "balanced":
+                score += routeCount >= 2 ? 0.6 : 0.0;
+                if (tileDanger >= 70) score -= 1.4;
+                reasons.Add("MODE_BALANCED_ADVANCE_RISK_MIX");
+                break;
+            case "defense":
+                score -= tileDanger * 0.035;
+                if (shanten <= 0 && waitCount >= 2)
+                    score += 0.9;
+                reasons.Add("MODE_DEFENSE_SAFE_TILE_PRIORITY");
+                break;
+            case "fold":
+                score -= tileDanger * 0.060;
+                if (tileDanger <= 25)
+                    score += 2.4;
+                reasons.Add("MODE_FOLD_STOP_LOSS_SAFE_FIRST");
+                break;
+            case "chase":
+                score += expectedScore.WinGain * 0.16 + context.HandAnalysis.BigHandPotential * 0.012;
+                if (tileDanger >= 86)
+                    score -= 3.4;
+                reasons.Add("MODE_CHASE_REWARD_WEIGHT_UP");
+                break;
+        }
+
+        if (context.RoundGoal.Goal == "protect_lead" && tileDanger >= 58)
+        {
+            score -= 1.2;
+            reasons.Add("ROUND_GOAL_PROTECT_LEAD_RISK_DOWN");
+        }
+        if (context.RiskTolerance.Value >= 65 && tileDanger <= 55)
+        {
+            score += 0.55;
+            reasons.Add("RISK_TOLERANCE_HIGH_ALLOW_PROGRESS");
+        }
+        return Math.Abs(score) < 0.001
+            ? NeijiangSimpleAdjustment.Empty
+            : new NeijiangSimpleAdjustment(score, reasons);
+    }
+
+    private static NeijiangDecisionPerformanceReport BuildPerformanceReport(
+        double totalMs,
+        IReadOnlyList<NeijiangModulePerfSample> modulePerf)
+    {
+        var warnings = modulePerf
+            .Where(item => item.Warning)
+            .Select(item => $"PERF_{item.Module.ToUpperInvariant()}_OVER_BUDGET")
+            .ToList();
+        if (totalMs >= 100.0)
+            warnings.Add("PERF_CHOOSE_ACTION_P95_BUDGET_WARNING");
+        return new NeijiangDecisionPerformanceReport
+        {
+            TotalMs = Math.Round(totalMs, 3),
+            MaxModuleMs = modulePerf.Select(item => item.ElapsedMs).DefaultIfEmpty(0.0).Max(),
+            Warning = warnings.Count > 0,
+            WarningCodes = warnings,
+            Modules = modulePerf
+        };
+    }
+
+    private static NeijiangDecisionExplain BuildExplain(
+        int tileType,
+        int score,
+        NeijiangAiContext context,
+        IReadOnlyList<string> reasons)
+        => new()
+        {
+            Mode = "normal",
+            Action = "discard",
+            TileType = tileType,
+            Score = score,
+            StrategyMode = context.StrategyMode.Mode,
+            ReasonCodes = context.ReasonCodes
+                .Concat(reasons.Where(item => item.All(ch => char.IsUpper(ch) || ch == '_' || char.IsDigit(ch))).Take(4))
+                .Distinct()
+                .Take(10)
+                .ToArray()
+        };
 
     private static List<int> GetExactReadyTiles(int[] hand18, int meldCount)
     {
@@ -450,17 +608,175 @@ public sealed class NeijiangDecisionEngine
         return routes;
     }
 
-    private static bool IsBetterDiscardCandidate(NeijiangCandidateDetail challenger, NeijiangCandidateDetail? incumbent, int roundStage)
+    private static bool IsBetterDiscardCandidate(
+        NeijiangCandidateDetail challenger,
+        NeijiangCandidateDetail? incumbent,
+        int roundStage,
+        NeijiangAiContext? context = null)
     {
         if (incumbent is null)
             return true;
+        var mode = context?.StrategyMode.Mode ?? "balanced";
+        var roundGoal = context?.RoundGoal.Goal ?? "";
+        var chase = mode == "chase" || roundGoal == "chase_score";
+        var defensive = mode is "defense" or "fold" || roundGoal == "protect_lead";
+        var scoreGap = challenger.Score - incumbent.Score;
+        var dangerGap = challenger.Danger - incumbent.Danger;
+
+        if (defensive && dangerGap <= -22 && scoreGap >= -650)
+            return true;
+        if (defensive && dangerGap >= 24 && scoreGap < 900)
+            return false;
+
         var challengerRank = StrategicShantenRank(challenger, roundStage);
         var incumbentRank = StrategicShantenRank(incumbent, roundStage);
         if (challengerRank != incumbentRank)
+        {
+            if (chase && challengerRank > incumbentRank && scoreGap >= 520 && challenger.Danger <= 82)
+                return true;
+            if (chase && challengerRank < incumbentRank && scoreGap <= -780 && incumbent.Danger <= 82)
+                return false;
             return challengerRank < incumbentRank;
+        }
         if (challenger.Shanten != incumbent.Shanten && Math.Abs(challenger.Score - incumbent.Score) < 900)
             return challenger.Shanten < incumbent.Shanten;
         return challenger.Score > incumbent.Score;
+    }
+
+    private static List<NeijiangCandidateDetail> SortDiscardCandidates(
+        IReadOnlyList<NeijiangCandidateDetail> candidates,
+        int roundStage,
+        NeijiangAiContext? context)
+    {
+        var mode = context?.StrategyMode.Mode ?? "balanced";
+        var roundGoal = context?.RoundGoal.Goal ?? "";
+        var protectiveLeadActive = roundGoal == "protect_lead" && roundStage >= 2;
+        var rankRoundGoal = protectiveLeadActive ? roundGoal : roundGoal == "protect_lead" ? "" : roundGoal;
+        var wallCount = context?.Stage.WallCount ?? 99;
+        if (mode == "fold")
+        {
+            return candidates
+                .OrderBy(item => FoldCandidateTierRank(item, roundStage, wallCount))
+                .ThenBy(item => item.Danger >= 82 ? 1 : 0)
+                .ThenByDescending(item => item.Score)
+                .ThenBy(item => item.Danger)
+                .ThenBy(item => StrategicShantenRank(item, roundStage))
+                .ThenByDescending(item => item.LiveUkeire)
+                .ToList();
+        }
+
+        if (mode == "defense" || protectiveLeadActive)
+        {
+            return candidates
+                .OrderBy(item => CandidateTierRank(item, mode, rankRoundGoal, roundStage))
+                .ThenBy(item => item.Danger >= 72 ? 1 : 0)
+                .ThenByDescending(item => item.Score)
+                .ThenBy(item => item.Danger)
+                .ThenBy(item => StrategicShantenRank(item, roundStage))
+                .ThenByDescending(item => item.LiveUkeire)
+                .ThenByDescending(item => item.WaitQualityScore)
+                .ToList();
+        }
+
+        if (mode == "chase" || roundGoal == "chase_score")
+        {
+            return candidates
+                .OrderBy(item => item.Danger >= 86 ? 1 : 0)
+                .ThenBy(item => CandidateTierRank(item, mode, rankRoundGoal, roundStage))
+                .ThenByDescending(item => item.Score)
+                .ThenByDescending(item => item.ExpectedNetScore)
+                .ThenByDescending(item => BigRouteCount(item))
+                .ThenBy(item => StrategicShantenRank(item, roundStage))
+                .ThenBy(item => item.FastTingDiscardRank)
+                .ThenByDescending(item => item.WaitCount)
+                .ThenByDescending(item => item.LiveUkeire)
+                .ThenBy(item => item.Danger)
+                .ToList();
+        }
+
+        return candidates
+            .OrderBy(item => CandidateTierRank(item, mode, rankRoundGoal, roundStage))
+            .ThenByDescending(item => item.Score)
+            .ThenBy(item => StrategicShantenRank(item, roundStage))
+            .ThenBy(item => item.FastTingDiscardRank)
+            .ThenByDescending(item => item.WaitCount)
+            .ThenByDescending(item => item.LiveUkeire)
+            .ThenBy(item => item.Danger)
+            .ThenByDescending(item => item.WaitQualityScore)
+            .ToList();
+    }
+
+    private static int FoldCandidateTierRank(NeijiangCandidateDetail candidate, int roundStage, int wallCount)
+    {
+        if (candidate.Danger >= 86)
+            return 90;
+        if (KeepsReadyWithAcceptableRisk(candidate))
+            return 0;
+        if (wallCount <= 2 && candidate.Shanten <= 0 && candidate.WaitCount > 0 && candidate.Danger < 82)
+            return 0;
+        if (candidate.Danger <= 12)
+            return 4;
+        if (candidate.Danger <= 25)
+            return 8;
+        if (candidate.Danger <= 42)
+            return 16;
+        if (candidate.Shanten <= 1 && candidate.LiveUkeire >= 4)
+            return roundStage >= 2 ? 40 : 36;
+        return 48;
+    }
+
+    private static int BigRouteCount(NeijiangCandidateDetail candidate)
+        => candidate.RoutesAfter.Count(route => route is "七对" or "对对胡" or "清一色");
+
+    private static bool KeepsReadyWithAcceptableRisk(NeijiangCandidateDetail candidate)
+        => candidate.Shanten <= 0 && candidate.WaitCount > 0 && candidate.Danger < 78;
+
+    private static int CandidateTierRank(
+        NeijiangCandidateDetail candidate,
+        string mode,
+        string roundGoal,
+        int roundStage)
+    {
+        if (candidate.Danger >= 86)
+            return 90;
+
+        if (mode is "fold" or "defense" || roundGoal == "protect_lead")
+        {
+            if (KeepsReadyWithAcceptableRisk(candidate))
+                return 0;
+            if (candidate.Danger <= 25)
+                return 8;
+            if (candidate.Danger <= 42)
+                return 16;
+            if (candidate.Shanten <= 1 && candidate.LiveUkeire >= 4)
+                return 28;
+            return 42;
+        }
+
+        if (mode == "chase" || roundGoal == "chase_score")
+        {
+            if (candidate.Shanten <= 0 && candidate.WaitCount > 0)
+                return 0;
+            if (BigRouteCount(candidate) > 0 && candidate.Shanten <= 1)
+                return 0;
+            if (candidate.Shanten <= 1 && candidate.LiveUkeire >= 5)
+                return 12;
+            if (candidate.Shanten <= 2 && candidate.LiveUkeire >= 10 && roundStage <= 1 && candidate.Danger < 70)
+                return 12;
+            if (BigRouteCount(candidate) > 0 && candidate.Shanten <= 2)
+                return 18;
+            return 44;
+        }
+
+        if (candidate.Shanten <= 0 && candidate.WaitCount > 0)
+            return 0;
+        if (candidate.Shanten <= 1 && candidate.LiveUkeire >= 4)
+            return 10;
+        if (candidate.Shanten <= 2 && candidate.LiveUkeire >= 10 && roundStage <= 1 && candidate.Danger < 70)
+            return 10;
+        if (candidate.Shanten <= 1)
+            return 18;
+        return 48;
     }
 
     private static int StrategicShantenRank(NeijiangCandidateDetail candidate, int roundStage)
@@ -1003,6 +1319,10 @@ public sealed class NeijiangDecisionEngine
 
     private static string BuildExplanationHint(int shanten, int ukeire, int liveUkeire, int waitCount, int danger, string strategyMode, string riskLabel)
     {
+        if (strategyMode == "fold") return "这手先止损避炮";
+        if (strategyMode == "defense") return "这手先降风险";
+        if (strategyMode == "chase") return "落后局势提高收益权重";
+        if (strategyMode == "attack") return "这手按进攻推进";
         if (strategyMode == "宽叫压制") return "这手先保宽叫";
         if (strategyMode == "快速成叫" && liveUkeire >= 8) return "这手先抢速度";
         if (danger >= 70) return "这手先保安全";
@@ -1086,9 +1406,13 @@ public sealed class NeijiangDecisionEngine
     private static int ResolveRoundStage(NeijiangStateView state)
     {
         var maxDiscards = state.Discards18.Max(list => list.Count);
-        if (state.WallCount >= 14 && maxDiscards <= 5) return 0;
-        if (state.WallCount >= 8 && maxDiscards <= 11) return 1;
-        return 2;
+        var hasLikelyReady = state.IsCalled.Any(value => value) || state.IsReady.Any(value => value);
+        var exposedMeldCount = state.Melds18.Sum(list => list.Count / 3);
+        if (state.WallCount <= 6) return 2;
+        if (hasLikelyReady && state.WallCount <= 8) return 2;
+        if (maxDiscards >= 10 || state.WallCount <= 13 || exposedMeldCount >= 5) return 1;
+        if (hasLikelyReady && state.WallCount <= 10) return 1;
+        return 0;
     }
 
     private static string RoundStageLabel(int roundStage) => roundStage switch
@@ -1166,9 +1490,11 @@ public sealed class NeijiangDecisionEngine
 
         if (state.WallCount <= 5 && maxReadyPosterior >= 0.56 && current.Danger >= 22)
         {
+            var currentKeepsReady = current.Shanten <= 0 && current.WaitCount > 0 && current.Danger < 78;
             var safeSameSpeed = candidates
                 .Where(item => item.TileType != current.TileType
                     && item.Shanten <= current.Shanten
+                    && (!currentKeepsReady || item.WaitCount > 0)
                     && item.Danger <= 12)
                 .OrderBy(item => item.Danger)
                 .ThenByDescending(item => item.WaitCount)
@@ -1181,9 +1507,11 @@ public sealed class NeijiangDecisionEngine
 
         if (state.WallCount <= 3 && current.WaitCount > 0 && current.LiveUkeire <= 6 && current.Danger > 24)
         {
+            var currentKeepsReady = current.Shanten <= 0 && current.WaitCount > 0 && current.Danger < 78;
             var safeFold = candidates
                 .Where(item => item.TileType != current.TileType
                     && item.Shanten <= current.Shanten + 1
+                    && (!currentKeepsReady || item.WaitCount > 0)
                     && item.Danger <= 12
                     && (item.Shanten <= current.Shanten
                         || item.LiveUkeire >= 10
@@ -1200,10 +1528,39 @@ public sealed class NeijiangDecisionEngine
         return null;
     }
 
+    private static NeijiangCandidateDetail? SelectLateWallKeepReadyOverride(
+        IReadOnlyList<NeijiangCandidateDetail> candidates,
+        int currentTile,
+        NeijiangStateView state)
+    {
+        if (state.WallCount > 5 || candidates.Count < 2)
+            return null;
+
+        var current = candidates.FirstOrDefault(item => item.TileType == currentTile);
+        if (current is null)
+            return null;
+
+        if (current.Shanten <= 0 && current.WaitCount > 0)
+            return null;
+
+        return candidates
+            .Where(item => item.TileType != current.TileType
+                && item.Shanten <= 0
+                && item.WaitCount > 0
+                && item.Danger < 78
+                && item.Score > current.Score)
+            .OrderByDescending(item => item.Score)
+            .ThenByDescending(item => item.WaitCount)
+            .ThenBy(item => item.Danger)
+            .ThenByDescending(item => item.LiveUkeire)
+            .FirstOrDefault();
+    }
+
     private static List<NeijiangCandidateDetail> ApplySearchBonuses(
         IReadOnlyList<NeijiangCandidateDetail> candidates,
         NeijiangSearchResult searchResult,
-        int roundStage)
+        int roundStage,
+        NeijiangAiContext? context)
     {
         var updated = new List<NeijiangCandidateDetail>(candidates.Count);
         foreach (var candidate in candidates)
@@ -1275,14 +1632,7 @@ public sealed class NeijiangDecisionEngine
             });
         }
 
-        return updated
-            .OrderBy(item => StrategicShantenRank(item, roundStage))
-            .ThenByDescending(item => item.Score)
-            .ThenBy(item => item.FastTingDiscardRank)
-            .ThenByDescending(item => item.LiveUkeire)
-            .ThenBy(item => item.Danger)
-            .ThenByDescending(item => item.ExpectedValue)
-            .ToList();
+        return SortDiscardCandidates(updated, roundStage, context);
     }
 
     private static NeijiangBeliefSummary BuildBeliefSummary(

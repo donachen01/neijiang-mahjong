@@ -341,7 +341,7 @@ public partial class NeijiangCSharpRuntime : Node
         var beforeBelief = NeijiangBeliefEngine.GetDiagnostics();
         var state = BuildState(payload);
         NeijiangDecisionResult result;
-        result = _facade.DecideDiscardCached(state, forceLightweight: payload.MobileSpeedMode);
+        result = _facade.DecideDiscardCached(state, forceLightweight: payload.MobileSpeedMode || payload.ForceLightweight);
         stopwatch.Stop();
         var beliefMetrics = BuildBeliefMetrics(beforeBelief, NeijiangBeliefEngine.GetDiagnostics());
         var cacheSnapshot = _facade.GetTurnCacheSnapshot();
@@ -386,7 +386,11 @@ public partial class NeijiangCSharpRuntime : Node
             },
             elapsedMs = stopwatch.ElapsedMilliseconds,
             beliefMetrics,
-            mobileSpeedMode = payload.MobileSpeedMode,
+            explain = result.Explain,
+            performance = result.Performance,
+            aiContext = BuildAiContextObject(result.AiContext),
+            mobileSpeedMode = payload.MobileSpeedMode || payload.ForceLightweight,
+            forceLightweight = payload.ForceLightweight,
             compactResult = payload.CompactResult,
             reasons = result.Reasons,
             candidateScores = result.CandidateScores,
@@ -401,9 +405,10 @@ public partial class NeijiangCSharpRuntime : Node
             action = result.Action.ActionType.ToString().ToLowerInvariant(),
             tileType = result.Action.TileType,
             score = result.Action.Score,
-            shanten = 0,
-            ukeire = 0,
-            liveUkeire = result.ExactWallRemaining,
+            shanten = result.SelectedShanten,
+            ukeire = result.SelectedLiveUkeire,
+            liveUkeire = result.SelectedLiveUkeire,
+            waitCount = result.SelectedWaitCount,
             winProbability = 0.0,
             dealInProbability = result.OracleExactDealIn ? 1.0 : 0.0,
             searchUsed = false,
@@ -441,6 +446,7 @@ public partial class NeijiangCSharpRuntime : Node
             oracleDealInTargetSeats = result.OracleDealInTargetSeats,
             exactKeepsReady = result.ExactKeepsReady,
             exactWallRemaining = result.ExactWallRemaining,
+            selectedTier = result.SelectedTier,
             teamRole = result.TeamRole,
             teamPressureBonus = result.TeamPressureBonus,
             teamPlanSummary = result.TeamPlanSummary,
@@ -478,6 +484,9 @@ public partial class NeijiangCSharpRuntime : Node
             pengOnlyInteractionBonus = item.PengOnlyInteractionBonus,
             keepsReady = item.KeepsReady,
             exactWallRemaining = item.ExactWallRemaining,
+            tier = item.Tier,
+            tierRank = item.TierRank,
+            tierAdjustment = item.TierAdjustment,
             dealInTargetSeats = item.DealInTargetSeats,
             reasons = item.Reasons
         };
@@ -962,7 +971,14 @@ public partial class NeijiangCSharpRuntime : Node
             payload.Melds18,
             payload.PassedHu18,
             payload.PassedPeng18,
-            payload.PassedGang18);
+            payload.PassedGang18,
+            payload.Scores,
+            payload.RoundIndex,
+            payload.TotalRounds,
+            payload.RemainingRounds,
+            payload.VisibleVersion,
+            payload.HandVersion,
+            payload.StrategyContextVersion);
 
         if (payload.IsCalled is { Length: 4 }) Array.Copy(payload.IsCalled, state.IsCalled, 4);
         if (payload.IsReady is { Length: 4 }) Array.Copy(payload.IsReady, state.IsReady, 4);
@@ -975,8 +991,46 @@ public partial class NeijiangCSharpRuntime : Node
         return state;
     }
 
+    private static object BuildAiContextObject(NeijiangAiContext? context)
+    {
+        if (context is null)
+            return new { enabled = false };
+        return new
+        {
+            enabled = true,
+            stage = context.Stage,
+            roundGoal = context.RoundGoal,
+            strategyMode = context.StrategyMode,
+            handAnalysis = context.HandAnalysis,
+            attackEligibility = context.AttackEligibility,
+            opponentDangerProfiles = context.OpponentDangerProfiles,
+            tileDangerMap = context.TileDangerMap,
+            scoreSituation = context.ScoreSituation,
+            riskTolerance = context.RiskTolerance,
+            updatedAtTurn = context.UpdatedAtTurn,
+            dirtyFlags = context.DirtyFlags,
+            reasonCodes = context.ReasonCodes
+        };
+    }
+
     private static object BuildStrategyProfile(NeijiangStateView state, NeijiangDecisionResult result)
     {
+        if (result.AiContext is not null)
+        {
+            var context = result.AiContext;
+            return new
+            {
+                mode_label = context.StrategyMode.Mode,
+                round_stage = context.Stage.StageIndex,
+                round_stage_label = context.Stage.Stage,
+                threat_level = context.OpponentDangerProfiles.Values.Select(item => item.DangerLevel).DefaultIfEmpty(0).Max(),
+                score_situation = context.ScoreSituation.Situation,
+                round_goal = context.RoundGoal.Goal,
+                risk_tolerance = context.RiskTolerance.Value,
+                attack_eligibility = context.AttackEligibility.Level,
+                reasons = context.ReasonCodes
+            };
+        }
         var roundStage = ResolveRoundStage(state);
         var handShape = AnalyzeTwoSuitShape(state);
         var threatSummaries = Enumerable.Range(0, 4)
@@ -1137,6 +1191,13 @@ public partial class NeijiangCSharpRuntime : Node
         public int DealerSeat { get; set; }
         public int CurrentSeat { get; set; }
         public int WallCount { get; set; }
+        public int RoundIndex { get; set; }
+        public int TotalRounds { get; set; }
+        public int RemainingRounds { get; set; }
+        public int VisibleVersion { get; set; }
+        public int HandVersion { get; set; }
+        public int StrategyContextVersion { get; set; }
+        public List<int> Scores { get; set; } = new();
         public int[] Hand18 { get; set; } = Array.Empty<int>();
         public int[] Visible18 { get; set; } = Array.Empty<int>();
         public int[] Remaining18 { get; set; } = Array.Empty<int>();
@@ -1151,6 +1212,7 @@ public partial class NeijiangCSharpRuntime : Node
         public bool IsBaoJiao { get; set; }
         public int LastDrawTileType { get; set; } = -1;
         public List<int> BaoGangTileTypes { get; set; } = new();
+        public bool ForceLightweight { get; set; }
         public bool MobileSpeedMode { get; set; }
         public bool CompactResult { get; set; }
     }

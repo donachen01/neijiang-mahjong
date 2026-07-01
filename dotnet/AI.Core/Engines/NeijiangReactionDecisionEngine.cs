@@ -94,6 +94,7 @@ public sealed class NeijiangReactionDecisionEngine
             RoundStage = roundStage,
             MaxReadyPosterior = maxReadyPosterior,
             Reasons = BuildPassReasons(currentFollowUp, roundStage, threatLevel, maxReadyPosterior)
+                .Concat(BuildRouteProtectionPassReasons(state, currentPlan))
                 .Concat(currentPlan.Reasons)
                 .ToArray(),
             PosteriorSummary = BuildPosteriorSummary(passWallPosterior, passBlockPosterior, passDiscardRisk.Risk, maxReadyPosterior, threatLevel),
@@ -304,6 +305,8 @@ public sealed class NeijiangReactionDecisionEngine
             score -= 980;
         if (sevenPairsTenpai)
             score -= 1320;
+        if (sevenPairsLikely && currentPairCount >= 5)
+            score -= 6000;
         if (currentPlan.ForbidsMelds)
             score -= 6000;
 
@@ -315,6 +318,8 @@ public sealed class NeijiangReactionDecisionEngine
         };
         if (currentPlan.ForbidsMelds)
             reasons.Add($"七对路线：{currentPlan.PrimaryRoute} 禁止碰牌，碰牌会破坏七对");
+        if (sevenPairsLikely && currentPairCount >= 5)
+            reasons.Add("七对路线：五对以上门清牌不碰，保留七对/龙七对");
         if (sevenPairsTenpai) reasons.Add("七对已听，碰牌会破坏听牌，优先过牌");
         if (reDiscardsClaimedTile) reasons.Add("碰后最优首打仍是同张，直接改碰属于无效副露");
         if (reDiscardsClaimedTile && state.Hand18[reactionTileType] >= 3)
@@ -414,6 +419,8 @@ public sealed class NeijiangReactionDecisionEngine
         if (discardRisk.Risk >= 56) score -= 42;
         if (roundStage >= 2 && followUp.Shanten > 0) score -= 24;
         if (maxReadyPosterior >= 0.62 && followUp.Shanten > 0) score -= 12;
+        if (sevenPairsLikely && CountPairs(state.Hand18) >= 5)
+            score -= 6000;
         if (currentPlan.ForbidsGangs)
             score -= 6000;
 
@@ -426,6 +433,8 @@ public sealed class NeijiangReactionDecisionEngine
         };
         if (currentPlan.ForbidsGangs)
             reasons.Add($"七对路线：{currentPlan.PrimaryRoute} 禁止杠牌，杠牌会破坏七对");
+        if (sevenPairsLikely && CountPairs(state.Hand18) >= 5)
+            reasons.Add("七对路线：五对以上门清牌不杠，保留七对/龙七对");
         if (followUp.Shanten <= 0) reasons.Add("杠后仍保持成叫");
         if (followUp.Shanten > currentFollowUp.Shanten) reasons.Add("杠牌会拖慢速度，直接降权");
         if (isMeldedGang && followUp.Shanten <= currentFollowUp.Shanten && !sevenPairsLikely)
@@ -504,9 +513,13 @@ public sealed class NeijiangReactionDecisionEngine
     private static int ResolveRoundStage(NeijiangStateView state)
     {
         var maxDiscards = state.Discards18.Max(list => list.Count);
-        if (state.WallCount >= 14 && maxDiscards <= 5) return 0;
-        if (state.WallCount >= 8 && maxDiscards <= 11) return 1;
-        return 2;
+        var hasLikelyReady = state.IsCalled.Any(value => value) || state.IsReady.Any(value => value);
+        var exposedMeldCount = state.Melds18.Sum(list => list.Count / 3);
+        if (state.WallCount <= 6) return 2;
+        if (hasLikelyReady && state.WallCount <= 8) return 2;
+        if (maxDiscards >= 10 || state.WallCount <= 13 || exposedMeldCount >= 5) return 1;
+        if (hasLikelyReady && state.WallCount <= 10) return 1;
+        return 0;
     }
 
     private int ResolveThreatLevel(NeijiangStateView state, NeijiangBeliefSnapshot belief)
@@ -551,6 +564,19 @@ public sealed class NeijiangReactionDecisionEngine
         if (threatLevel >= 3 || maxReadyPosterior >= 0.56) reasons.Add("桌面压力偏高，过更稳");
         if (roundStage >= 2) reasons.Add("后期不为低价值副露冒险");
         return reasons;
+    }
+
+    private static IReadOnlyList<string> BuildRouteProtectionPassReasons(
+        NeijiangStateView state,
+        NeijiangRoutePlanResult currentPlan)
+    {
+        var currentMeldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var pairCount = CountPairs(state.Hand18);
+        if (currentPlan.ForbidsMelds)
+            return Array.Empty<string>();
+        if (currentMeldCount == 0 && pairCount >= 5 && IsSevenPairsLikely(state.Hand18, currentMeldCount))
+            return new[] { "七对路线：五对以上门清牌优先过牌，保留七对/龙七对" };
+        return Array.Empty<string>();
     }
 
     private static IReadOnlyList<string> BuildPosteriorSummary(double wallPosterior, double blockPosterior, int discardRisk, double maxReadyPosterior, int threatLevel)

@@ -1,5 +1,72 @@
 # Changelog
 
+## 1.0.59 - 2026-07-01
+
+- Backed up the current working tree and prior Android artifacts to the AI volume before cleanup.
+- Removed tracked legacy regression evidence under `测试数据统计` and retired old one-off/monolithic test runners that are no longer part of the current Neijiang release gate.
+- Updated the README and current regression map so release validation points at `tests/current/*`, C# smoke, Python tooling tests, and fixed-seed AI pressure runs.
+- Preserved the 1.0.58 realtime AI rule set and keep-ready defense behavior; this release is focused on cleanup, verification, and packaging hygiene.
+
+## 1.0.58 - 2026-07-01
+
+- Changed the formal AI turn/reaction path to compute against the current realtime table state by default, while preserving explicit native-async test coverage for the async backend.
+- Defined Neijiang AI stage evaluation by wall count, discard progress, exposed meld pressure, and likely-ready pressure so early/middle/late strategy is no longer ambiguous.
+- Tuned opening route judgment for pinghu, qidui, qingyise, and five-pair concealed hands, including pass protection for qidui/long-qidui potential before committing to calls.
+- Added a late-wall keep-ready guard after hard-defense overrides so the final discarded tile does not break a ready hand when a higher-score ready candidate has acceptable danger.
+- Verified the selected release rule set with 30 fixed-seed realtime bone-ash AI rounds: `forced_stop_rounds=0`, average discard quality `95.15`, A/B acceptable rate `93.71%`, D/E error rate `4.64%`, and E-level blunders `24/668`.
+
+## 1.0.57 - 2026-06-28
+
+- Added automated long-term AI pressure-evaluation output for score delta, deal-in rate, deal-in loss, draw/battle-end distribution, phase counts, and final debug snapshots across all-AI benchmark runs.
+- Added turn-quality diagnostics and training-index fields for selected danger, mode consistency, expected-net gaps, route alternatives, opportunity-loss flags, and candidate quality scores.
+- Fixed C# discard selection so strategy-aware sorted candidates update the actual chosen tile, score, shanten, live-ukeire, and explain reasons instead of only reordering diagnostics.
+- Tuned long-term EV policy so medium trailing positions stay balanced unless the score gap or final stretch justifies chase mode.
+- Verified 300 fixed-seed automated pressure rounds with `forced_stop_rounds=0`; the final fixed-seed score path stayed unchanged, while the selection path and diagnostics are now internally aligned for further batch tuning.
+
+## 1.0.56 - 2026-06-28
+
+- Added `AIContextCache` for C# discard decisions, covering stage, round goal, strategy mode, hand analysis, attack eligibility, opponent danger, tile danger, score situation, risk tolerance, dirty flags, explain reason codes, and module timing.
+- Added old-hand strategy evaluators for `attack`, `balanced`, `defense`, `fold`, and `chase`, plus strategic deal-in risk adjustment without hardcoding a fixed discard.
+- Passed score, round, hand-version, and visible-version context through the Godot C# bridge, native runtime, CLI fallback, and decision cache fingerprint so score-aware strategy cannot reuse stale cached decisions.
+- Added smoke coverage for AI context stage/explain/performance output and score-driven strategy mode switching.
+- Re-ran the opening bao-jiao/bao-gang stall regressions covering AI-only bao-jiao, AI bao-gang, human bao-jiao/bao-gang, stale AI turn rejection, native C# contract mapping, and UI turn-resume paths.
+
+## 1.0.55 - 2026-06-26
+
+- Fixed a reported bao-jiao/bao-gang stall where an AI turn could reuse a stale cached discard `tile_id` after the hand changed, causing the table to stop when the opposite AI should discard.
+- AI turn execution now rejects cached decisions that are no longer executable and refreshes the decision once against the current hand before giving up.
+- Added a regression case for the reported shape: human dealer already declared bao-jiao/bao-gang, opposite AI already declared bao-jiao, and the AI turn recovers from a stale discard cache by discarding the legal drawn tile.
+
+## 1.0.54 - 2026-06-25
+
+- Fixed a real opening bao-jiao UI stall where stale draw-transition state could hide the human `报叫` and `过` controls after an AI player declared bao-jiao.
+- Added a live MainScene replay that uses the real AI manager and Godot timers to reproduce AI bao-jiao before the human opening prompt, then verifies the buttons are visible.
+- Added UI regression coverage for a reported AI discard-reaction path so AI bao-jiao followed by AI reaction does not leave the table stuck.
+
+## 1.0.53 - 2026-06-25
+
+- Fixed the opening AI bao-jiao/bao-gang completion path so the state broadcast happens after advancing to dealer first discard, preventing the UI from holding a stale no-action snapshot.
+- Added UI regression coverage for AI opening bao-jiao with bao-gang where the human player is not also declaring, then continued the round until the human draws and discards.
+- Added matching UI regression coverage for the AI opening bao-jiao-only path, including intermediate AI turns before control returns to the human player.
+
+## 1.0.52 - 2026-06-24
+
+- Fixed the opening bao-jiao/bao-gang dialog flow so the top-right close button cancels instead of silently submitting, and an explicit `确认报叫` button submits the selected bao-gang choices.
+- Added current smoke coverage for a real opening deal where the human declares opening bao-jiao with selected bao-gang keys and the AI dealer proceeds to first discard.
+- Added UI regression coverage for the bao-gang dialog cancel/confirm path and refreshed helper-text assertions to match the current in-game wording.
+
+## 1.0.51 - 2026-06-23
+
+- Preserved the AI-mode contract by mapping legacy cheating-level entrypoints to the `hell` preset and legacy advanced entrypoints back to `bone_ash`.
+- Recognized `hell_challenge_direct_sync_delivery` as a direct hell challenge backend so synchronous hell decisions keep the same oracle execution/diagnostic path as direct and async hell decisions.
+- Added current smoke coverage for legacy AI-level preset mapping and direct hell challenge sync-delivery recognition.
+
+## 1.0.50 - 2026-06-18
+
+- Fixed an opening bao-jiao/bao-gang stall where AI declarations could recursively advance the opening review queue and leave the round stuck before dealer first discard.
+- Kept bao-jiao/bao-gang judgment backend-owned: C# still decides AI declarations, while Godot only advances the reviewed queue and executes the returned action.
+- Added current smoke coverage for AI opening declaration stopping at the human prompt, and for human pass resuming queued AI review before dealer first discard.
+
 ## 1.0.49 - 2026-05-21
 
 - Fixed reported bao-gang stalls by sending the declared `bao_gang_tiles` whitelist to C# as `baoGangTileTypes`.

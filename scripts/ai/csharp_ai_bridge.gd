@@ -25,12 +25,12 @@ func is_available() -> bool:
 	return FileAccess.file_exists(ProjectSettings.globalize_path(CLI_DLL_PATH))
 
 
-func analyze_discard(player_state: Dictionary, table_state: Dictionary, rules_config, request_tag: String = "") -> Dictionary:
+func analyze_discard(player_state: Dictionary, table_state: Dictionary, rules_config, request_tag: String = "", force_lightweight: bool = false, compact_result: bool = false) -> Dictionary:
 	if not is_available():
 		last_transport_mode = "unavailable"
 		last_host_error = "cli_missing"
 		return {}
-	var payload := _build_payload(player_state, table_state, rules_config)
+	var payload := build_discard_transport_payload(player_state, table_state, rules_config, force_lightweight, compact_result)
 	if _ensure_host_connection():
 		var host_result := _analyze_discard_via_host(payload)
 		if not host_result.is_empty():
@@ -54,8 +54,14 @@ func analyze_discard(player_state: Dictionary, table_state: Dictionary, rules_co
 	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
 
 
-func build_discard_transport_payload(player_state: Dictionary, table_state: Dictionary, rules_config) -> Dictionary:
-	return _build_payload(player_state, table_state, rules_config)
+func build_discard_transport_payload(player_state: Dictionary, table_state: Dictionary, rules_config, force_lightweight: bool = false, compact_result: bool = false) -> Dictionary:
+	var payload := _build_payload(player_state, table_state, rules_config)
+	if force_lightweight:
+		payload["forceLightweight"] = true
+		payload["mobileSpeedMode"] = true
+	if compact_result:
+		payload["compactResult"] = true
+	return payload
 
 
 func analyze_reaction(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, request_tag: String = "") -> Dictionary:
@@ -275,10 +281,18 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 	is_ready.resize(4)
 	var has_hu := PackedByteArray()
 	has_hu.resize(4)
+	var scores: Array[int] = []
+	var discard_total := 0
+	var meld_total := 0
 	for index in range(mini(4, players.size())):
 		var player: Dictionary = players[index]
-		discards18.append(_encode_tile_list(player.get("discards", []), active_suits))
-		melds18.append(_encode_meld_tile_list(player.get("melds", []), active_suits))
+		var encoded_discards := _encode_tile_list(player.get("discards", []), active_suits)
+		var encoded_melds := _encode_meld_tile_list(player.get("melds", []), active_suits)
+		discards18.append(encoded_discards)
+		melds18.append(encoded_melds)
+		discard_total += encoded_discards.size()
+		meld_total += encoded_melds.size()
+		scores.append(int(player.get("score", 0)))
 		is_called[index] = 1 if bool(player.get("bao_jiao", false)) else 0
 		is_ready[index] = 1 if bool(player.get("bao_jiao", false)) else 0
 		has_hu[index] = 1 if bool(player.get("has_won", false)) else 0
@@ -286,11 +300,25 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 		discards18.append([])
 	while melds18.size() < 4:
 		melds18.append([])
+	while scores.size() < 4:
+		scores.append(0)
+	var visible_version := int(table_state.get("wall_count", 0)) \
+		+ discard_total * 31 \
+		+ meld_total * 47 \
+		+ int(table_state.get("round_index", 0)) * 101
+	var hand_version := int(player_state.get("hand_count", hand_tiles.size())) * 19 + hand_tiles.size()
 	return {
 		"seatIndex": self_seat,
 		"dealerSeat": _resolve_dealer_seat(players, table_state, self_seat),
 		"currentSeat": int(table_state.get("current_turn_seat", self_seat)),
 		"wallCount": int(table_state.get("wall_count", 0)),
+		"roundIndex": int(table_state.get("round_index", 0)),
+		"totalRounds": int(table_state.get("total_rounds", 0)),
+		"remainingRounds": int(table_state.get("remaining_rounds", 0)),
+		"visibleVersion": visible_version,
+		"handVersion": hand_version,
+		"strategyContextVersion": visible_version + hand_version,
+		"scores": scores,
 		"mobileSpeedMode": OS.has_feature("android") or OS.has_feature("ios"),
 		"compactResult": OS.has_feature("android") or OS.has_feature("ios"),
 		"hand18": hand18,

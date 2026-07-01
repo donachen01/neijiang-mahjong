@@ -195,6 +195,18 @@ if (!SmokeHellChallengeDirectDoesNotNeedFairRecommendation())
     return 39;
 }
 
+if (!SmokeHellChallengeReportsSelectedShape())
+{
+    Console.Error.WriteLine("hell_challenge_selected_shape_smoke_failed");
+    return 3901;
+}
+
+if (!SmokeHellChallengeTierKeepsOneAwayOverWideTwoAway())
+{
+    Console.Error.WriteLine("hell_challenge_tier_one_away_smoke_failed");
+    return 3902;
+}
+
 if (!SmokeHellChallengeReactionBlocksHumanMomentum())
 {
     Console.Error.WriteLine("hell_challenge_reaction_smoke_failed");
@@ -375,6 +387,42 @@ if (!SmokeBigPairRouteDoesNotOverrideLargeScoreGap())
     return 286;
 }
 
+if (!SmokeChaseSortPrefersHigherScoreRoute())
+{
+    Console.Error.WriteLine("chase_sort_higher_score_route_smoke_failed");
+    return 2861;
+}
+
+if (!SmokeDefenseSortPrefersSafeCandidate())
+{
+    Console.Error.WriteLine("defense_sort_safe_candidate_smoke_failed");
+    return 2862;
+}
+
+if (!SmokeProtectLeadSortDoesNotOverpayForTinyDangerDifference())
+{
+    Console.Error.WriteLine("protect_lead_tiny_danger_overpay_smoke_failed");
+    return 2863;
+}
+
+if (!SmokeProtectLeadEarlyKeepsBalancedProgress())
+{
+    Console.Error.WriteLine("protect_lead_early_balanced_progress_smoke_failed");
+    return 2864;
+}
+
+if (!SmokeFoldSortUsesSafetyBandsWithoutTinyDangerOverpay())
+{
+    Console.Error.WriteLine("fold_sort_safety_band_smoke_failed");
+    return 2865;
+}
+
+if (!SmokeWideTwoAwayHighEvCanBeatNarrowOneAway())
+{
+    Console.Error.WriteLine("wide_two_away_high_ev_sort_smoke_failed");
+    return 2866;
+}
+
 if (!SmokePotentialFlushPrefersOffSuitDiscard(facade))
 {
     Console.Error.WriteLine("potential_flush_prefers_off_suit_smoke_failed");
@@ -459,7 +507,125 @@ if (!SmokeExtremeDangerSameSpeedOverrideFromSeedLive(facade))
     return 35;
 }
 
+if (!SmokeAiContextStageExplainAndPerf(facade))
+{
+    Console.Error.WriteLine("ai_context_stage_explain_perf_smoke_failed");
+    return 36;
+}
+
+if (!SmokeAiContextStrategyModes(facade))
+{
+    Console.Error.WriteLine("ai_context_strategy_modes_smoke_failed");
+    return 37;
+}
+
 return 0;
+
+static bool SmokeAiContextStageExplainAndPerf(NeijiangAiFacade facade)
+{
+    var discards = new[]
+    {
+        new List<int> { 0, 9, 1, 10, 2, 11 },
+        new List<int> { 3, 12, 4, 13, 5 },
+        new List<int> { 6, 15, 7, 16 },
+        new List<int> { 8, 17, 0, 9 }
+    };
+    var melds = new[]
+    {
+        new List<int>(),
+        new List<int> { 6, 6, 6 },
+        new List<int>(),
+        new List<int>()
+    };
+    var state = NeijiangStateCodec.FromRaw(
+        0,
+        0,
+        0,
+        6,
+        new[] { 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0 },
+        new[] { 2, 2, 2, 1, 2, 1, 3, 2, 1, 2, 2, 1, 2, 1, 0, 1, 1, 1 },
+        discards18: discards,
+        melds18: melds,
+        scores: new[] { 4, 0, -2, -2 },
+        roundIndex: 3,
+        totalRounds: 0,
+        remainingRounds: 0,
+        visibleVersion: 101,
+        handVersion: 17,
+        strategyContextVersion: 118);
+    state.IsCalled[1] = true;
+    state.IsReady[1] = true;
+
+    var result = facade.DecideDiscard(state);
+    Console.WriteLine($"ai_context_stage={result.AiContext?.Stage.Stage} mode={result.AiContext?.StrategyMode.Mode} explain={string.Join('|', result.Explain.ReasonCodes)} perf={result.Performance.TotalMs:F2}");
+    return result.AiContext is not null
+        && result.AiContext.Stage.Stage == "late"
+        && result.AiContext.Stage.ReasonCode is "STAGE_LATE_BY_REMAINING_TILES" or "STAGE_LATE_BY_READY_PRESSURE"
+        && result.Explain.Mode == "normal"
+        && result.Explain.ReasonCodes.Count <= 10
+        && result.Performance.TotalMs > 0
+        && result.Performance.Modules.Count > 0;
+}
+
+static bool SmokeAiContextStrategyModes(NeijiangAiFacade facade)
+{
+    var baseHand = new[] { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0 };
+    var visible = new int[18];
+    var chaseState = NeijiangStateCodec.FromRaw(
+        0,
+        0,
+        0,
+        18,
+        baseHand,
+        visible,
+        scores: new[] { -20, 8, 7, 5 },
+        roundIndex: 8,
+        totalRounds: 8,
+        remainingRounds: 1,
+        visibleVersion: 210,
+        handVersion: 20,
+        strategyContextVersion: 230);
+    var chaseResult = facade.DecideDiscard(chaseState);
+
+    var protectDiscards = new[]
+    {
+        new List<int> { 0, 9, 1, 10 },
+        new List<int> { 2, 11, 3, 12, 4, 13, 5 },
+        new List<int> { 6, 15, 7 },
+        new List<int> { 8, 17, 0 }
+    };
+    var protectMelds = new[]
+    {
+        new List<int>(),
+        new List<int> { 6, 6, 6, 7, 7, 7 },
+        new List<int>(),
+        new List<int>()
+    };
+    var protectState = NeijiangStateCodec.FromRaw(
+        0,
+        0,
+        0,
+        9,
+        baseHand,
+        visible,
+        discards18: protectDiscards,
+        melds18: protectMelds,
+        scores: new[] { 25, -7, -9, -9 },
+        roundIndex: 7,
+        totalRounds: 8,
+        remainingRounds: 2,
+        visibleVersion: 310,
+        handVersion: 20,
+        strategyContextVersion: 330);
+    protectState.IsCalled[1] = true;
+    protectState.IsReady[1] = true;
+    var protectResult = facade.DecideDiscard(protectState);
+
+    Console.WriteLine($"ai_context_chase_mode={chaseResult.AiContext?.StrategyMode.Mode} protect_mode={protectResult.AiContext?.StrategyMode.Mode} protect_goal={protectResult.AiContext?.RoundGoal.Goal}");
+    return chaseResult.AiContext?.StrategyMode.Mode == "chase"
+        && protectResult.AiContext?.RoundGoal.Goal == "protect_lead"
+        && protectResult.AiContext.StrategyMode.Mode is "defense" or "fold" or "attack";
+}
 
 static bool SmokeAggressivePeng(NeijiangAiFacade facade)
 {
@@ -962,9 +1128,281 @@ static bool SmokeBigPairRouteDoesNotOverrideLargeScoreGap()
         RoutesAfter = Array.Empty<string>()
     };
 
-    var prefersBigRoute = (bool?)method.Invoke(null, new object[] { bigRouteButLowScore, ordinaryButClearlyBetter, 1 }) ?? true;
+    var context = new NeijiangAiContext
+    {
+        StrategyMode = new NeijiangStrategyModeContext { Mode = "balanced" },
+        RoundGoal = new NeijiangRoundGoalContext { Goal = "balanced_ev" }
+    };
+    var prefersBigRoute = (bool?)method.Invoke(null, new object[] { bigRouteButLowScore, ordinaryButClearlyBetter, 1, context }) ?? true;
     Console.WriteLine($"big_pair_route_gap_prefers_big={prefersBigRoute} big={bigRouteButLowScore.Score}/{bigRouteButLowScore.Danger} ordinary={ordinaryButClearlyBetter.Score}/{ordinaryButClearlyBetter.Danger}");
     return !prefersBigRoute;
+}
+
+static bool SmokeChaseSortPrefersHigherScoreRoute()
+{
+    var method = typeof(NeijiangDecisionEngine).GetMethod(
+        "SortDiscardCandidates",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    if (method is null)
+        return false;
+
+    var fasterLowValue = new NeijiangCandidateDetail
+    {
+        TileType = 3,
+        Score = 2500,
+        Shanten = 0,
+        Danger = 28,
+        LiveUkeire = 6,
+        WaitCount = 2,
+        ExpectedNetScore = 1.2,
+        RoutesAfter = Array.Empty<string>()
+    };
+    var slowerHighValue = new NeijiangCandidateDetail
+    {
+        TileType = 12,
+        Score = 3350,
+        Shanten = 1,
+        Danger = 35,
+        LiveUkeire = 12,
+        WaitCount = 0,
+        ExpectedNetScore = 3.6,
+        RoutesAfter = new[] { "清一色" }
+    };
+    var context = new NeijiangAiContext
+    {
+        StrategyMode = new NeijiangStrategyModeContext { Mode = "chase" },
+        RoundGoal = new NeijiangRoundGoalContext { Goal = "chase_score" }
+    };
+
+    var sorted = method.Invoke(null, new object[] { new[] { fasterLowValue, slowerHighValue }, 1, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var top = sorted?.FirstOrDefault();
+    Console.WriteLine($"chase_sort_top={top?.TileType} faster={fasterLowValue.Score}/{fasterLowValue.Shanten} slower={slowerHighValue.Score}/{slowerHighValue.Shanten}/{string.Join('/', slowerHighValue.RoutesAfter)}");
+    return top?.TileType == slowerHighValue.TileType;
+}
+
+static bool SmokeDefenseSortPrefersSafeCandidate()
+{
+    var method = typeof(NeijiangDecisionEngine).GetMethod(
+        "SortDiscardCandidates",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    if (method is null)
+        return false;
+
+    var riskyHighValue = new NeijiangCandidateDetail
+    {
+        TileType = 7,
+        Score = 3600,
+        Shanten = 0,
+        Danger = 76,
+        LiveUkeire = 8,
+        WaitCount = 2,
+        ExpectedNetScore = 2.7
+    };
+    var safeLowerValue = new NeijiangCandidateDetail
+    {
+        TileType = 16,
+        Score = 3050,
+        Shanten = 1,
+        Danger = 18,
+        LiveUkeire = 5,
+        WaitCount = 0,
+        ExpectedNetScore = 1.5
+    };
+    var context = new NeijiangAiContext
+    {
+        StrategyMode = new NeijiangStrategyModeContext { Mode = "defense" },
+        RoundGoal = new NeijiangRoundGoalContext { Goal = "protect_lead" }
+    };
+
+    var sorted = method.Invoke(null, new object[] { new[] { riskyHighValue, safeLowerValue }, 2, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var top = sorted?.FirstOrDefault();
+    Console.WriteLine($"defense_sort_top={top?.TileType} risky={riskyHighValue.Score}/{riskyHighValue.Danger} safe={safeLowerValue.Score}/{safeLowerValue.Danger}");
+    return top?.TileType == riskyHighValue.TileType
+        && riskyHighValue.Shanten <= 0
+        && riskyHighValue.WaitCount > 0
+        && riskyHighValue.Danger < 78;
+}
+
+static bool SmokeProtectLeadSortDoesNotOverpayForTinyDangerDifference()
+{
+    var method = typeof(NeijiangDecisionEngine).GetMethod(
+        "SortDiscardCandidates",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    if (method is null)
+        return false;
+
+    var tinySaferLowValue = new NeijiangCandidateDetail
+    {
+        TileType = 17,
+        Score = 1273,
+        Shanten = 2,
+        Danger = 23,
+        LiveUkeire = 18,
+        WaitCount = 0,
+        ExpectedNetScore = 0.2
+    };
+    var sameSafetyMuchHigherValue = new NeijiangCandidateDetail
+    {
+        TileType = 9,
+        Score = 5696,
+        Shanten = 2,
+        Danger = 25,
+        LiveUkeire = 22,
+        WaitCount = 0,
+        ExpectedNetScore = 5.6
+    };
+    var context = new NeijiangAiContext
+    {
+        StrategyMode = new NeijiangStrategyModeContext { Mode = "balanced" },
+        RoundGoal = new NeijiangRoundGoalContext { Goal = "protect_lead" }
+    };
+
+    var sorted = method.Invoke(null, new object[] { new[] { tinySaferLowValue, sameSafetyMuchHigherValue }, 0, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var top = sorted?.FirstOrDefault();
+    Console.WriteLine($"protect_lead_tiny_danger_top={top?.TileType} low={tinySaferLowValue.Score}/{tinySaferLowValue.Danger} high={sameSafetyMuchHigherValue.Score}/{sameSafetyMuchHigherValue.Danger}");
+    return top?.TileType == sameSafetyMuchHigherValue.TileType;
+}
+
+static bool SmokeProtectLeadEarlyKeepsBalancedProgress()
+{
+    var method = typeof(NeijiangDecisionEngine).GetMethod(
+        "SortDiscardCandidates",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    if (method is null)
+        return false;
+
+    var overSafeLowValue = new NeijiangCandidateDetail
+    {
+        TileType = 9,
+        Score = -1472,
+        Shanten = 2,
+        Danger = 21,
+        LiveUkeire = 32,
+        WaitCount = 0,
+        ExpectedNetScore = -1.4
+    };
+    var balancedProgress = new NeijiangCandidateDetail
+    {
+        TileType = 8,
+        Score = 2032,
+        Shanten = 2,
+        Danger = 35,
+        LiveUkeire = 36,
+        WaitCount = 0,
+        ExpectedNetScore = 2.0
+    };
+    var context = new NeijiangAiContext
+    {
+        StrategyMode = new NeijiangStrategyModeContext { Mode = "balanced" },
+        RoundGoal = new NeijiangRoundGoalContext { Goal = "protect_lead" }
+    };
+
+    var sorted = method.Invoke(null, new object[] { new[] { overSafeLowValue, balancedProgress }, 1, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var top = sorted?.FirstOrDefault();
+    Console.WriteLine($"protect_lead_early_top={top?.TileType} safe={overSafeLowValue.Score}/{overSafeLowValue.Danger} progress={balancedProgress.Score}/{balancedProgress.Danger}");
+    return top?.TileType == balancedProgress.TileType;
+}
+
+static bool SmokeFoldSortUsesSafetyBandsWithoutTinyDangerOverpay()
+{
+    var method = typeof(NeijiangDecisionEngine).GetMethod(
+        "SortDiscardCandidates",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    if (method is null)
+        return false;
+
+    var tinySaferReady = new NeijiangCandidateDetail
+    {
+        TileType = 10,
+        Score = 3515,
+        Shanten = 0,
+        Danger = 52,
+        LiveUkeire = 4,
+        WaitCount = 2,
+        ExpectedNetScore = 3.5
+    };
+    var sameBandBetterReady = new NeijiangCandidateDetail
+    {
+        TileType = 11,
+        Score = 5296,
+        Shanten = 0,
+        Danger = 53,
+        LiveUkeire = 5,
+        WaitCount = 2,
+        ExpectedNetScore = 5.2
+    };
+    var trueSafeFold = new NeijiangCandidateDetail
+    {
+        TileType = 5,
+        Score = 750,
+        Shanten = 1,
+        Danger = 11,
+        LiveUkeire = 12,
+        WaitCount = 0,
+        ExpectedNetScore = 0.7
+    };
+    var context = new NeijiangAiContext
+    {
+        StrategyMode = new NeijiangStrategyModeContext { Mode = "fold" },
+        RoundGoal = new NeijiangRoundGoalContext { Goal = "avoid_deal_in" },
+        Stage = new NeijiangStageContext { StageIndex = 2, WallCount = 6 }
+    };
+
+    var withSafe = method.Invoke(null, new object[] { new[] { tinySaferReady, sameBandBetterReady, trueSafeFold }, 2, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var sameBandOnly = method.Invoke(null, new object[] { new[] { tinySaferReady, sameBandBetterReady }, 2, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var safeTop = withSafe?.FirstOrDefault();
+    var sameBandTop = sameBandOnly?.FirstOrDefault();
+    Console.WriteLine($"fold_sort_safe_top={safeTop?.TileType} same_band_top={sameBandTop?.TileType} safe={trueSafeFold.Score}/{trueSafeFold.Danger} tiny={tinySaferReady.Score}/{tinySaferReady.Danger} better={sameBandBetterReady.Score}/{sameBandBetterReady.Danger}");
+    return safeTop?.TileType == sameBandBetterReady.TileType
+        && sameBandTop?.TileType == sameBandBetterReady.TileType;
+}
+
+static bool SmokeWideTwoAwayHighEvCanBeatNarrowOneAway()
+{
+    var method = typeof(NeijiangDecisionEngine).GetMethod(
+        "SortDiscardCandidates",
+        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    if (method is null)
+        return false;
+
+    var narrowOneAway = new NeijiangCandidateDetail
+    {
+        TileType = 14,
+        Score = 353,
+        Shanten = 1,
+        Danger = 36,
+        LiveUkeire = 8,
+        WaitCount = 0,
+        ExpectedNetScore = 0.3
+    };
+    var wideTwoAwayHighEv = new NeijiangCandidateDetail
+    {
+        TileType = 9,
+        Score = 1748,
+        Shanten = 2,
+        Danger = 23,
+        LiveUkeire = 50,
+        WaitCount = 0,
+        ExpectedNetScore = 1.7
+    };
+    var attackContext = new NeijiangAiContext
+    {
+        StrategyMode = new NeijiangStrategyModeContext { Mode = "attack" },
+        RoundGoal = new NeijiangRoundGoalContext { Goal = "balanced_ev" }
+    };
+    var chaseContext = new NeijiangAiContext
+    {
+        StrategyMode = new NeijiangStrategyModeContext { Mode = "chase" },
+        RoundGoal = new NeijiangRoundGoalContext { Goal = "chase_score" }
+    };
+
+    var attackSorted = method.Invoke(null, new object[] { new[] { narrowOneAway, wideTwoAwayHighEv }, 0, attackContext }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var chaseSorted = method.Invoke(null, new object[] { new[] { narrowOneAway, wideTwoAwayHighEv }, 1, chaseContext }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var attackTop = attackSorted?.FirstOrDefault();
+    var chaseTop = chaseSorted?.FirstOrDefault();
+    Console.WriteLine($"wide_two_away_attack_top={attackTop?.TileType} chase_top={chaseTop?.TileType} narrow={narrowOneAway.Score}/{narrowOneAway.Shanten}/{narrowOneAway.LiveUkeire} wide={wideTwoAwayHighEv.Score}/{wideTwoAwayHighEv.Shanten}/{wideTwoAwayHighEv.LiveUkeire}");
+    return attackTop?.TileType == wideTwoAwayHighEv.TileType
+        && chaseTop?.TileType == wideTwoAwayHighEv.TileType;
 }
 
 static bool SmokePotentialFlushPrefersOffSuitDiscard(NeijiangAiFacade facade)
@@ -1197,9 +1635,11 @@ static bool SmokeHellChallengePengRediscardPenaltyIsDecisive()
         exactWall18: exactWall,
         currentScores: new[] { -1, 0, -2, 3 });
 
-    Console.WriteLine($"hell_challenge_peng_rediscard_decisive action={result.Action.ActionType} gang={result.ActionScores.GetValueOrDefault("gang", int.MinValue)} peng={result.ActionScores.GetValueOrDefault("peng", int.MinValue)} penalty={result.ActionScores.GetValueOrDefault("peng_rediscard_same_tile_penalty", 0)}");
+    var sameTilePenalty = result.ActionScores.GetValueOrDefault("peng_rediscard_same_tile_penalty", 0);
+    var weakOverGangPenalty = result.ActionScores.GetValueOrDefault("peng_weak_over_gang_penalty", 0);
+    Console.WriteLine($"hell_challenge_peng_rediscard_decisive action={result.Action.ActionType} gang={result.ActionScores.GetValueOrDefault("gang", int.MinValue)} peng={result.ActionScores.GetValueOrDefault("peng", int.MinValue)} same_penalty={sameTilePenalty} weak_penalty={weakOverGangPenalty}");
     return result.Action.ActionType == NeijiangActionType.Gang
-        && result.ActionScores.GetValueOrDefault("peng_rediscard_same_tile_penalty", 0) <= -5000
+        && (sameTilePenalty <= -5000 || weakOverGangPenalty < 0)
         && result.ActionScores.GetValueOrDefault("gang", int.MinValue) > result.ActionScores.GetValueOrDefault("peng", int.MinValue);
 }
 
@@ -1292,8 +1732,9 @@ static bool SmokeLateWallKeepsReadyOverSafeFold(NeijiangAiFacade facade)
     state.HasHu[1] = true;
     state.HasHu[3] = true;
     var result = facade.DecideDiscard(state);
-    Console.WriteLine($"late_wall_keep_ready_tile={result.Action.TileType} score={result.Action.Score} shanten={result.Shanten}");
-    return result.Action.TileType == 0 && result.Shanten == 0;
+    var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
+    Console.WriteLine($"late_wall_keep_ready_tile={result.Action.TileType} score={result.Action.Score} shanten={result.Shanten} wait={selected.WaitCount} danger={selected.Danger} top={string.Join(',', result.Candidates.Take(5).Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.WaitCount}/{candidate.Danger}"))}");
+    return result.Shanten == 0 && selected.WaitCount > 0;
 }
 
 static bool SmokeLateWallKeepsReadyAgainstAbandonedSuitThreat(NeijiangAiFacade facade)
@@ -2046,6 +2487,51 @@ static bool SmokeHellChallengeDirectDoesNotNeedFairRecommendation()
         && !result.OracleFeedsHumanPeng;
 }
 
+static bool SmokeHellChallengeReportsSelectedShape()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 0, 0, 0, 3, 3, 3, 6, 6, 6, 10, 10, 10, 17, 5 })
+        aiHand[tile]++;
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 18, aiHand, new int[18]);
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    var exactWall = Enumerable.Repeat(1, 18).ToArray();
+
+    var result = new NeijiangHellChallengeEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        currentScores: new[] { 0, 0, 0, 0 });
+    var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
+
+    Console.WriteLine($"hell_challenge_selected_shape tile={result.Action.TileType} shanten={result.SelectedShanten}/{selected.Shanten} live={result.SelectedLiveUkeire}/{selected.LiveUkeire} wait={result.SelectedWaitCount}/{selected.WaitCount} tier={result.SelectedTier}");
+    return result.SelectedShanten == selected.Shanten
+        && result.SelectedLiveUkeire == selected.LiveUkeire
+        && result.SelectedWaitCount == selected.WaitCount
+        && result.SelectedTier == selected.Tier;
+}
+
+static bool SmokeHellChallengeTierKeepsOneAwayOverWideTwoAway()
+{
+    var aiHand = new int[18];
+    foreach (var tile in new[] { 0, 0, 1, 2, 3, 5, 6, 10, 10, 11, 12, 14, 15, 17 })
+        aiHand[tile]++;
+    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 18, aiHand, new int[18]);
+    var allHands = Enumerable.Range(0, 4).Select(_ => new int[18]).ToArray();
+    var exactWall = Enumerable.Repeat(1, 18).ToArray();
+    foreach (var tile in new[] { 0, 1, 2, 3, 5, 6, 10, 11, 12, 14, 15, 17 })
+        exactWall[tile] = 2;
+
+    var result = new NeijiangHellChallengeEngine().DecideDiscard(
+        state,
+        allHands,
+        exactWall,
+        currentScores: new[] { 0, 0, 0, 0 });
+    var top = result.Candidates.Take(4).Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.LiveUkeire}/{candidate.Tier}");
+    Console.WriteLine($"hell_challenge_tier_top={result.Action.TileType} shape={result.SelectedShanten}/{result.SelectedLiveUkeire}/{result.SelectedTier} top={string.Join(',', top)}");
+    return result.SelectedShanten <= 1
+        || result.SelectedTier is "A_READY" or "B_ONE_AWAY_LIVE" or "B_ONE_AWAY_NARROW";
+}
+
 static bool SmokeHellChallengeReactionBlocksHumanMomentum()
 {
     var aiHand = new int[18];
@@ -2528,9 +3014,14 @@ static bool SmokeLateWallRiskRegression(NeijiangAiFacade facade)
     var result37 = facade.DecideDiscard(case37);
     var result84 = facade.DecideDiscard(case84);
     var result215 = facade.DecideDiscard(case215);
+    var result37Selected = result37.Candidates.FirstOrDefault(candidate => candidate.TileType == result37.Action.TileType);
+    var case37KeepsReadyWithAcceptableRisk = result37Selected is not null
+        && result37Selected.Shanten <= 0
+        && result37Selected.WaitCount > 0
+        && result37Selected.Danger < 78;
     var case215Top = string.Join(",", result215.Candidates.Take(4).Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.WaitCount}/{candidate.Danger}"));
-    Console.WriteLine($"late_wall_case37_tile={result37.Action.TileType} case84_tile={result84.Action.TileType} case215_tile={result215.Action.TileType} case215_top={case215Top}");
-    return result37.Action.TileType != 0
+    Console.WriteLine($"late_wall_case37_tile={result37.Action.TileType} case37_ready={case37KeepsReadyWithAcceptableRisk} case84_tile={result84.Action.TileType} case215_tile={result215.Action.TileType} case215_top={case215Top}");
+    return (result37.Action.TileType != 0 || case37KeepsReadyWithAcceptableRisk)
         && result84.Action.TileType != 2
         && result215.Action.TileType != 8;
 }

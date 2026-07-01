@@ -7,6 +7,8 @@ signal opening_roll_started(data: Dictionary)
 
 @onready var game_state: Node = get_node("/root/GameState")
 
+var latest_snapshot: Dictionary = {}
+
 
 func _ready() -> void:
 	if game_state != null and game_state.has_signal("state_changed"):
@@ -19,7 +21,16 @@ func _ready() -> void:
 func get_snapshot() -> Dictionary:
 	if game_state == null:
 		return {}
+	if not latest_snapshot.is_empty():
+		return latest_snapshot.duplicate(true)
 	return game_state.call("get_debug_snapshot")
+
+
+func get_fresh_snapshot() -> Dictionary:
+	if game_state == null:
+		return {}
+	latest_snapshot = game_state.call("get_debug_snapshot")
+	return latest_snapshot.duplicate(true)
 
 
 func set_human_trainer_hint_enabled(enabled: bool) -> void:
@@ -167,7 +178,8 @@ func pump_ai_background_requests() -> int:
 
 
 func _on_state_changed(snapshot: Dictionary) -> void:
-	snapshot_changed.emit(snapshot)
+	latest_snapshot = snapshot.duplicate(true)
+	snapshot_changed.emit(latest_snapshot.duplicate(true))
 
 
 func _on_opening_roll_started(data: Dictionary) -> void:
@@ -175,4 +187,7 @@ func _on_opening_roll_started(data: Dictionary) -> void:
 
 
 func _emit_snapshot() -> void:
-	snapshot_changed.emit(get_snapshot())
+	if game_state == null:
+		return
+	latest_snapshot = game_state.call("get_debug_snapshot")
+	snapshot_changed.emit(latest_snapshot.duplicate(true))

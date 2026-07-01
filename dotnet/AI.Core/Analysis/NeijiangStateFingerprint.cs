@@ -14,6 +14,12 @@ public static class NeijiangStateFingerprint
             .Append("|wall=").Append(state.WallCount)
             .Append("|turn=").Append(state.TurnIndex)
             .Append("|phase=").Append(state.Phase)
+            .Append("|round=").Append(state.RoundIndex)
+            .Append("|totalRounds=").Append(state.TotalRounds)
+            .Append("|remainingRounds=").Append(state.RemainingRounds)
+            .Append("|visibleVersion=").Append(state.VisibleVersion)
+            .Append("|handVersion=").Append(state.HandVersion)
+            .Append("|strategyContextVersion=").Append(state.StrategyContextVersion)
             .Append("|selfBaoJiao=").Append(state.IsBaoJiao ? 1 : 0)
             .Append("|lastDraw=").Append(state.LastDrawTileType)
             .Append("|baoGang=").Append(string.Join(',', state.BaoGangTileTypes.OrderBy(tile => tile)))
@@ -23,6 +29,7 @@ public static class NeijiangStateFingerprint
         AppendVector(builder, "hand", state.Hand18);
         AppendVector(builder, "visible", state.Visible18);
         AppendVector(builder, "remain", state.Remaining18);
+        AppendVector(builder, "scores", state.Scores);
 
         for (var seat = 0; seat < 4; seat++)
         {

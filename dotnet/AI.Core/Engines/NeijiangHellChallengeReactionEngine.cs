@@ -128,8 +128,12 @@ public sealed class NeijiangHellChallengeReactionEngine
                     RemoveCopies(state.Hand18, reactionTileType, 2),
                     reactionTileType,
                     exactWall18);
+                if (scores.TryGetValue("gang", out var directGangScore) && peng.Action.Score <= directGangScore + 180)
+                    peng = ApplyWeakPengOverGangPenalty(peng, directGangScore);
                 if (peng.ActionScores.TryGetValue("peng_rediscard_same_tile_penalty", out var sameTilePenalty))
                     scores["peng_rediscard_same_tile_penalty"] = sameTilePenalty;
+                if (peng.ActionScores.TryGetValue("peng_weak_over_gang_penalty", out var weakOverGangPenalty))
+                    scores["peng_weak_over_gang_penalty"] = weakOverGangPenalty;
             }
             if (peng.ActionScores.TryGetValue("middle_peng_shape_penalty", out var middlePengPenalty))
                 scores["middle_peng_shape_penalty"] = middlePengPenalty;
@@ -262,6 +266,24 @@ public sealed class NeijiangHellChallengeReactionEngine
         {
             ["peng"] = peng.Action.Score - penalty,
             ["peng_rediscard_same_tile_penalty"] = -penalty
+        };
+        peng.Action = new NeijiangAction(peng.Action.ActionType, peng.Action.TileType, peng.Action.Score - penalty, peng.Action.Reason);
+        peng.Reasons = reasons;
+        peng.ActionScores = new ReadOnlyDictionary<string, int>(scores);
+        return peng;
+    }
+
+    private static NeijiangReactionDecisionResult ApplyWeakPengOverGangPenalty(
+        NeijiangReactionDecisionResult peng,
+        int directGangScore)
+    {
+        var margin = peng.Action.Score - directGangScore;
+        var penalty = 600 + Math.Max(0, 180 - margin);
+        var reasons = peng.Reasons.Concat(new[] { "后端决策：同张可杠时，碰牌收益不足以压过明杠" }).Distinct().ToArray();
+        var scores = new Dictionary<string, int>(peng.ActionScores)
+        {
+            ["peng"] = peng.Action.Score - penalty,
+            ["peng_weak_over_gang_penalty"] = -penalty
         };
         peng.Action = new NeijiangAction(peng.Action.ActionType, peng.Action.TileType, peng.Action.Score - penalty, peng.Action.Reason);
         peng.Reasons = reasons;

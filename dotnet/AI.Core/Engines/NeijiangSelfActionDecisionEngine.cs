@@ -63,6 +63,7 @@ public sealed class NeijiangSelfActionDecisionEngine
             ShantenAfter = current.Shanten,
             LiveUkeireAfter = current.LiveUkeire,
             Reasons = new[] { $"当前最快向听 {current.Shanten}", $"当前活张 {current.LiveUkeire}", "杠牌需由 C# 判断是否不拖慢成叫" }
+                .Concat(BuildRouteProtectionPassReasons(state, currentPlan))
                 .Concat(currentPlan.Reasons)
                 .ToArray(),
             ActionScores = scores
@@ -279,10 +280,27 @@ public sealed class NeijiangSelfActionDecisionEngine
     private static int ResolveRoundStage(NeijiangStateView state)
     {
         var maxDiscards = state.Discards18.Max(list => list.Count);
-        if (state.WallCount >= 14 && maxDiscards <= 5) return 0;
-        if (state.WallCount >= 8 && maxDiscards <= 11) return 1;
-        return 2;
+        var hasLikelyReady = state.IsCalled.Any(value => value) || state.IsReady.Any(value => value);
+        var exposedMeldCount = state.Melds18.Sum(list => list.Count / 3);
+        if (state.WallCount <= 6) return 2;
+        if (hasLikelyReady && state.WallCount <= 8) return 2;
+        if (maxDiscards >= 10 || state.WallCount <= 13 || exposedMeldCount >= 5) return 1;
+        if (hasLikelyReady && state.WallCount <= 10) return 1;
+        return 0;
     }
+
+    private static IReadOnlyList<string> BuildRouteProtectionPassReasons(
+        NeijiangStateView state,
+        NeijiangRoutePlanResult currentPlan)
+    {
+        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        if (currentPlan.ForbidsGangs || meldCount > 0 || CountPairs(state.Hand18) < 5)
+            return Array.Empty<string>();
+        return new[] { "七对路线：五对以上门清牌优先过牌，保留七对/龙七对" };
+    }
+
+    private static int CountPairs(int[] hand18)
+        => hand18.Count(count => count >= 2);
 
     private static int[] RemoveCopies(int[] hand18, int tileType, int removeCount)
     {

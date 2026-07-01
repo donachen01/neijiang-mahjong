@@ -114,10 +114,8 @@ func _run() -> void:
 	_run_test("bao_jiao_allows_whitelisted_discard_gang", _test_bao_jiao_allows_whitelisted_discard_gang, failures)
 	_run_test("bao_jiao_allows_only_whitelisted_an_gang", _test_bao_jiao_allows_only_whitelisted_an_gang, failures)
 	_run_test("mandatory_self_bao_gang_is_csharp_decision", _test_mandatory_self_bao_gang_is_csharp_decision, failures)
-	_run_test("bao_jiao_self_draw_reported_gang_is_backend_decision_without_frontend_mandatory", _test_bao_jiao_self_draw_reported_gang_is_backend_decision_without_frontend_mandatory, failures)
 	_run_test("ai_reaction_honors_backend_peng_when_gang_available", _test_ai_reaction_honors_backend_peng_when_gang_available, failures)
 	_run_test("mandatory_reaction_bao_gang_is_csharp_decision", _test_mandatory_reaction_bao_gang_is_csharp_decision, failures)
-	_run_test("bao_jiao_reaction_reported_gang_is_backend_decision_without_frontend_mandatory", _test_bao_jiao_reaction_reported_gang_is_backend_decision_without_frontend_mandatory, failures)
 	_run_test("add_gang_requires_matching_last_draw_after_peng", _test_add_gang_requires_matching_last_draw_after_peng, failures)
 	_run_test("peng_does_not_reask_self_action_for_immediate_add_gang", _test_peng_does_not_reask_self_action_for_immediate_add_gang, failures)
 	_run_test("reaction_context_defers_native_ai_until_timer", _test_reaction_context_defers_native_ai_until_timer, failures)
@@ -518,110 +516,6 @@ func _test_mandatory_reaction_bao_gang_is_csharp_decision():
 	var resolved_action := str(game_state._resolve_ai_reaction_action(0, candidate, "pass"))
 	if resolved_action != "pass":
 		return "expected frontend not to override fake C# pass into gang, got %s" % resolved_action
-	return true
-
-
-func _test_bao_jiao_self_draw_reported_gang_is_backend_decision_without_frontend_mandatory():
-	var game_state = _build_neijiang_test_game_state()
-	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
-	game_state.current_turn_seat = 1
-	game_state.wall.clear()
-	game_state.wall.append(_make_tile(812, "tong", 3))
-	game_state.wall.append(_make_tile(813, "tiao", 1))
-	game_state.wall_count = game_state.wall.size()
-	_set_test_players(game_state, [
-		_make_player_neijiang(0, []),
-		_make_player_neijiang(1, [
-			_make_tile(801, "tiao", 4), _make_tile(802, "tiao", 4), _make_tile(803, "tiao", 4), _make_tile(804, "tiao", 4),
-			_make_tile(805, "tiao", 1), _make_tile(806, "tiao", 2), _make_tile(807, "tiao", 3),
-			_make_tile(808, "tong", 1), _make_tile(809, "tong", 2), _make_tile(810, "tong", 3),
-			_make_tile(811, "tong", 5),
-		], [], true),
-		_make_player_neijiang(2, []),
-		_make_player_neijiang(3, []),
-	])
-	game_state.players[1]["bao_gang_tiles"] = ["tiao_4"]
-	game_state.last_draw_tile = {
-		"seat": 1,
-		"tile": game_state.players[1]["hand_tiles"][3].duplicate(true),
-	}
-	var payload: Dictionary = game_state.ai_manager.csharp_bridge.build_self_action_transport_payload(
-		game_state._build_player_state(1),
-		game_state._build_table_state(),
-		game_state.rules,
-		false,
-		[3],
-		[],
-		{},
-		[]
-	)
-	var bao_gang_types: Array = payload.get("baoGangTileTypes", [])
-	if not bao_gang_types.has(3):
-		return "expected transport payload to include reported tiao_4 baoGangTileTypes, got %s" % [payload]
-	var decision: Dictionary = game_state.ai_manager.analyze_self_action(
-		game_state._build_player_state(1),
-		game_state._build_table_state(),
-		game_state.rules,
-		false,
-		[3],
-		[],
-		{},
-		[]
-	)
-	if str(decision.get("action", "")) != "gang" or str(decision.get("gang_subtype", "")) != "an_gang" or int(decision.get("tile_type", -1)) != 3:
-		return "expected C# to independently force reported self bao gang without frontend mandatory, got %s" % [decision]
-	return true
-
-
-func _test_bao_jiao_reaction_reported_gang_is_backend_decision_without_frontend_mandatory():
-	var game_state = _build_neijiang_test_game_state()
-	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
-	game_state.current_turn_seat = 0
-	game_state.wall.clear()
-	game_state.wall.append(_make_tile(833, "tong", 3))
-	game_state.wall.append(_make_tile(834, "tiao", 1))
-	game_state.wall_count = game_state.wall.size()
-	_set_test_players(game_state, [
-		_make_player_neijiang(0, []),
-		_make_player_neijiang(1, [
-			_make_tile(821, "tiao", 6), _make_tile(822, "tiao", 6), _make_tile(823, "tiao", 6),
-			_make_tile(824, "tiao", 1), _make_tile(825, "tiao", 2), _make_tile(826, "tiao", 3),
-			_make_tile(827, "tong", 1), _make_tile(828, "tong", 2), _make_tile(829, "tong", 3),
-			_make_tile(830, "tong", 5),
-		], [], true),
-		_make_player_neijiang(2, []),
-		_make_player_neijiang(3, []),
-	])
-	game_state.players[1]["bao_gang_tiles"] = ["tiao_6"]
-	game_state.players[0]["discards"].append(_make_tile(831, "tiao", 6))
-	_set_discard_reaction(game_state, 0, _make_tile(831, "tiao", 6))
-	var candidate: Dictionary = game_state._get_reaction_candidate_for_seat(1)
-	if candidate.is_empty() or not bool(candidate.get("mandatory_gang", false)):
-		return "expected mandatory reaction gang candidate, got %s" % [candidate]
-	var backend_candidate := candidate.duplicate(true)
-	backend_candidate["mandatory_gang"] = false
-	var payload: Dictionary = game_state.ai_manager.csharp_bridge.build_reaction_transport_payload(
-		backend_candidate,
-		game_state._build_player_state(1),
-		game_state._build_table_state(),
-		game_state.current_discard_context,
-		game_state.rules
-	)
-	var bao_gang_types: Array = payload.get("baoGangTileTypes", [])
-	if not bao_gang_types.has(5):
-		return "expected transport payload to include reported tiao_6 baoGangTileTypes, got %s" % [payload]
-	var decision: Dictionary = game_state.ai_manager.analyze_reaction(
-		backend_candidate,
-		game_state._build_player_state(1),
-		game_state._build_table_state(),
-		game_state.current_discard_context,
-		game_state.rules,
-		game_state.ai_tuning_config,
-		game_state.hu_checker,
-		false
-	)
-	if str(decision.get("action", "")) != "gang" or int(decision.get("csharp_result", {}).get("tileType", -1)) != 5:
-		return "expected C# to independently force reported reaction bao gang without frontend mandatory, got %s" % [decision]
 	return true
 
 

@@ -20,6 +20,10 @@ public sealed class NeijiangHellOracleResult
     public IReadOnlyList<int> OracleDealInTargetSeats { get; init; } = Array.Empty<int>();
     public bool ExactKeepsReady { get; init; }
     public int ExactWallRemaining { get; init; }
+    public int SelectedShanten { get; init; }
+    public int SelectedLiveUkeire { get; init; }
+    public int SelectedWaitCount { get; init; }
+    public string SelectedTier { get; init; } = "";
     public int FairTileType { get; init; } = -1;
     public int ActualTileType { get; init; } = -1;
     public string TeamRole { get; init; } = "";
@@ -46,6 +50,9 @@ public sealed class NeijiangHellChallengeCandidate
     public int PengOnlyInteractionBonus { get; init; }
     public bool KeepsReady { get; init; }
     public int ExactWallRemaining { get; init; }
+    public string Tier { get; init; } = "";
+    public int TierRank { get; init; }
+    public int TierAdjustment { get; init; }
     public IReadOnlyList<int> DealInTargetSeats { get; init; } = Array.Empty<int>();
     public IReadOnlyList<string> Reasons { get; init; } = Array.Empty<string>();
 }

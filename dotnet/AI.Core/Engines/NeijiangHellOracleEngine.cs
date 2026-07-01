@@ -74,6 +74,10 @@ public sealed class NeijiangHellOracleEngine
             OracleDealInTargetSeats = challenge.OracleDealInTargetSeats,
             ExactKeepsReady = bestKeepsReady,
             ExactWallRemaining = bestWallRemaining,
+            SelectedShanten = challenge.SelectedShanten,
+            SelectedLiveUkeire = challenge.SelectedLiveUkeire,
+            SelectedWaitCount = challenge.SelectedWaitCount,
+            SelectedTier = challenge.SelectedTier,
             FairTileType = fairTileType,
             ActualTileType = actualTileType,
             Reasons = challenge.Reasons

@@ -8,6 +8,13 @@ public sealed class NeijiangStateView
     public int WallCount { get; init; }
     public int TurnIndex { get; init; }
     public int Phase { get; init; }
+    public int RoundIndex { get; set; }
+    public int TotalRounds { get; set; }
+    public int RemainingRounds { get; set; }
+    public int VisibleVersion { get; set; }
+    public int HandVersion { get; set; }
+    public int StrategyContextVersion { get; set; }
+    public int[] Scores { get; set; } = new int[4];
 
     public int[] Hand18 { get; init; } = new int[18];
     public int[] Visible18 { get; init; } = new int[18];

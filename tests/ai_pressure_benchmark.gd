@@ -4,6 +4,7 @@ const GAME_STATE_SCRIPT := preload("res://autoload/GameState.gd")
 
 const DEFAULT_TOTAL_ROUNDS := 40
 const DEFAULT_MAX_STEPS_PER_ROUND := 5000
+const SHORT_ROUND_STEP_THRESHOLD := 80
 
 
 func _init() -> void:
@@ -82,33 +83,42 @@ func _run_ab_benchmark(game_state: Node, preset_a: String, preset_b: String, tot
 
 func _play_single_round(game_state: Node, round_no: int, max_steps_per_round: int) -> Dictionary:
 	var step := 0
+	var phase_counts := {}
 	while step < max_steps_per_round:
 		_prepare_all_ai_table(game_state)
+		if game_state.has_method("pump_ai_background_requests"):
+			game_state.call("pump_ai_background_requests")
 		var phase := int(game_state.get("current_phase"))
-		match phase:
-			2:
-				if bool(game_state.get("opening_roll_pending_completion")):
-					game_state.call("complete_opening_roll")
-			3:
-				game_state.call("_auto_select_ai_ding_que")
-				game_state.call("_complete_ding_que_if_ready")
-			5:
-				if bool(game_state.call("is_ai_turn_ready")):
-					game_state.call("run_ai_turn")
-			6:
-				if bool(game_state.call("is_ai_reaction_pending")):
-					game_state.call("run_ai_reaction")
-				else:
-					game_state.call("_finalize_reaction_without_claim")
-			7:
-				return _extract_round_result(game_state, round_no, step)
-			_:
-				pass
+		phase_counts[phase] = int(phase_counts.get(phase, 0)) + 1
+		if phase == int(GAME_STATE_SCRIPT.RoundPhase.TABLE_SETUP):
+			if bool(game_state.get("opening_roll_pending_completion")):
+				game_state.call("complete_opening_roll")
+		elif phase == int(GAME_STATE_SCRIPT.RoundPhase.DING_QUE):
+			game_state.call("_auto_select_ai_ding_que")
+			game_state.call("_complete_ding_que_if_ready")
+		elif phase == int(GAME_STATE_SCRIPT.RoundPhase.DRAW):
+			game_state.call("_begin_turn")
+		elif phase == int(GAME_STATE_SCRIPT.RoundPhase.DISCARD):
+			if bool(game_state.call("is_ai_turn_ready")):
+				game_state.call("run_ai_turn")
+		elif phase == int(GAME_STATE_SCRIPT.RoundPhase.REACTION):
+			if bool(game_state.call("is_ai_reaction_pending")):
+				game_state.call("run_ai_reaction")
+			else:
+				game_state.call("_finalize_reaction_without_claim")
+		elif phase == int(GAME_STATE_SCRIPT.RoundPhase.SETTLEMENT):
+			var result := _extract_round_result(game_state, round_no, step)
+			result["phase_counts"] = phase_counts.duplicate(true)
+			result["final_debug_snapshot"] = _extract_benchmark_debug_snapshot(game_state)
+			return result
 		step += 1
 		await process_frame
 
 	push_error("Round %d exceeded max steps %d" % [round_no, max_steps_per_round])
-	return _extract_round_result(game_state, round_no, step, true)
+	var forced_result := _extract_round_result(game_state, round_no, step, true)
+	forced_result["phase_counts"] = phase_counts.duplicate(true)
+	forced_result["final_debug_snapshot"] = _extract_benchmark_debug_snapshot(game_state)
+	return forced_result
 
 
 func _prepare_all_ai_table(game_state: Node) -> void:
@@ -145,6 +155,22 @@ func _extract_round_result(game_state: Node, round_no: int, steps: int, forced_s
 	}
 
 
+func _extract_benchmark_debug_snapshot(game_state: Node) -> Dictionary:
+	return {
+		"current_phase": int(game_state.get("current_phase")),
+		"current_turn_seat": int(game_state.get("current_turn_seat")),
+		"current_dealer_seat": int(game_state.get("current_dealer_seat")),
+		"wall_count": int(game_state.get("wall_count")),
+		"discard_count": game_state.get("discard_pile").size(),
+		"opening_roll_pending_completion": bool(game_state.get("opening_roll_pending_completion")),
+		"opening_bao_jiao_pending": bool(game_state.get("opening_bao_jiao_pending")),
+		"opening_bao_jiao_current_seat": int(game_state.get("opening_bao_jiao_current_seat")),
+		"is_ai_turn_ready": bool(game_state.call("is_ai_turn_ready")),
+		"is_ai_reaction_pending": bool(game_state.call("is_ai_reaction_pending")),
+		"debug_last_message": str(game_state.get("debug_last_message")),
+	}
+
+
 func _create_stats() -> Dictionary:
 	var seats := {}
 	for seat in range(4):
@@ -172,7 +198,16 @@ func _create_stats() -> Dictionary:
 		"total_rounds": 0,
 		"forced_stop_rounds": 0,
 		"draw_rounds": 0,
+		"draw_wall_empty_rounds": 0,
 		"battle_end_rounds": 0,
+		"short_rounds": 0,
+		"short_draw_rounds": 0,
+		"short_battle_end_rounds": 0,
+		"draw_nonzero_score_rounds": 0,
+		"draw_zero_score_rounds": 0,
+		"terminal_type_counts": {},
+		"terminal_metrics_raw": {},
+		"terminal_metrics": {},
 		"total_steps": 0,
 		"seat_stats": seats,
 		"ai_metrics_total": {},
@@ -187,17 +222,37 @@ func _accumulate_round_stats(stats: Dictionary, result: Dictionary) -> void:
 	if bool(result.get("forced_stop", false)):
 		stats["forced_stop_rounds"] = int(stats.get("forced_stop_rounds", 0)) + 1
 	var end_reason := str(result.get("end_reason", ""))
+	var steps := int(result.get("steps", 0))
+	var is_short_round := steps <= SHORT_ROUND_STEP_THRESHOLD
+	var score_changes: Dictionary = result.get("score_changes", {})
+	var has_nonzero_score_change := _has_nonzero_score_change(score_changes)
+	var terminal_type_counts: Dictionary = stats.get("terminal_type_counts", {})
+	terminal_type_counts[end_reason] = int(terminal_type_counts.get(end_reason, 0)) + 1
+	stats["terminal_type_counts"] = terminal_type_counts
+	if is_short_round:
+		stats["short_rounds"] = int(stats.get("short_rounds", 0)) + 1
 	if end_reason.begins_with("draw"):
 		stats["draw_rounds"] = int(stats.get("draw_rounds", 0)) + 1
-	else:
+		if end_reason == "draw_wall_empty":
+			stats["draw_wall_empty_rounds"] = int(stats.get("draw_wall_empty_rounds", 0)) + 1
+		if is_short_round:
+			stats["short_draw_rounds"] = int(stats.get("short_draw_rounds", 0)) + 1
+		if has_nonzero_score_change:
+			stats["draw_nonzero_score_rounds"] = int(stats.get("draw_nonzero_score_rounds", 0)) + 1
+		else:
+			stats["draw_zero_score_rounds"] = int(stats.get("draw_zero_score_rounds", 0)) + 1
+	elif end_reason == "battle_end":
 		stats["battle_end_rounds"] = int(stats.get("battle_end_rounds", 0)) + 1
+		if is_short_round:
+			stats["short_battle_end_rounds"] = int(stats.get("short_battle_end_rounds", 0)) + 1
+	_accumulate_terminal_bucket(stats, "combined", result)
+	_accumulate_terminal_bucket(stats, end_reason, result)
 
 	var seat_stats: Dictionary = stats.get("seat_stats", {})
-	var score_changes: Dictionary = result.get("score_changes", {})
 	for seat_key in seat_stats.keys():
 		var seat := int(seat_key)
 		var item: Dictionary = seat_stats[seat]
-		var delta := int(score_changes.get(seat, 0))
+		var delta := _score_delta_for_seat(score_changes, seat)
 		item["total_delta"] = int(item.get("total_delta", 0)) + delta
 		if delta > 0:
 			item["positive_rounds"] = int(item.get("positive_rounds", 0)) + 1
@@ -232,7 +287,7 @@ func _accumulate_round_stats(stats: Dictionary, result: Dictionary) -> void:
 			match win_type:
 				"discard_win", "gang_discard_win", "qiang_gang_hu":
 					source_item["deal_in_count"] = int(source_item.get("deal_in_count", 0)) + 1
-					source_item["deal_in_loss_total"] = int(source_item.get("deal_in_loss_total", 0)) + int(score_changes.get(source_seat, 0))
+					source_item["deal_in_loss_total"] = int(source_item.get("deal_in_loss_total", 0)) + _score_delta_for_seat(score_changes, source_seat)
 				"self_draw", "gang_self_draw":
 					source_item["self_draw_loss_rounds"] = int(source_item.get("self_draw_loss_rounds", 0)) + 1 if source_seat != winner else int(source_item.get("self_draw_loss_rounds", 0))
 			seat_stats[source_seat] = source_item
@@ -258,17 +313,157 @@ func _accumulate_round_stats(stats: Dictionary, result: Dictionary) -> void:
 	stats["round_summaries"].append(
 		{
 			"round_no": int(result.get("round_no", 0)),
-			"steps": int(result.get("steps", 0)),
+			"steps": steps,
 			"end_reason": end_reason,
+			"is_short_round": is_short_round,
+			"score_change_nonzero": has_nonzero_score_change,
 			"winner_seats": result.get("winner_seats", []).duplicate(),
 			"score_changes": score_changes.duplicate(true),
 			"ai_decision_metrics": result.get("ai_decision_metrics", {}).duplicate(true),
+			"phase_counts": result.get("phase_counts", {}).duplicate(true),
+			"final_debug_snapshot": result.get("final_debug_snapshot", {}).duplicate(true),
 		}
 	)
 
 
+func _create_terminal_bucket() -> Dictionary:
+	var seat_deltas := {}
+	for seat in range(4):
+		seat_deltas[seat] = 0
+	return {
+		"rounds": 0,
+		"forced_stop_rounds": 0,
+		"short_rounds": 0,
+		"total_steps": 0,
+		"score_nonzero_rounds": 0,
+		"score_zero_rounds": 0,
+		"win_events": 0,
+		"self_draw_wins": 0,
+		"discard_wins": 0,
+		"qiang_gang_hu_wins": 0,
+		"deal_in_count": 0,
+		"deal_in_loss_abs_total": 0,
+		"seat_deltas": seat_deltas,
+	}
+
+
+func _has_nonzero_score_change(score_changes: Dictionary) -> bool:
+	for value in score_changes.values():
+		if int(value) != 0:
+			return true
+	return false
+
+
+func _score_delta_for_seat(score_changes: Dictionary, seat: int) -> int:
+	if score_changes.has(seat):
+		return int(score_changes.get(seat, 0))
+	return int(score_changes.get(str(seat), 0))
+
+
+func _accumulate_terminal_bucket(stats: Dictionary, bucket_key: String, result: Dictionary) -> void:
+	var key := bucket_key if bucket_key != "" else "unknown"
+	var buckets: Dictionary = stats.get("terminal_metrics_raw", {})
+	if not buckets.has(key):
+		buckets[key] = _create_terminal_bucket()
+	var bucket: Dictionary = buckets[key]
+	var steps := int(result.get("steps", 0))
+	var score_changes: Dictionary = result.get("score_changes", {})
+	bucket["rounds"] = int(bucket.get("rounds", 0)) + 1
+	bucket["total_steps"] = int(bucket.get("total_steps", 0)) + steps
+	if bool(result.get("forced_stop", false)):
+		bucket["forced_stop_rounds"] = int(bucket.get("forced_stop_rounds", 0)) + 1
+	if steps <= SHORT_ROUND_STEP_THRESHOLD:
+		bucket["short_rounds"] = int(bucket.get("short_rounds", 0)) + 1
+	if _has_nonzero_score_change(score_changes):
+		bucket["score_nonzero_rounds"] = int(bucket.get("score_nonzero_rounds", 0)) + 1
+	else:
+		bucket["score_zero_rounds"] = int(bucket.get("score_zero_rounds", 0)) + 1
+
+	var seat_deltas: Dictionary = bucket.get("seat_deltas", {})
+	for seat in range(4):
+		seat_deltas[seat] = int(seat_deltas.get(seat, 0)) + _score_delta_for_seat(score_changes, seat)
+	bucket["seat_deltas"] = seat_deltas
+
+	for event in result.get("win_events", []):
+		bucket["win_events"] = int(bucket.get("win_events", 0)) + 1
+		var win_type := str(event.get("win_type", ""))
+		match win_type:
+			"self_draw", "gang_self_draw":
+				bucket["self_draw_wins"] = int(bucket.get("self_draw_wins", 0)) + 1
+			"qiang_gang_hu":
+				bucket["qiang_gang_hu_wins"] = int(bucket.get("qiang_gang_hu_wins", 0)) + 1
+			_:
+				bucket["discard_wins"] = int(bucket.get("discard_wins", 0)) + 1
+		var source_seat := int(event.get("source_seat", -1))
+		if source_seat >= 0:
+			match win_type:
+				"discard_win", "gang_discard_win", "qiang_gang_hu":
+					bucket["deal_in_count"] = int(bucket.get("deal_in_count", 0)) + 1
+					bucket["deal_in_loss_abs_total"] = int(bucket.get("deal_in_loss_abs_total", 0)) + absi(_score_delta_for_seat(score_changes, source_seat))
+
+	buckets[key] = bucket
+	stats["terminal_metrics_raw"] = buckets
+
+
+func _finalize_terminal_metrics(stats: Dictionary) -> void:
+	var raw_buckets: Dictionary = stats.get("terminal_metrics_raw", {})
+	var terminal_metrics := {}
+	for key in raw_buckets.keys():
+		terminal_metrics[key] = _finalize_single_terminal_metric(raw_buckets[key])
+	stats["terminal_metrics"] = terminal_metrics
+
+	var battle_metric: Dictionary = terminal_metrics.get("battle_end", {})
+	var draw_metric: Dictionary = terminal_metrics.get("draw_wall_empty", {})
+	var effective_battle_metric := battle_metric.duplicate(true)
+	effective_battle_metric["definition"] = "Only battle_end rounds are treated as the primary old-hand discard-strength sample; draw_wall_empty is reported separately as draw/cha-jiao pressure."
+	effective_battle_metric["target_avg_delta_per_battle_round"] = float(effective_battle_metric.get("target_avg_delta_per_round", 0.0))
+	stats["effective_battle_metrics"] = effective_battle_metric
+
+	var draw_settlement_metric := draw_metric.duplicate(true)
+	draw_settlement_metric["definition"] = "draw_wall_empty rounds are normal wall-empty draw settlements; score_nonzero_rounds tracks whether cha-jiao/tui-gang settlement changed scores."
+	draw_settlement_metric["target_avg_delta_per_draw_round"] = float(draw_settlement_metric.get("target_avg_delta_per_round", 0.0))
+	stats["draw_settlement_metrics"] = draw_settlement_metric
+	stats["evaluation_policy"] = {
+		"primary_discard_strength_metric": "effective_battle_metrics.target_avg_delta_per_battle_round",
+		"draw_pressure_metric": "draw_settlement_metrics.target_avg_delta_per_draw_round",
+		"combined_metric": "long_term_score_metrics.target_avg_delta_per_round",
+		"short_round_step_threshold": SHORT_ROUND_STEP_THRESHOLD,
+		"note": "combined_metric is retained for continuity; split terminal metrics should be used before judging long-term AI discard strength.",
+	}
+
+
+func _finalize_single_terminal_metric(bucket: Dictionary) -> Dictionary:
+	var rounds := int(bucket.get("rounds", 0))
+	var seat_deltas: Dictionary = bucket.get("seat_deltas", {})
+	return {
+		"rounds": rounds,
+		"forced_stop_rounds": int(bucket.get("forced_stop_rounds", 0)),
+		"short_rounds": int(bucket.get("short_rounds", 0)),
+		"short_round_rate": _safe_ratio(int(bucket.get("short_rounds", 0)), rounds),
+		"avg_steps_per_round": _safe_ratio(float(bucket.get("total_steps", 0)), rounds),
+		"score_nonzero_rounds": int(bucket.get("score_nonzero_rounds", 0)),
+		"score_zero_rounds": int(bucket.get("score_zero_rounds", 0)),
+		"score_nonzero_rate": _safe_ratio(int(bucket.get("score_nonzero_rounds", 0)), rounds),
+		"win_events": int(bucket.get("win_events", 0)),
+		"self_draw_wins": int(bucket.get("self_draw_wins", 0)),
+		"discard_wins": int(bucket.get("discard_wins", 0)),
+		"qiang_gang_hu_wins": int(bucket.get("qiang_gang_hu_wins", 0)),
+		"deal_in_count": int(bucket.get("deal_in_count", 0)),
+		"deal_in_rate": _safe_ratio(int(bucket.get("deal_in_count", 0)), rounds),
+		"deal_in_loss_abs_per_round": _safe_ratio(int(bucket.get("deal_in_loss_abs_total", 0)), rounds),
+		"target_seat": 0,
+		"target_total_delta": int(seat_deltas.get(0, 0)),
+		"target_avg_delta_per_round": _safe_ratio(int(seat_deltas.get(0, 0)), rounds),
+		"seat_deltas": seat_deltas.duplicate(true),
+	}
+
+
 func _finalize_stats(stats: Dictionary, game_state: Node) -> void:
 	var players: Array = game_state.get("players")
+	var win_rates: Array[float] = []
+	var deal_in_rates: Array[float] = []
+	var final_scores: Array[int] = []
+	var total_deal_in_loss_abs := 0
 	for player in players:
 		var seat := int(player.get("seat", -1))
 		var seat_stats: Dictionary = stats.get("seat_stats", {})
@@ -278,10 +473,36 @@ func _finalize_stats(stats: Dictionary, game_state: Node) -> void:
 			item["avg_delta_per_round"] = 0.0 if int(stats.get("total_rounds", 0)) <= 0 else float(item.get("total_delta", 0)) / float(stats.get("total_rounds", 0))
 			item["win_rate"] = 0.0 if int(stats.get("total_rounds", 0)) <= 0 else float(item.get("wins", 0)) / float(stats.get("total_rounds", 0))
 			item["deal_in_rate"] = 0.0 if int(stats.get("total_rounds", 0)) <= 0 else float(item.get("deal_in_count", 0)) / float(stats.get("total_rounds", 0))
+			win_rates.append(float(item.get("win_rate", 0.0)))
+			deal_in_rates.append(float(item.get("deal_in_rate", 0.0)))
+			final_scores.append(int(item.get("final_score", 0)))
+			total_deal_in_loss_abs += absi(int(item.get("deal_in_loss_total", 0)))
 			seat_stats[seat] = item
 			stats["seat_stats"] = seat_stats
 	stats["avg_steps_per_round"] = 0.0 if int(stats.get("total_rounds", 0)) <= 0 else float(stats.get("total_steps", 0)) / float(stats.get("total_rounds", 0))
-	stats["report_version"] = 1
+	var score_spread := 0
+	if not final_scores.is_empty():
+		var min_score := final_scores[0]
+		var max_score := final_scores[0]
+		for score in final_scores:
+			min_score = mini(min_score, score)
+			max_score = maxi(max_score, score)
+		score_spread = max_score - min_score
+	var seat_stats: Dictionary = stats.get("seat_stats", {})
+	var target_seat: Dictionary = seat_stats.get(0, {})
+	stats["long_term_score_metrics"] = {
+		"target_seat": 0,
+		"target_avg_delta_per_round": float(target_seat.get("avg_delta_per_round", 0.0)),
+		"target_win_rate": float(target_seat.get("win_rate", 0.0)),
+		"target_deal_in_rate": float(target_seat.get("deal_in_rate", 0.0)),
+		"target_final_score": int(target_seat.get("final_score", 0)),
+		"avg_win_rate_across_seats": _average_float(win_rates),
+		"avg_deal_in_rate_across_seats": _average_float(deal_in_rates),
+		"deal_in_loss_abs_per_round": 0.0 if int(stats.get("total_rounds", 0)) <= 0 else float(total_deal_in_loss_abs) / float(stats.get("total_rounds", 0)),
+		"final_score_spread": score_spread,
+	}
+	stats["report_version"] = 3
+	_finalize_terminal_metrics(stats)
 
 
 func _print_summary(stats: Dictionary) -> void:
@@ -297,8 +518,25 @@ func _print_summary(stats: Dictionary) -> void:
 	print("total_rounds=", stats.get("total_rounds", 0))
 	print("forced_stop_rounds=", stats.get("forced_stop_rounds", 0))
 	print("draw_rounds=", stats.get("draw_rounds", 0))
+	print("draw_wall_empty_rounds=", stats.get("draw_wall_empty_rounds", 0))
 	print("battle_end_rounds=", stats.get("battle_end_rounds", 0))
+	print("short_rounds=", stats.get("short_rounds", 0))
+	print("short_draw_rounds=", stats.get("short_draw_rounds", 0))
+	print("short_battle_end_rounds=", stats.get("short_battle_end_rounds", 0))
+	print("draw_nonzero_score_rounds=", stats.get("draw_nonzero_score_rounds", 0))
+	print("draw_zero_score_rounds=", stats.get("draw_zero_score_rounds", 0))
 	print("avg_steps_per_round=", "%.2f" % float(stats.get("avg_steps_per_round", 0.0)))
+	var long_term: Dictionary = stats.get("long_term_score_metrics", {})
+	print("target_avg_delta_per_round=", "%.3f" % float(long_term.get("target_avg_delta_per_round", 0.0)))
+	print("avg_deal_in_rate_across_seats=", "%.3f" % float(long_term.get("avg_deal_in_rate_across_seats", 0.0)))
+	print("deal_in_loss_abs_per_round=", "%.3f" % float(long_term.get("deal_in_loss_abs_per_round", 0.0)))
+	var effective_battle: Dictionary = stats.get("effective_battle_metrics", {})
+	print("effective_battle_rounds=", int(effective_battle.get("rounds", 0)))
+	print("effective_battle_target_avg_delta=", "%.3f" % float(effective_battle.get("target_avg_delta_per_battle_round", 0.0)))
+	print("effective_battle_deal_in_rate=", "%.3f" % float(effective_battle.get("deal_in_rate", 0.0)))
+	var draw_settlement: Dictionary = stats.get("draw_settlement_metrics", {})
+	print("draw_settlement_target_avg_delta=", "%.3f" % float(draw_settlement.get("target_avg_delta_per_draw_round", 0.0)))
+	print("draw_settlement_score_nonzero_rate=", "%.3f" % float(draw_settlement.get("score_nonzero_rate", 0.0)))
 	var seat_stats: Dictionary = stats.get("seat_stats", {})
 	for seat_key in seat_stats.keys():
 		var seat := int(seat_key)
@@ -411,10 +649,10 @@ func _write_ab_csv_report(stats: Dictionary, output_path: String) -> void:
 		return
 	var comparison: Dictionary = stats.get("comparison", {})
 	var lines: Array[String] = []
-	lines.append("metric,preset_a,preset_b")
+	lines.append("metric,preset_a,preset_b,delta_b_minus_a")
 	for key in comparison.keys():
 		var value: Dictionary = comparison.get(key, {})
-		lines.append("%s,%s,%s" % [str(key), str(value.get("a", "")), str(value.get("b", ""))])
+		lines.append("%s,%s,%s,%s" % [str(key), str(value.get("a", "")), str(value.get("b", "")), str(value.get("delta_b_minus_a", ""))])
 	file.store_string("\n".join(lines))
 	file.flush()
 	file.close()
@@ -429,7 +667,7 @@ func _accumulate_ai_metrics(stats: Dictionary, metrics: Dictionary) -> void:
 
 
 func _build_comparison(stats_a: Dictionary, stats_b: Dictionary) -> Dictionary:
-	return {
+	var comparison := {
 		"avg_steps_per_round": {
 			"a": stats_a.get("avg_steps_per_round", 0.0),
 			"b": stats_b.get("avg_steps_per_round", 0.0),
@@ -441,6 +679,18 @@ func _build_comparison(stats_a: Dictionary, stats_b: Dictionary) -> Dictionary:
 		"battle_end_rounds": {
 			"a": stats_a.get("battle_end_rounds", 0),
 			"b": stats_b.get("battle_end_rounds", 0),
+		},
+		"short_rounds": {
+			"a": stats_a.get("short_rounds", 0),
+			"b": stats_b.get("short_rounds", 0),
+		},
+		"draw_nonzero_score_rounds": {
+			"a": stats_a.get("draw_nonzero_score_rounds", 0),
+			"b": stats_b.get("draw_nonzero_score_rounds", 0),
+		},
+		"draw_zero_score_rounds": {
+			"a": stats_a.get("draw_zero_score_rounds", 0),
+			"b": stats_b.get("draw_zero_score_rounds", 0),
 		},
 		"reaction_hu": {
 			"a": int(stats_a.get("ai_metrics_total", {}).get("reaction_hu", 0)),
@@ -463,6 +713,75 @@ func _build_comparison(stats_a: Dictionary, stats_b: Dictionary) -> Dictionary:
 			"b": int(stats_b.get("ai_metrics_total", {}).get("discard_strategy_全守", 0)),
 		},
 	}
+	var score_a: Dictionary = stats_a.get("long_term_score_metrics", {})
+	var score_b: Dictionary = stats_b.get("long_term_score_metrics", {})
+	for key in [
+		"target_avg_delta_per_round",
+		"target_win_rate",
+		"target_deal_in_rate",
+		"target_final_score",
+		"avg_deal_in_rate_across_seats",
+		"deal_in_loss_abs_per_round",
+		"final_score_spread",
+	]:
+		comparison[key] = {
+			"a": score_a.get(key, 0.0),
+			"b": score_b.get(key, 0.0),
+			"delta_b_minus_a": float(score_b.get(key, 0.0)) - float(score_a.get(key, 0.0)),
+		}
+	for metric in [
+		"target_avg_delta_per_battle_round",
+		"deal_in_rate",
+		"deal_in_loss_abs_per_round",
+		"short_round_rate",
+	]:
+		var battle_a_value: float = float(_nested_metric(stats_a, ["effective_battle_metrics", metric], 0.0))
+		var battle_b_value: float = float(_nested_metric(stats_b, ["effective_battle_metrics", metric], 0.0))
+		comparison["battle_%s" % metric] = {
+			"a": battle_a_value,
+			"b": battle_b_value,
+			"delta_b_minus_a": battle_b_value - battle_a_value,
+		}
+	for metric in [
+		"target_avg_delta_per_draw_round",
+		"score_nonzero_rate",
+		"short_round_rate",
+	]:
+		var draw_a_value: float = float(_nested_metric(stats_a, ["draw_settlement_metrics", metric], 0.0))
+		var draw_b_value: float = float(_nested_metric(stats_b, ["draw_settlement_metrics", metric], 0.0))
+		comparison["draw_%s" % metric] = {
+			"a": draw_a_value,
+			"b": draw_b_value,
+			"delta_b_minus_a": draw_b_value - draw_a_value,
+		}
+	return comparison
+
+
+func _nested_metric(source: Dictionary, keys: Array, fallback) -> Variant:
+	var cursor: Variant = source
+	for key in keys:
+		if typeof(cursor) != TYPE_DICTIONARY:
+			return fallback
+		var dict: Dictionary = cursor
+		if not dict.has(key):
+			return fallback
+		cursor = dict[key]
+	return cursor
+
+
+func _safe_ratio(numerator: float, denominator: int) -> float:
+	if denominator <= 0:
+		return 0.0
+	return numerator / float(denominator)
+
+
+func _average_float(values: Array[float]) -> float:
+	if values.is_empty():
+		return 0.0
+	var total := 0.0
+	for value in values:
+		total += value
+	return total / float(values.size())
 
 
 func _read_int_arg(prefix: String, fallback: int) -> int:

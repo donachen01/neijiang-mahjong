@@ -24,6 +24,17 @@ func _run() -> void:
 	_run_test("main_controls_are_layered_by_purpose", _test_main_controls_are_layered_by_purpose.bind(root_node), failures)
 	_run_test("action_buttons_use_circular_mahjong_style", _test_action_buttons_use_circular_mahjong_style.bind(root_node), failures)
 	_run_test("bao_gang_dialog_stays_phone_readable", _test_bao_gang_dialog_stays_phone_readable.bind(root_node), failures)
+	_run_test("opening_roll_ui_timer_commits_before_bao_jiao", _test_opening_roll_ui_timer_commits_before_bao_jiao.bind(root_node), failures)
+	_run_test("opening_reported_ai_reaction_uses_real_manager_without_stall", _test_opening_reported_ai_reaction_uses_real_manager_without_stall.bind(root_node), failures)
+	_run_test("bao_gang_dialog_confirm_advances_opening_bao_jiao", _test_bao_gang_dialog_confirm_advances_opening_bao_jiao.bind(root_node), failures)
+	_run_test("opening_ai_bao_gang_before_human_pass_does_not_stick_ui", _test_opening_ai_bao_gang_before_human_pass_does_not_stick_ui.bind(root_node), failures)
+	_run_test("opening_ai_bao_gang_after_human_pass_publishes_ai_request", _test_opening_ai_bao_gang_after_human_pass_publishes_ai_request.bind(root_node), failures)
+	_run_test("opening_ai_bao_gang_before_human_confirm_does_not_stick_ui", _test_opening_ai_bao_gang_before_human_confirm_does_not_stick_ui.bind(root_node), failures)
+	_run_test("opening_ai_bao_gang_before_human_dealer_first_discard_does_not_stick_ui", _test_opening_ai_bao_gang_before_human_dealer_first_discard_does_not_stick_ui.bind(root_node), failures)
+	_run_test("opening_ai_bao_jiao_only_before_human_pass_does_not_stick_ui", _test_opening_ai_bao_jiao_only_before_human_pass_does_not_stick_ui.bind(root_node), failures)
+	_run_test("opening_ai_bao_jiao_only_before_human_confirm_does_not_stick_ui", _test_opening_ai_bao_jiao_only_before_human_confirm_does_not_stick_ui.bind(root_node), failures)
+	_run_test("opening_ai_bao_gang_then_human_next_turn_can_draw_and_discard", _test_opening_ai_bao_gang_then_human_next_turn_can_draw_and_discard.bind(root_node), failures)
+	_run_test("opening_ai_bao_jiao_only_then_human_next_turn_can_draw_and_discard", _test_opening_ai_bao_jiao_only_then_human_next_turn_can_draw_and_discard.bind(root_node), failures)
 	_run_test("bao_gang_tiles_are_framed_in_self_hand", _test_bao_gang_tiles_are_framed_in_self_hand.bind(root_node), failures)
 	_run_test("ai_bao_gang_tiles_are_framed_in_opponent_hand", _test_ai_bao_gang_tiles_are_framed_in_opponent_hand.bind(root_node), failures)
 
@@ -212,7 +223,7 @@ func _test_selected_tile_helper_uses_csharp_candidate_details(root_node: Node):
 	if not compare.visible:
 		return "expected selected tile C# comparison details to be visible"
 	var text := str(compare.text)
-	for expected in ["不建议打5筒", "向听更慢1", "活进张少5", "风险高19", "净分低1.80", "C#后验：下家疑似等筒", "推荐9条"]:
+	for expected in ["不建议先打5筒", "更建议打9条", "会晚1步", "会少5张", "更危险", "综合收益会少1.80", "下家疑似等筒"]:
 		if not text.contains(expected):
 			return "expected C# selected-option detail '%s' in helper text, got %s" % [expected, text]
 	return true
@@ -271,7 +282,7 @@ func _test_recommended_tile_helper_prioritizes_csharp_probability_details(root_n
 	if not compare.visible:
 		return "expected recommended C# probability details to be visible"
 	var text := str(compare.text)
-	for expected in ["净分1.25", "自摸31%", "点炮8%", "防守压分0.42", "牌效+16", "中盘压力上升", "座位2近期不要这张", "手形好搭 5"]:
+	for expected in ["大概能赚1.25", "自摸机会31%", "放炮机会8%", "收益会少0.42", "牌会更顺+16", "中盘压力上升", "座位2近期不要这张", "手形好搭 5"]:
 		if not text.contains(expected):
 			return "expected C# probability detail '%s' in helper text, got %s" % [expected, text]
 	if text == "这手先抢速度":
@@ -525,6 +536,15 @@ func _test_bao_gang_dialog_stays_phone_readable(root_node: Node):
 	var tile_row := content_box.get_node_or_null("BaoGangTileRow") as HBoxContainer
 	if tile_row == null:
 		return "expected bao gang options to be arranged as one horizontal tile row"
+	var footer := content_box.get_node_or_null("BaoGangDialogFooter") as HBoxContainer
+	if footer == null:
+		return "expected bao gang dialog to expose an explicit confirm/cancel footer"
+	var confirm_button := footer.get_node_or_null("BaoGangConfirmButton") as Button
+	var cancel_button := footer.get_node_or_null("BaoGangCancelButton") as Button
+	if confirm_button == null or confirm_button.text != "确认报叫":
+		return "expected bao gang dialog to expose a clear confirm button"
+	if cancel_button == null or cancel_button.text != "取消":
+		return "expected bao gang dialog to expose a cancel button"
 	if tile_row.get_theme_constant("separation") < 22:
 		return "expected generous spacing between bao gang tiles"
 	for check_item in checks:
@@ -564,6 +584,644 @@ func _test_bao_gang_dialog_stays_phone_readable(root_node: Node):
 		if check_style.border_color.r < 0.45 or check_style.border_color.g < 0.35:
 			return "expected bao gang option tile to use warm border"
 	dialog.hide()
+	return true
+
+
+func _test_opening_roll_ui_timer_commits_before_bao_jiao(root_node: Node):
+	var game_manager: GameManager = root_node.get("game_manager") as GameManager
+	if game_manager == null or game_manager.game_state == null:
+		return "missing game manager/state"
+	var game_state = game_manager.game_state
+	game_state.start_new_round(true)
+	var starting_snapshot: Dictionary = game_manager.get_fresh_snapshot()
+	root_node.call("_on_snapshot_changed", starting_snapshot)
+	if int(starting_snapshot.get("current_phase", -1)) != 2 or not bool(starting_snapshot.get("opening_roll_pending", false)):
+		return "expected opening roll to start in TABLE_SETUP, got %s" % [starting_snapshot]
+	for _index in range(24):
+		root_node.call("_on_opening_roll_timer_timeout")
+	root_node.call("_on_opening_roll_commit_timer_timeout")
+	var latest: Dictionary = game_manager.get_fresh_snapshot()
+	if int(latest.get("current_phase", -1)) == 2 or bool(latest.get("opening_roll_pending", false)):
+		return "expected UI opening roll timers to commit before bao-jiao/discard, got %s" % [latest]
+	if bool(latest.get("human_ding_que_pending", false)):
+		return "expected Neijiang opening flow to skip ding-que after roll, got %s" % [latest]
+	return true
+
+
+func _test_opening_reported_ai_reaction_uses_real_manager_without_stall(root_node: Node):
+	var game_manager: GameManager = root_node.get("game_manager") as GameManager
+	if game_manager == null or game_manager.game_state == null:
+		return "missing game manager/state"
+	root_node.call("_on_draw_transition_timer_timeout")
+	var game_state = game_manager.game_state
+	game_state.start_new_round(true)
+	if game_state.ai_manager != null:
+		game_state.ai_manager.active_async_requests.clear()
+		game_state.ai_manager.active_async_request_keys.clear()
+		game_state.ai_manager.set_native_async_enabled(false)
+	if game_state.ai_tuning_config != null:
+		game_state.ai_tuning_config.apply_preset("bone_ash")
+	game_state.ai_level = 2
+	game_state.current_dealer_seat = 2
+	game_state.current_turn_seat = 2
+	game_state.current_phase = 5
+	game_state.opening_roll_pending_completion = false
+	game_state.opening_roll_data.clear()
+	game_state.discard_pile.clear()
+	game_state.pending_reactions.clear()
+	game_state.current_discard_context.clear()
+	game_state.last_draw_tile.clear()
+	game_state.last_turn_context = {"seat": 2, "draw_reason": "opening_discard"}
+	game_state._clear_pending_ai_async_state()
+	game_state.opening_bao_jiao_pending = false
+	game_state.opening_bao_jiao_queue.clear()
+	game_state.opening_bao_jiao_current_seat = -1
+	game_state.wall.clear()
+	game_state.wall.append_array(_tiles_from_types([14, 15, 16, 17], 13100))
+	game_state.wall_count = game_state.wall.size()
+	game_state.players.clear()
+	game_state.players.append_array([
+		_make_player_for_opening(0, _opening_not_ready_hand(13200)),
+		_make_player_for_opening(1, _opening_ready_hand(13300)),
+		_make_player_for_opening(2, _tiles_from_types([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 13400)),
+		_make_player_for_opening(3, _opening_not_ready_hand(13500)),
+	])
+	game_state.players[0]["is_ai"] = false
+	for seat in [1, 2, 3]:
+		game_state.players[seat]["is_ai"] = true
+	game_state.players[1]["bao_jiao"] = true
+	game_state.players[1]["bao_jiao_ting_tiles"] = [_make_tile(13600, "tong", 9)]
+	game_state.players[1]["rule_marks"] = ["报叫"]
+	game_state.players[1]["opening_bao_jiao_reviewed"] = true
+	for seat in [0, 3]:
+		game_state.players[seat]["opening_bao_jiao_reviewed"] = true
+	var dealer_discard_id := int(game_state.players[2]["hand_tiles"][0].get("id", -1))
+	if not bool(game_state._discard_tile_internal(2, dealer_discard_id)):
+		return "expected dealer first discard to execute, debug=%s" % game_state.debug_last_message
+	var after_dealer: Dictionary = game_manager.get_fresh_snapshot()
+	root_node.call("_on_snapshot_changed", after_dealer)
+	if int(after_dealer.get("current_phase", -1)) != 6 or not bool(game_state.is_ai_reaction_pending()):
+		return "expected reported AI seat 1 reaction after dealer discard, got %s" % [after_dealer]
+	var reaction_summary := str(after_dealer.get("reaction_summary", ""))
+	if not reaction_summary.contains("座位1"):
+		return "expected reported AI seat 1 in reaction summary, got %s snapshot=%s" % [reaction_summary, after_dealer]
+	var ai_reaction_timer := root_node.get("ai_reaction_timer") as Timer
+	if ai_reaction_timer == null or ai_reaction_timer.is_stopped():
+		return "expected UI to schedule AI reaction timer after reported AI reaction, timer=%s snapshot=%s" % [
+			ai_reaction_timer,
+			after_dealer,
+		]
+	root_node.call("_on_ai_reaction_timer_timeout")
+	if game_state.pending_ai_reaction_decision.is_empty() and game_state.pending_ai_reaction_request_id <= 0:
+		return "expected first AI reaction timer tick to start or resolve real-manager request, snapshot=%s debug=%s ai_core=%s" % [
+			game_manager.get_fresh_snapshot(),
+			game_state.debug_last_message,
+			game_manager.get_fresh_snapshot().get("ai_core_debug", {}),
+		]
+	for _attempt in range(6):
+		game_state.pump_ai_background_requests()
+		if not game_state.pending_ai_reaction_decision.is_empty():
+			break
+		OS.delay_msec(10)
+	if game_state.pending_ai_reaction_decision.is_empty():
+		return "expected real-manager AI reaction decision to be delivered, pending_meta=%s snapshot=%s ai_core=%s" % [
+			game_state.pending_ai_reaction_request_meta,
+			after_dealer,
+			after_dealer.get("ai_core_debug", {}),
+		]
+	root_node.call("_on_ai_reaction_timer_timeout")
+	var latest: Dictionary = game_manager.get_fresh_snapshot()
+	if int(latest.get("current_phase", -1)) == 6 and bool(game_state.is_ai_reaction_pending()):
+		return "reported AI seat 1 stayed stuck after real-manager reaction, debug=%s pending_meta=%s pending_decision=%s snapshot=%s ai_core=%s" % [
+			game_state.debug_last_message,
+			game_state.pending_ai_reaction_request_meta,
+			game_state.pending_ai_reaction_decision,
+			latest,
+			latest.get("ai_core_debug", {}),
+		]
+	if int(latest.get("current_phase", -1)) != 7 and int(latest.get("current_turn_seat", -1)) == 2:
+		return "expected reported AI reaction to advance or settle, got snapshot=%s debug=%s" % [
+			latest,
+			game_state.debug_last_message,
+		]
+	return true
+
+
+func _test_bao_gang_dialog_confirm_advances_opening_bao_jiao(root_node: Node):
+	var game_manager: GameManager = root_node.get("game_manager") as GameManager
+	if game_manager == null or game_manager.game_state == null:
+		return "missing game manager/state"
+	var game_state = game_manager.game_state
+	game_state.previous_dealer_seat = 1
+	game_state.start_new_round(true)
+	game_state.wall.clear()
+	game_state.wall.append_array(_wall_for_opening_hands([
+		_opening_ready_bao_gang_hand(1200),
+		_tiles_from_types([0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 16, 17], 2200),
+		_tiles_from_types([0, 2, 4, 6, 8, 9, 11, 13, 15, 17, 1, 10, 16], 3200),
+		_tiles_from_types([1, 3, 5, 7, 9, 11, 13, 15, 17, 0, 8, 10, 12], 4200),
+	], 5200))
+	game_state.wall_count = game_state.wall.size()
+	if not bool(game_state.complete_opening_roll()):
+		return "expected opening roll to complete"
+	var snapshot: Dictionary = game_manager.get_fresh_snapshot()
+	root_node.call("_on_snapshot_changed", snapshot)
+	var plan: Dictionary = snapshot.get("human_bao_jiao_plan", {})
+	var options: Array = plan.get("bao_gang_options", [])
+	if not bool(snapshot.get("human_can_bao_jiao", false)) or options.is_empty():
+		return "expected opening human bao-jiao with bao-gang options, got plan=%s snapshot=%s" % [plan, snapshot]
+
+	root_node.call("_on_bao_jiao_pressed")
+	var panel := root_node.get("bao_gang_dialog_content") as Panel
+	if panel == null:
+		return "expected bao-gang dialog content after pressing bao-jiao"
+	var close_button := panel.get_node_or_null("BaoGangCloseButton") as Button
+	if close_button == null:
+		return "expected close button"
+	close_button.pressed.emit()
+	if bool(game_state.players[0].get("bao_jiao", false)):
+		return "expected close button to cancel selection without declaring"
+	if not bool(game_state.opening_bao_jiao_pending):
+		return "expected opening bao-jiao window to remain pending after cancel"
+
+	root_node.call("_on_bao_jiao_pressed")
+	panel = root_node.get("bao_gang_dialog_content") as Panel
+	if panel == null:
+		return "expected bao-gang dialog content after reopening"
+	var content_box := panel.get_node_or_null("BaoGangSurfaceMargin/BaoGangSurfaceContent") as VBoxContainer
+	if content_box == null:
+		return "expected bao-gang content box"
+	var footer := content_box.get_node_or_null("BaoGangDialogFooter") as HBoxContainer
+	if footer == null:
+		return "expected confirm/cancel footer"
+	var confirm_button := footer.get_node_or_null("BaoGangConfirmButton") as Button
+	if confirm_button == null:
+		return "expected confirm button"
+	confirm_button.pressed.emit()
+	if not bool(game_state.players[0].get("bao_jiao", false)):
+		return "expected confirm button to declare bao-jiao"
+	if Array(game_state.players[0].get("bao_gang_tiles", [])).is_empty():
+		return "expected confirm button to submit selected bao-gang keys"
+	if bool(game_state.opening_bao_jiao_pending):
+		return "expected opening bao-jiao window to finish after confirm, current=%s queue=%s debug=%s" % [
+			game_state.opening_bao_jiao_current_seat,
+			game_state.opening_bao_jiao_queue,
+			game_state.debug_last_message,
+		]
+	if int(game_state.current_turn_seat) != 1 or not bool(game_state.is_ai_turn_ready()):
+		return "expected AI dealer first discard to be ready after dialog confirm, turn=%s debug=%s" % [
+			game_state.current_turn_seat,
+			game_state.debug_last_message,
+		]
+	return true
+
+
+func _test_opening_ai_bao_gang_before_human_pass_does_not_stick_ui(root_node: Node):
+	var setup_result := _setup_opening_ai_bao_gang_before_human(root_node, 6100)
+	if setup_result.has("error"):
+		return setup_result["error"]
+	var game_state = setup_result["game_state"]
+	var pass_button := root_node.get("pass_button") as Button
+	if pass_button == null or not pass_button.visible:
+		return "expected pass button to be visible while human is asked after AI declarations"
+	pass_button.pressed.emit()
+	if bool(game_state.opening_bao_jiao_pending):
+		return "expected opening bao-jiao window to finish after human pass, current=%s queue=%s debug=%s" % [
+			game_state.opening_bao_jiao_current_seat,
+			game_state.opening_bao_jiao_queue,
+			game_state.debug_last_message,
+		]
+	if not bool(game_state.players[2].get("bao_jiao", false)) or Array(game_state.players[2].get("bao_gang_tiles", [])).is_empty():
+		return "expected AI seat 2 to have declared bao-jiao with bao-gang before human pass"
+	if int(game_state.current_turn_seat) != 3 or not bool(game_state.is_ai_turn_ready()):
+		return "expected AI dealer first discard to be ready after pass, turn=%s debug=%s snapshot=%s" % [
+			game_state.current_turn_seat,
+			game_state.debug_last_message,
+			game_state.get_debug_snapshot(),
+		]
+	var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "human pass")
+	if first_discard_result != true:
+		return first_discard_result
+	var latest: Dictionary = root_node.get("last_snapshot")
+	if bool(latest.get("human_can_pass_opening_bao_jiao", false)) or bool(latest.get("human_can_bao_jiao", false)):
+		return "expected UI snapshot to clear opening prompt after pass, got %s" % [latest]
+	return true
+
+
+func _test_opening_ai_bao_gang_after_human_pass_publishes_ai_request(root_node: Node):
+	var setup_result := _setup_opening_ai_bao_gang_before_human(root_node, 6600)
+	if setup_result.has("error"):
+		return setup_result["error"]
+	var game_manager: GameManager = root_node.get("game_manager") as GameManager
+	var game_state = setup_result["game_state"]
+	var pass_button := root_node.get("pass_button") as Button
+	if pass_button == null or not pass_button.visible:
+		return "expected pass button while human is asked after AI declarations"
+	pass_button.pressed.emit()
+	if int(game_state.pending_ai_turn_request_id) <= 0 and game_state.pending_ai_turn_decision.is_empty():
+		return "expected GameState to start AI dealer first-discard request after human pass"
+	var latest: Dictionary = game_manager.get_snapshot()
+	var latest_request_id := int(latest.get("pending_ai_turn_request_id", 0))
+	var latest_decision: Dictionary = latest.get("pending_ai_turn_decision", {})
+	if latest_request_id <= 0 and latest_decision.is_empty():
+		return "expected published snapshot to include AI first-discard pending state, latest=%s state_request=%s state_decision=%s debug=%s" % [
+			latest,
+			game_state.pending_ai_turn_request_id,
+			game_state.pending_ai_turn_decision,
+			game_state.debug_last_message,
+		]
+	return true
+
+
+func _test_opening_ai_bao_gang_before_human_confirm_does_not_stick_ui(root_node: Node):
+	var setup_result := _setup_opening_ai_bao_gang_before_human(root_node, 7100)
+	if setup_result.has("error"):
+		return setup_result["error"]
+	var game_state = setup_result["game_state"]
+	root_node.call("_on_bao_jiao_pressed")
+	var panel := root_node.get("bao_gang_dialog_content") as Panel
+	if panel == null:
+		return "expected bao-gang dialog after human bao-jiao press"
+	var content_box := panel.get_node_or_null("BaoGangSurfaceMargin/BaoGangSurfaceContent") as VBoxContainer
+	if content_box == null:
+		return "expected bao-gang content box"
+	var footer := content_box.get_node_or_null("BaoGangDialogFooter") as HBoxContainer
+	if footer == null:
+		return "expected confirm/cancel footer"
+	var confirm_button := footer.get_node_or_null("BaoGangConfirmButton") as Button
+	if confirm_button == null:
+		return "expected confirm button"
+	confirm_button.pressed.emit()
+	if bool(game_state.opening_bao_jiao_pending):
+		return "expected opening bao-jiao window to finish after human confirm behind AI declarations, current=%s queue=%s debug=%s" % [
+			game_state.opening_bao_jiao_current_seat,
+			game_state.opening_bao_jiao_queue,
+			game_state.debug_last_message,
+		]
+	if not bool(game_state.players[0].get("bao_jiao", false)) or Array(game_state.players[0].get("bao_gang_tiles", [])).is_empty():
+		return "expected human bao-jiao and selected bao-gang to be recorded"
+	if not bool(game_state.players[2].get("bao_jiao", false)) or Array(game_state.players[2].get("bao_gang_tiles", [])).is_empty():
+		return "expected AI seat 2 to have declared bao-jiao with bao-gang before human confirm"
+	if int(game_state.current_turn_seat) != 3 or not bool(game_state.is_ai_turn_ready()):
+		return "expected AI dealer first discard to be ready after confirm, turn=%s debug=%s snapshot=%s" % [
+			game_state.current_turn_seat,
+			game_state.debug_last_message,
+			game_state.get_debug_snapshot(),
+		]
+	var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "human confirm")
+	if first_discard_result != true:
+		return first_discard_result
+	var latest: Dictionary = root_node.get("last_snapshot")
+	if bool(latest.get("human_can_pass_opening_bao_jiao", false)) or bool(latest.get("human_can_bao_jiao", false)):
+		return "expected UI snapshot to clear opening prompt after confirm, got %s" % [latest]
+	return true
+
+
+func _test_opening_ai_bao_gang_before_human_dealer_first_discard_does_not_stick_ui(root_node: Node):
+	var game_manager: GameManager = root_node.get("game_manager") as GameManager
+	if game_manager == null or game_manager.game_state == null:
+		return "missing game manager/state"
+	var game_state = game_manager.game_state
+	game_state.start_new_round(true)
+	var fake_manager := FakeOpeningBaoJiaoManager.new()
+	fake_manager.ai_turn_analysis_ready.connect(game_state._on_ai_turn_analysis_ready)
+	game_state.ai_manager = fake_manager
+	if game_state.ai_tuning_config != null:
+		game_state.ai_tuning_config.apply_preset("bone_ash")
+	game_state.ai_level = 2
+	game_state.current_dealer_seat = 0
+	game_state.current_turn_seat = 0
+	game_state.current_phase = 5
+	game_state.discard_pile.clear()
+	game_state.last_draw_tile.clear()
+	game_state.last_turn_context = {"seat": 0, "draw_reason": "opening_discard"}
+	game_state.opening_bao_jiao_pending = false
+	game_state.opening_bao_jiao_queue.clear()
+	game_state.opening_bao_jiao_current_seat = -1
+	game_state.players.clear()
+	game_state.players.append_array([
+		_make_player_for_opening(0, _tiles_from_types([0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 16, 17], 8100)),
+		_make_player_for_opening(1, _opening_ready_hand(8200)),
+		_make_player_for_opening(2, _opening_ready_bao_gang_hand(8300)),
+		_make_player_for_opening(3, _opening_ready_bao_gang_hand(8400)),
+	])
+	game_state.players[0]["is_ai"] = false
+	game_state.players[1]["is_ai"] = true
+	game_state.players[2]["is_ai"] = true
+	game_state.players[3]["is_ai"] = true
+	game_state.wall_count = 18
+	if bool(game_state._start_opening_bao_jiao_window()):
+		return "expected all-AI opening bao-jiao window to finish without stopping at human dealer, current=%s queue=%s debug=%s" % [
+			game_state.opening_bao_jiao_current_seat,
+			game_state.opening_bao_jiao_queue,
+			game_state.debug_last_message,
+		]
+	if bool(game_state.opening_bao_jiao_pending):
+		return "expected opening window to be closed before human dealer first discard"
+	if not bool(game_state.players[3].get("bao_jiao", false)) or Array(game_state.players[3].get("bao_gang_tiles", [])).is_empty():
+		return "expected AI seat 3 to declare bao-jiao with bao-gang before human dealer discard"
+	var snapshot: Dictionary = game_manager.get_fresh_snapshot()
+	root_node.call("_on_snapshot_changed", snapshot)
+	if not bool(snapshot.get("human_can_discard", false)):
+		return "expected human dealer to be able to discard after AI opening declarations, got %s" % [snapshot]
+	if bool(snapshot.get("human_can_pass_opening_bao_jiao", false)) or bool(snapshot.get("human_can_bao_jiao", false)):
+		return "expected no opening bao-jiao prompt for human dealer, got %s" % [snapshot]
+	var self_tiles: Array = game_state.get_player_hand_tiles(0)
+	if self_tiles.is_empty():
+		return "expected human dealer hand"
+	var tile_id := int(self_tiles[0].get("id", -1))
+	if tile_id < 0:
+		return "expected human dealer tile id"
+	root_node.call("_on_hand_tile_pressed", tile_id)
+	root_node.call("_on_hand_tile_pressed", tile_id)
+	if game_state.discard_pile.is_empty() or int(game_state.discard_pile[-1].get("seat", -1)) != 0:
+		return "expected human dealer first discard in discard pile after clicking a hand tile, debug=%s" % game_state.debug_last_message
+	return true
+
+
+func _test_opening_ai_bao_jiao_only_before_human_pass_does_not_stick_ui(root_node: Node):
+	var setup_result := _setup_opening_ai_bao_gang_before_human(root_node, 9100, false)
+	if setup_result.has("error"):
+		return setup_result["error"]
+	var game_state = setup_result["game_state"]
+	var pass_button := root_node.get("pass_button") as Button
+	if pass_button == null or not pass_button.visible:
+		return "expected pass button to be visible while human is asked after AI bao-jiao-only declaration"
+	pass_button.pressed.emit()
+	if bool(game_state.opening_bao_jiao_pending):
+		return "expected opening bao-jiao-only window to finish after human pass, current=%s queue=%s debug=%s" % [
+			game_state.opening_bao_jiao_current_seat,
+			game_state.opening_bao_jiao_queue,
+			game_state.debug_last_message,
+		]
+	if not bool(game_state.players[2].get("bao_jiao", false)):
+		return "expected AI seat 2 to declare bao-jiao before human pass"
+	if not Array(game_state.players[2].get("bao_gang_tiles", [])).is_empty():
+		return "expected AI seat 2 to declare bao-jiao without bao-gang, got %s" % [
+			game_state.players[2].get("bao_gang_tiles", []),
+		]
+	if int(game_state.current_turn_seat) != 3 or not bool(game_state.is_ai_turn_ready()):
+		return "expected AI dealer first discard to be ready after bao-jiao-only pass, turn=%s debug=%s snapshot=%s" % [
+			game_state.current_turn_seat,
+			game_state.debug_last_message,
+			game_state.get_debug_snapshot(),
+		]
+	var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "bao-jiao-only human pass")
+	if first_discard_result != true:
+		return first_discard_result
+	var latest: Dictionary = root_node.get("last_snapshot")
+	if bool(latest.get("human_can_pass_opening_bao_jiao", false)) or bool(latest.get("human_can_bao_jiao", false)):
+		return "expected UI snapshot to clear opening bao-jiao-only prompt after pass, got %s" % [latest]
+	return true
+
+
+func _test_opening_ai_bao_jiao_only_before_human_confirm_does_not_stick_ui(root_node: Node):
+	var setup_result := _setup_opening_ai_bao_gang_before_human(root_node, 10100, false)
+	if setup_result.has("error"):
+		return setup_result["error"]
+	var game_state = setup_result["game_state"]
+	var snapshot: Dictionary = root_node.get("last_snapshot")
+	var plan: Dictionary = snapshot.get("human_bao_jiao_plan", {})
+	if not Array(plan.get("bao_gang_options", [])).is_empty():
+		return "expected human bao-jiao-only plan without bao-gang options, got %s" % [plan]
+	root_node.call("_on_bao_jiao_pressed")
+	if bool(game_state.opening_bao_jiao_pending):
+		return "expected opening bao-jiao-only window to finish after human confirm, current=%s queue=%s debug=%s" % [
+			game_state.opening_bao_jiao_current_seat,
+			game_state.opening_bao_jiao_queue,
+			game_state.debug_last_message,
+		]
+	if not bool(game_state.players[0].get("bao_jiao", false)):
+		return "expected human bao-jiao-only declaration to be recorded"
+	if not Array(game_state.players[0].get("bao_gang_tiles", [])).is_empty():
+		return "expected human bao-jiao-only declaration without bao-gang, got %s" % [
+			game_state.players[0].get("bao_gang_tiles", []),
+		]
+	if not bool(game_state.players[2].get("bao_jiao", false)):
+		return "expected AI seat 2 to declare bao-jiao before human confirm"
+	if not Array(game_state.players[2].get("bao_gang_tiles", [])).is_empty():
+		return "expected AI seat 2 to declare bao-jiao without bao-gang before human confirm, got %s" % [
+			game_state.players[2].get("bao_gang_tiles", []),
+		]
+	if int(game_state.current_turn_seat) != 3 or not bool(game_state.is_ai_turn_ready()):
+		return "expected AI dealer first discard to be ready after bao-jiao-only confirm, turn=%s debug=%s snapshot=%s" % [
+			game_state.current_turn_seat,
+			game_state.debug_last_message,
+			game_state.get_debug_snapshot(),
+		]
+	var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "bao-jiao-only human confirm")
+	if first_discard_result != true:
+		return first_discard_result
+	var latest: Dictionary = root_node.get("last_snapshot")
+	if bool(latest.get("human_can_pass_opening_bao_jiao", false)) or bool(latest.get("human_can_bao_jiao", false)):
+		return "expected UI snapshot to clear opening bao-jiao-only prompt after confirm, got %s" % [latest]
+	return true
+
+
+func _test_opening_ai_bao_gang_then_human_next_turn_can_draw_and_discard(root_node: Node):
+	var setup_result := _setup_ai_opening_declaration_then_human_draw(root_node, 11100, true)
+	if setup_result.has("error"):
+		return setup_result["error"]
+	return _assert_human_next_turn_can_discard_after_ai_opening_declaration(
+		root_node,
+		setup_result["game_state"],
+		"AI bao-jiao with bao-gang"
+	)
+
+
+func _test_opening_ai_bao_jiao_only_then_human_next_turn_can_draw_and_discard(root_node: Node):
+	var setup_result := _setup_ai_opening_declaration_then_human_draw(root_node, 12100, false)
+	if setup_result.has("error"):
+		return setup_result["error"]
+	return _assert_human_next_turn_can_discard_after_ai_opening_declaration(
+		root_node,
+		setup_result["game_state"],
+		"AI bao-jiao only"
+	)
+
+
+func _setup_ai_opening_declaration_then_human_draw(root_node: Node, id_start: int, with_bao_gang: bool) -> Dictionary:
+	var game_manager: GameManager = root_node.get("game_manager") as GameManager
+	if game_manager == null or game_manager.game_state == null:
+		return {"error": "missing game manager/state"}
+	root_node.call("_on_draw_transition_timer_timeout")
+	var game_state = game_manager.game_state
+	game_state.start_new_round(true)
+	var fake_manager := FakeOpeningBaoJiaoManager.new()
+	fake_manager.discard_from_end = true
+	fake_manager.ai_turn_analysis_ready.connect(game_state._on_ai_turn_analysis_ready)
+	game_state.ai_manager = fake_manager
+	if game_state.ai_tuning_config != null:
+		game_state.ai_tuning_config.apply_preset("bone_ash")
+	game_state.ai_level = 2
+	game_state.current_dealer_seat = 3
+	game_state.current_turn_seat = 3
+	game_state.current_phase = 5
+	game_state.discard_pile.clear()
+	game_state.last_draw_tile.clear()
+	game_state.last_turn_context = {"seat": 3, "draw_reason": "opening_discard"}
+	game_state.opening_bao_jiao_pending = false
+	game_state.opening_bao_jiao_queue.clear()
+	game_state.opening_bao_jiao_current_seat = -1
+	game_state.wall.clear()
+	game_state.wall.append_array(_tiles_from_types([17, 16, 15, 14], id_start + 500))
+	game_state.wall_count = game_state.wall.size()
+	var ai_opening_hand := _opening_ready_bao_gang_hand(id_start + 200) if with_bao_gang else _opening_ready_hand(id_start + 200)
+	game_state.players.clear()
+	game_state.players.append_array([
+		_make_player_for_opening(0, _opening_not_ready_hand(id_start)),
+		_make_player_for_opening(1, _opening_not_ready_hand(id_start + 100)),
+		_make_player_for_opening(2, ai_opening_hand),
+		_make_player_for_opening(3, _tiles_from_types([0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 16, 17], id_start + 300)),
+	])
+	game_state.players[0]["is_ai"] = false
+	game_state.players[1]["is_ai"] = true
+	game_state.players[2]["is_ai"] = true
+	game_state.players[3]["is_ai"] = true
+	if bool(game_state._start_opening_bao_jiao_window()):
+		return {"error": "expected AI-only opening declarations to finish without stopping at human, current=%s queue=%s debug=%s" % [
+			game_state.opening_bao_jiao_current_seat,
+			game_state.opening_bao_jiao_queue,
+			game_state.debug_last_message,
+		]}
+	if not bool(game_state.players[2].get("bao_jiao", false)):
+		return {"error": "expected AI seat 2 to declare opening bao-jiao"}
+	var ai_bao_gang_tiles: Array = game_state.players[2].get("bao_gang_tiles", [])
+	if with_bao_gang and ai_bao_gang_tiles.is_empty():
+		return {"error": "expected AI seat 2 to declare bao-gang tiles"}
+	if not with_bao_gang and not ai_bao_gang_tiles.is_empty():
+		return {"error": "expected AI seat 2 to declare bao-jiao only, got bao_gang_tiles=%s" % [ai_bao_gang_tiles]}
+	var snapshot: Dictionary = game_manager.get_fresh_snapshot()
+	root_node.call("_on_snapshot_changed", snapshot)
+	if bool(snapshot.get("human_can_bao_jiao", false)) or bool(snapshot.get("human_can_pass_opening_bao_jiao", false)):
+		return {"error": "expected human not to be in opening bao-jiao prompt, got %s" % [snapshot]}
+	if int(snapshot.get("current_turn_seat", -1)) != 3 or not bool(game_state.is_ai_turn_ready()):
+		return {"error": "expected AI dealer to be ready for first discard after AI declaration, got %s" % [snapshot]}
+	return {"game_state": game_state}
+
+
+func _assert_human_next_turn_can_discard_after_ai_opening_declaration(root_node: Node, game_state, context: String):
+	var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, context)
+	if typeof(first_discard_result) != TYPE_BOOL or not bool(first_discard_result):
+		return first_discard_result
+	var game_manager: GameManager = root_node.get("game_manager") as GameManager
+	var latest: Dictionary = game_manager.get_fresh_snapshot()
+	root_node.call("_on_snapshot_changed", latest)
+	for _step in range(8):
+		if int(latest.get("current_phase", -1)) == 5 and int(latest.get("current_turn_seat", -1)) == 0:
+			break
+		if not bool(game_state.is_ai_turn_ready()):
+			break
+		if not _drive_one_ai_turn_from_ui_timer(root_node, game_state, "%s step %d" % [context, _step]):
+			break
+		latest = game_manager.get_fresh_snapshot()
+		root_node.call("_on_snapshot_changed", latest)
+	if int(latest.get("current_phase", -1)) != 5 or int(latest.get("current_turn_seat", -1)) != 0:
+		return "expected human seat 0 discard turn after %s, got %s" % [context, latest]
+	if not bool(latest.get("human_can_discard", false)):
+		return "expected human_can_discard after %s, got %s" % [context, latest]
+	if int(latest.get("recent_draw_seat", -1)) != 0:
+		return "expected human to have drawn before discard after %s, got %s" % [context, latest]
+	var self_tiles: Array = game_state.get_player_hand_tiles(0)
+	if self_tiles.is_empty():
+		return "expected human hand after drawing from %s" % context
+	root_node.call("_on_draw_transition_timer_timeout")
+	var tile_id := int(self_tiles[0].get("id", -1))
+	if tile_id < 0:
+		return "expected a playable human tile id after %s" % context
+	root_node.call("_on_hand_tile_pressed", tile_id)
+	root_node.call("_on_hand_tile_pressed", tile_id)
+	if game_state.discard_pile.is_empty() or int(game_state.discard_pile[-1].get("seat", -1)) != 0:
+		return "expected human discard to enter discard pile after %s, debug=%s" % [context, game_state.debug_last_message]
+	return true
+
+
+func _drive_one_ai_turn_from_ui_timer(root_node: Node, game_state, context: String) -> bool:
+	var game_manager: GameManager = root_node.get("game_manager") as GameManager
+	root_node.call("_on_snapshot_changed", game_manager.get_fresh_snapshot())
+	var ai_turn_timer := root_node.get("ai_turn_timer") as Timer
+	if ai_turn_timer == null or ai_turn_timer.is_stopped():
+		root_node.call("_on_draw_transition_timer_timeout")
+		root_node.call("_on_snapshot_changed", game_manager.get_fresh_snapshot())
+		if ai_turn_timer == null or ai_turn_timer.is_stopped():
+			return false
+	game_state.pump_ai_background_requests()
+	root_node.call("_on_ai_turn_timer_timeout")
+	return true
+
+
+func _setup_opening_ai_bao_gang_before_human(root_node: Node, id_start: int, with_bao_gang: bool = true) -> Dictionary:
+	var game_manager: GameManager = root_node.get("game_manager") as GameManager
+	if game_manager == null or game_manager.game_state == null:
+		return {"error": "missing game manager/state"}
+	var game_state = game_manager.game_state
+	game_state.start_new_round(true)
+	var fake_manager := FakeOpeningBaoJiaoManager.new()
+	fake_manager.ai_turn_analysis_ready.connect(game_state._on_ai_turn_analysis_ready)
+	game_state.ai_manager = fake_manager
+	if game_state.ai_tuning_config != null:
+		game_state.ai_tuning_config.apply_preset("bone_ash")
+	game_state.ai_level = 2
+	game_state.current_dealer_seat = 3
+	game_state.current_turn_seat = 3
+	game_state.current_phase = 5
+	game_state.discard_pile.clear()
+	game_state.last_draw_tile.clear()
+	game_state.last_turn_context = {"seat": 3, "draw_reason": "opening_discard"}
+	game_state.opening_bao_jiao_pending = false
+	game_state.opening_bao_jiao_queue.clear()
+	game_state.opening_bao_jiao_current_seat = -1
+	var human_opening_hand := _opening_ready_bao_gang_hand(id_start) if with_bao_gang else _opening_ready_hand(id_start)
+	var ai_opening_hand := _opening_ready_bao_gang_hand(id_start + 200) if with_bao_gang else _opening_ready_hand(id_start + 200)
+	game_state.players.clear()
+	game_state.players.append_array([
+		_make_player_for_opening(0, human_opening_hand),
+		_make_player_for_opening(1, _opening_ready_hand(id_start + 100)),
+		_make_player_for_opening(2, ai_opening_hand),
+		_make_player_for_opening(3, _tiles_from_types([0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 16, 17], id_start + 300)),
+	])
+	game_state.players[0]["is_ai"] = false
+	game_state.players[1]["is_ai"] = true
+	game_state.players[2]["is_ai"] = true
+	game_state.players[3]["is_ai"] = true
+	game_state.wall_count = 18
+	if not bool(game_state._start_opening_bao_jiao_window()):
+		return {"error": "expected opening bao-jiao window to start"}
+	if int(game_state.opening_bao_jiao_current_seat) != 0:
+		return {"error": "expected AI seats before human to be processed before stopping at human, current=%s queue=%s debug=%s" % [
+			game_state.opening_bao_jiao_current_seat,
+			game_state.opening_bao_jiao_queue,
+			game_state.debug_last_message,
+		]}
+	if not bool(game_state.players[2].get("bao_jiao", false)):
+		return {"error": "expected AI seat 2 to declare before human prompt"}
+	var snapshot: Dictionary = game_manager.get_fresh_snapshot()
+	root_node.call("_on_snapshot_changed", snapshot)
+	if not bool(snapshot.get("human_can_pass_opening_bao_jiao", false)):
+		return {"error": "expected human pass to be available after AI declarations, got %s" % [snapshot]}
+	if not bool(snapshot.get("human_can_bao_jiao", false)):
+		return {"error": "expected human bao-jiao to be available after AI declarations, got %s" % [snapshot]}
+	return {"game_state": game_state}
+
+
+func _assert_ai_dealer_first_discard_from_ui_timer(root_node: Node, game_state, context: String):
+	var ai_turn_timer := root_node.get("ai_turn_timer") as Timer
+	if ai_turn_timer == null:
+		return "expected AI turn timer to exist after %s" % context
+	if ai_turn_timer.is_stopped():
+		return "expected UI to schedule AI dealer first-discard timer after %s" % context
+	game_state.pump_ai_background_requests()
+	if game_state.pending_ai_turn_decision.is_empty():
+		return "expected background AI dealer discard decision to be delivered after %s, pending_meta=%s" % [
+			context,
+			game_state.pending_ai_turn_request_meta,
+		]
+	root_node.call("_on_ai_turn_timer_timeout")
+	if game_state.discard_pile.is_empty():
+		return "expected AI dealer first discard to enter discard pile after %s" % context
+	var discard: Dictionary = game_state.discard_pile[-1]
+	if int(discard.get("seat", -1)) != 3:
+		return "expected dealer seat 3 first discard after %s, got %s" % [context, discard]
 	return true
 
 
@@ -670,6 +1328,57 @@ func _collect_nodes_by_class(node: Node, target_class_name: String, result: Arra
 		_collect_nodes_by_class(child, target_class_name, result)
 
 
+func _tiles_from_types(tile_types: Array, id_start: int) -> Array:
+	var result: Array = []
+	var index := 0
+	for tile_type in tile_types:
+		var type_value := int(tile_type)
+		var suit := "tiao" if type_value < 9 else "tong"
+		var rank := type_value + 1 if type_value < 9 else type_value - 8
+		result.append(_make_tile(id_start + index, suit, rank))
+		index += 1
+	return result
+
+
+func _opening_ready_bao_gang_hand(id_start: int = 6000) -> Array:
+	return _tiles_from_types([0, 0, 0, 1, 2, 3, 4, 5, 9, 9, 15, 16, 17], id_start)
+
+
+func _opening_ready_hand(id_start: int = 5000) -> Array:
+	return _tiles_from_types([0, 0, 1, 2, 3, 4, 5, 9, 10, 11, 15, 16, 17], id_start)
+
+
+func _opening_not_ready_hand(id_start: int = 7000) -> Array:
+	return _tiles_from_types([0, 2, 4, 6, 8, 9, 11, 13, 15, 1, 3, 5, 7], id_start)
+
+
+func _make_player_for_opening(seat: int, hand_tiles: Array) -> Dictionary:
+	return {
+		"seat": seat,
+		"name": "玩家%d" % seat,
+		"is_ai": seat != 0,
+		"hand_tiles": hand_tiles.duplicate(true),
+		"hand_count": hand_tiles.size(),
+		"melds": [],
+		"discards": [],
+		"score": 0,
+		"ding_que": "",
+		"bao_jiao": false,
+		"bao_gang_tiles": [],
+		"opening_bao_jiao_reviewed": false,
+		"bao_jiao_ting_tiles": [],
+		"rule_marks": [],
+		"has_won": false,
+	}
+
+
+func _wall_for_opening_hands(hands_by_seat: Array, filler_id_start: int) -> Array:
+	var result: Array = _tiles_from_types([2, 4, 6, 8, 10, 12, 14, 16, 3, 5, 7, 9, 11, 13, 15, 17, 1, 0, 6], filler_id_start)
+	for seat in range(hands_by_seat.size() - 1, -1, -1):
+		result.append_array(Array(hands_by_seat[seat]).duplicate(true))
+	return result
+
+
 func _make_tile(id: int, suit: String, rank: int) -> Dictionary:
 	return {
 		"id": id,
@@ -702,3 +1411,99 @@ func _suit_label(suit: String) -> String:
 			return "筒"
 		_:
 			return "?"
+
+
+class FakeOpeningBaoJiaoManager:
+	extends RefCounted
+
+	signal ai_turn_analysis_ready(request_id: int, seat_index: int, analysis: Dictionary)
+
+	var latest_turn_snapshot: Dictionary = {}
+	var latest_reaction_snapshot: Dictionary = {}
+	var next_request_id: int = 1
+	var pending_turn_requests: Dictionary = {}
+	var preferred_discard_key: String = ""
+	var discard_from_end: bool = false
+
+	func analyze_bao_jiao(_player_state: Dictionary, _table_state: Dictionary, _rules_config, plan: Dictionary) -> Dictionary:
+		return {
+			"action": "bao_jiao",
+			"declare": true,
+			"selected_bao_gang_keys": plan.get("bao_gang_keys", []).duplicate(true),
+			"score": 100,
+			"reasons": ["ui regression fake opening declaration"],
+			"backend_mode": "ui_regression_fake_bao_jiao",
+		}
+
+	func start_turn_analysis_background(player_state: Dictionary, table_state: Dictionary, _rules_config, _ai_config, _hu_checker, _risk_analyzer, _allow_cheat: bool = false, _hell_payload: Dictionary = {}, _force_lightweight: bool = false, _compact_result: bool = false, _force_native_async: bool = false, _allow_sync_delivery: bool = true) -> int:
+		var hand_tiles: Array = player_state.get("hand_tiles", [])
+		if hand_tiles.is_empty():
+			return 0
+		var tile: Dictionary = hand_tiles[0].duplicate(true)
+		var last_draw: Dictionary = table_state.get("last_draw_tile", {})
+		var last_draw_tile: Dictionary = last_draw.get("tile", {})
+		if bool(player_state.get("bao_jiao", false)) and int(last_draw.get("seat", -1)) == int(player_state.get("seat", -1)) and not last_draw_tile.is_empty():
+			tile = last_draw_tile.duplicate(true)
+		elif not preferred_discard_key.is_empty():
+			for tile_item in hand_tiles:
+				var candidate: Dictionary = tile_item
+				if _key_for_tile(candidate) == preferred_discard_key:
+					tile = candidate.duplicate(true)
+					break
+		elif discard_from_end:
+			tile = Dictionary(hand_tiles[hand_tiles.size() - 1]).duplicate(true)
+		var request_id := next_request_id
+		next_request_id += 1
+		pending_turn_requests[request_id] = {
+			"seat": int(player_state.get("seat", -1)),
+			"analysis": {
+				"action": "discard",
+				"backend": "ui_regression_fake_turn",
+				"recommended": {
+					"tile": tile.duplicate(true),
+					"csharp_tile_type": _tile_type(tile),
+				},
+				"options": [],
+				"danger_tiles": [],
+			},
+		}
+		return request_id
+
+	func pump_async_requests() -> int:
+		var delivered := 0
+		for request_id in pending_turn_requests.keys():
+			var request: Dictionary = pending_turn_requests[request_id]
+			ai_turn_analysis_ready.emit(int(request_id), int(request.get("seat", -1)), request.get("analysis", {}).duplicate(true))
+			delivered += 1
+		pending_turn_requests.clear()
+		return delivered
+
+	func has_native_csharp_runtime() -> bool:
+		return false
+
+	func has_native_hell_challenge_runtime() -> bool:
+		return false
+
+	func set_native_csharp_runtime(_runtime) -> void:
+		pass
+
+	func set_compact_runtime_snapshots(_enabled: bool) -> void:
+		pass
+
+	func get_backend_status() -> Dictionary:
+		return {"backend_mode": "ui_regression_fake_bao_jiao"}
+
+	func get_debug_snapshot() -> Dictionary:
+		return {"backend_status": get_backend_status()}
+
+	func _tile_type(tile: Dictionary) -> int:
+		var suit := str(tile.get("suit", ""))
+		var rank := int(tile.get("rank", 0))
+		if suit == "tiao":
+			return rank - 1
+		if suit == "tong":
+			return 9 + rank - 1
+		return -1
+
+	func _key_for_tile(tile: Dictionary) -> String:
+		return "%s_%d" % [str(tile.get("suit", "")), int(tile.get("rank", 0))]

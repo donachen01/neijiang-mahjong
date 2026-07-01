@@ -105,6 +105,9 @@ var trainer_history: Array[Dictionary] = []
 var human_trainer_hint_enabled: bool = false
 var latest_trainer_hint: Dictionary = {}
 var latest_trainer_hint_cache_key: String = ""
+var pending_trainer_hint_request_id: int = 0
+var pending_trainer_hint_request_cache_key: String = ""
+var pending_trainer_hint_request_seat: int = -1
 var ai_decision_metrics: Dictionary = {}
 var ai_reaction_review_history: Array[Dictionary] = []
 var latest_ai_reaction_review: Dictionary = {}
@@ -319,10 +322,11 @@ func get_ai_level_index() -> int:
 func set_human_trainer_hint_enabled(enabled: bool) -> void:
 	human_trainer_hint_enabled = enabled
 	if ai_manager != null:
-		ai_manager.set_compact_runtime_snapshots(not enabled and not _is_hell_training_mode())
+		ai_manager.set_compact_runtime_snapshots(not _is_hell_training_mode() and (human_trainer_hint_enabled or not _is_ai_analysis_recording_enabled()))
 	if not enabled:
 		latest_trainer_hint.clear()
 		latest_trainer_hint_cache_key = ""
+		_clear_pending_trainer_hint_request()
 
 
 func set_ai_preset(preset_name: String) -> bool:
@@ -385,8 +389,6 @@ func _reload_ai_learning_for_new_round() -> void:
 func _build_ai_core_debug_snapshot() -> Dictionary:
 	if ai_manager == null:
 		return {}
-	if _is_hell_training_mode() or human_trainer_hint_enabled:
-		return ai_manager.get_debug_snapshot()
 	if not ai_manager.has_method("get_backend_status"):
 		return ai_manager.get_debug_snapshot()
 	var status: Dictionary = ai_manager.get_backend_status()
@@ -395,6 +397,12 @@ func _build_ai_core_debug_snapshot() -> Dictionary:
 		"latest_turn_snapshot": ai_manager.latest_turn_snapshot.duplicate(true),
 		"latest_reaction_snapshot": ai_manager.latest_reaction_snapshot.duplicate(true),
 	}
+
+
+func _build_full_ai_core_debug_snapshot() -> Dictionary:
+	if ai_manager == null:
+		return {}
+	return ai_manager.get_debug_snapshot()
 
 
 func _apply_ai_learning_adjustment() -> void:
@@ -441,7 +449,7 @@ func _apply_ai_runtime_tuning() -> void:
 	_apply_ai_learning_adjustment()
 	_apply_ai_manual_tuning()
 	if ai_manager != null:
-		ai_manager.set_compact_runtime_snapshots(not human_trainer_hint_enabled and not _is_hell_training_mode() and not _is_ai_analysis_recording_enabled())
+		ai_manager.set_compact_runtime_snapshots(not _is_hell_training_mode() and (human_trainer_hint_enabled or not _is_ai_analysis_recording_enabled()))
 
 
 func set_ai_tuning_value(key: String, value: int) -> bool:
@@ -570,7 +578,7 @@ func _update_ai_learning_after_round(score_changes: Dictionary) -> void:
 		"ai_decision_metrics": ai_decision_metrics.duplicate(true),
 		"latest_ai_reaction_review": latest_ai_reaction_review.duplicate(true),
 		"ai_reaction_review_history": ai_reaction_review_history.duplicate(true),
-		"ai_core_debug": _build_ai_core_debug_snapshot(),
+		"ai_core_debug": _build_full_ai_core_debug_snapshot(),
 	}
 	ai_learning_engine.record_human_round(round_result)
 	ai_tuning_config.apply_preset(str(ai_tuning_config.preset_name))
@@ -581,10 +589,23 @@ func _update_ai_learning_after_round(score_changes: Dictionary) -> void:
 func set_ai_level(level: int) -> bool:
 	if level < int(AILevel.BEGINNER) or level > int(AILevel.CHEATING):
 		return false
+	if ai_tuning_config != null:
+		var preset_name := AITuningConfigScript.PRESET_INTERMEDIATE
+		match level:
+			AILevel.CHEATING:
+				preset_name = AITuningConfigScript.PRESET_HELL
+			AILevel.ADVANCED:
+				preset_name = AITuningConfigScript.PRESET_BONE_ASH
+			_:
+				preset_name = AITuningConfigScript.PRESET_INTERMEDIATE
+		ai_tuning_config.apply_preset(preset_name)
+		if preset_name == AITuningConfigScript.PRESET_HELL and bool(ai_tuning_config.diagnostics_recording_enabled):
+			_ensure_hell_training_session()
 	ai_level = level
 	for player in players:
 		if bool(player.get("is_ai", false)):
 			player["ai_level"] = int(ai_level)
+	_apply_ai_runtime_tuning()
 	debug_last_message = "AI 难度已切换为 %s。" % AI_LEVEL_LABELS[int(ai_level)]
 	_emit_state_changed()
 	return true
@@ -706,6 +727,10 @@ func _build_table_state() -> Dictionary:
 		wall_count
 	)
 	table_state["reaction_pass_evidence"] = reaction_pass_evidence.duplicate(true)
+	table_state["round_index"] = round_index
+	table_state["current_dealer_seat"] = current_dealer_seat
+	table_state["total_rounds"] = 0
+	table_state["remaining_rounds"] = 0
 	return table_state
 
 
@@ -850,7 +875,7 @@ func get_human_bao_jiao_plan(seat: int) -> Dictionary:
 	return _build_bao_jiao_plan(seat)
 
 
-func execute_human_bao_jiao(seat: int, selected_bao_gang_keys: Variant = null) -> bool:
+func execute_human_bao_jiao(seat: int, selected_bao_gang_keys: Variant = null, advance_opening_queue: bool = true) -> bool:
 	if not can_human_bao_jiao(seat):
 		return false
 	var plan: Dictionary = _build_bao_jiao_plan(seat)
@@ -885,7 +910,7 @@ func execute_human_bao_jiao(seat: int, selected_bao_gang_keys: Variant = null) -
 			_format_tile_name_list(plan.get("ting_tiles", []))
 		]
 	_emit_state_changed()
-	if opening_bao_jiao_pending and opening_bao_jiao_current_seat == seat:
+	if advance_opening_queue and opening_bao_jiao_pending and opening_bao_jiao_current_seat == seat:
 		_mark_opening_bao_jiao_reviewed(seat)
 		_process_opening_bao_jiao_queue()
 	return true
@@ -1054,10 +1079,19 @@ func run_ai_turn() -> bool:
 
 	var decision: Dictionary = _get_or_prepare_ai_turn_decision()
 	if decision.is_empty():
-		return false
+		decision = _build_ai_turn_decision(true)
+		if decision.is_empty():
+			return false
 	pending_ai_turn_decision.clear()
 	_clear_pending_ai_turn_request()
-	return _execute_ai_turn_decision(decision)
+	if _execute_ai_turn_decision(decision):
+		return true
+	decision = _build_ai_turn_decision(true)
+	if not decision.is_empty() and _execute_ai_turn_decision(decision):
+		return true
+	debug_last_message = "AI seat %d could not complete a prepared turn decision; decision was refreshed but still invalid." % current_turn_seat
+	_emit_state_changed()
+	return false
 
 
 func prepare_ai_turn_decision() -> bool:
@@ -1106,7 +1140,27 @@ func _is_pending_ai_turn_decision_valid() -> bool:
 		and int(pending_ai_turn_decision.get("seat", -1)) == current_turn_seat \
 		and int(pending_ai_turn_decision.get("phase", -1)) == int(current_phase) \
 		and int(pending_ai_turn_decision.get("wall_count", -1)) == wall_count \
-		and int(pending_ai_turn_decision.get("hand_count", -1)) == int(players[current_turn_seat].get("hand_count", -1))
+		and int(pending_ai_turn_decision.get("hand_count", -1)) == int(players[current_turn_seat].get("hand_count", -1)) \
+		and _is_ai_turn_decision_still_executable(pending_ai_turn_decision)
+
+
+func _is_ai_turn_decision_still_executable(decision: Dictionary) -> bool:
+	var seat := int(decision.get("seat", -1))
+	if seat < 0 or seat >= players.size():
+		return false
+	match str(decision.get("action", "")):
+		"discard":
+			var requested_tile_id := int(decision.get("tile_id", -1))
+			if requested_tile_id == -1 or _tile_by_id_in_hand(seat, requested_tile_id).is_empty():
+				return false
+			if bool(players[seat].get("bao_jiao", false)):
+				var last_draw_tile_id := _get_last_draw_tile_id_for_seat(seat)
+				if requested_tile_id != last_draw_tile_id:
+					return false
+				if _must_self_gang_bao_gang_tile(seat, last_draw_tile_id):
+					return false
+			return true
+	return true
 
 
 func _is_pending_ai_turn_request_valid() -> bool:
@@ -2353,21 +2407,42 @@ func _get_human_trainer_hint_snapshot() -> Dictionary:
 	if not human_trainer_hint_enabled:
 		latest_trainer_hint.clear()
 		latest_trainer_hint_cache_key = ""
+		_clear_pending_trainer_hint_request()
 		return {}
 	var seat: int = 0
 	if seat < 0 or seat >= players.size():
 		latest_trainer_hint.clear()
 		latest_trainer_hint_cache_key = ""
+		_clear_pending_trainer_hint_request()
 		return {}
 	var can_show_hint: bool = can_human_discard(seat) or can_human_add_gang(seat) or can_human_an_gang(seat) or can_human_self_hu(seat)
 	if not can_show_hint:
 		latest_trainer_hint.clear()
 		latest_trainer_hint_cache_key = ""
+		_clear_pending_trainer_hint_request()
 		return {}
 	var cache_key: String = _build_trainer_hint_cache_key(seat)
 	if cache_key == latest_trainer_hint_cache_key and not latest_trainer_hint.is_empty():
 		return latest_trainer_hint.duplicate(true)
+	if pending_trainer_hint_request_id > 0 and pending_trainer_hint_request_cache_key == cache_key:
+		var pending_snapshot := latest_trainer_hint.duplicate(true)
+		if not pending_snapshot.is_empty():
+			pending_snapshot["request_pending"] = true
+			return pending_snapshot
+		return {
+			"request_pending": true,
+			"request_id": pending_trainer_hint_request_id,
+		}
 	latest_trainer_hint_cache_key = cache_key
+	if _start_human_trainer_hint_request(seat, cache_key):
+		if not latest_trainer_hint.is_empty():
+			var pending_snapshot := latest_trainer_hint.duplicate(true)
+			pending_snapshot["request_pending"] = true
+			return pending_snapshot
+		return {
+			"request_pending": true,
+			"request_id": pending_trainer_hint_request_id,
+		}
 	return _build_trainer_hint_for_seat(seat)
 
 
@@ -2387,6 +2462,65 @@ func _build_trainer_hint_cache_key(seat: int) -> String:
 		int(can_human_add_gang(seat)),
 		int(can_human_an_gang(seat)),
 	]
+
+
+func _start_human_trainer_hint_request(seat: int, cache_key: String) -> bool:
+	if ai_manager == null or rules == null or not bool(rules.is_neijiang_mode()):
+		return false
+	var player_state := _build_player_state(seat)
+	var table_state := _build_table_state()
+	var allow_cheat := int(players[seat].get("ai_level", int(ai_level))) == int(AILevel.CHEATING)
+	var request_id: int = ai_manager.start_turn_analysis_background(
+		player_state,
+		table_state,
+		rules,
+		ai_tuning_config,
+		hu_checker,
+		risk_analyzer,
+		allow_cheat,
+		{},
+		false,
+		true,
+		true,
+		false
+	)
+	if request_id <= 0:
+		return false
+	pending_trainer_hint_request_id = request_id
+	pending_trainer_hint_request_cache_key = cache_key
+	pending_trainer_hint_request_seat = seat
+	return true
+
+
+func _clear_pending_trainer_hint_request() -> void:
+	pending_trainer_hint_request_id = 0
+	pending_trainer_hint_request_cache_key = ""
+	pending_trainer_hint_request_seat = -1
+
+
+func _apply_trainer_hint_analysis(seat: int, analysis: Dictionary) -> bool:
+	if seat < 0 or seat >= players.size() or analysis.is_empty():
+		return false
+	var player: Dictionary = players[seat]
+	var recommended: Dictionary = analysis.get("recommended", {})
+	var can_add_gang_now: bool = seat == 0 and can_human_add_gang(seat)
+	var can_an_gang_now: bool = seat == 0 and can_human_an_gang(seat)
+	latest_trainer_hint = {
+		"recommended": recommended.duplicate(true),
+		"options": analysis.get("options", []).duplicate(true),
+		"danger_tiles": analysis.get("danger_tiles", []).duplicate(true),
+		"recommended_tile_id": int(recommended.get("tile", {}).get("id", -1)),
+		"danger_tile_ids": _extract_trainer_tile_ids(analysis.get("danger_tiles", [])),
+		"current_routes": analysis.get("current_routes", []).duplicate(true),
+		"forced_discard_suit": analysis.get("forced_discard_suit", ""),
+		"strategy_profile": analysis.get("strategy_profile", {}).duplicate(true),
+		"situation_label": _resolve_trainer_situation_label(player, analysis.get("strategy_profile", {})),
+		"can_add_gang": can_add_gang_now,
+		"can_an_gang": can_an_gang_now,
+		"can_self_hu": seat == 0 and can_human_self_hu(seat),
+		"review_count": trainer_history.size(),
+	}
+	return true
 
 
 func _extract_trainer_tile_ids(items: Array) -> Array[int]:
@@ -2678,10 +2812,11 @@ func _process_opening_bao_jiao_queue() -> void:
 			var ai_decision := _build_ai_bao_jiao_decision(seat, plan)
 			if _should_execute_ai_bao_jiao_decision(ai_decision):
 				var selected_keys := _sanitize_bao_gang_selection(plan, ai_decision.get("selected_bao_gang_keys", []))
-				if execute_human_bao_jiao(seat, selected_keys):
+				if execute_human_bao_jiao(seat, selected_keys, false):
 					players[seat]["bao_jiao_backend_mode"] = str(ai_decision.get("backend_mode", ""))
 					players[seat]["bao_jiao_decision_score"] = int(ai_decision.get("score", 0))
 					players[seat]["bao_jiao_decision_reasons"] = Array(ai_decision.get("reasons", [])).duplicate(true)
+					_mark_opening_bao_jiao_reviewed(seat)
 			else:
 				_mark_opening_bao_jiao_reviewed(seat)
 				debug_last_message = "%s 放弃开局报叫/报杠。" % _seat_display_name(seat)
@@ -2692,8 +2827,8 @@ func _process_opening_bao_jiao_queue() -> void:
 	opening_bao_jiao_pending = false
 	opening_bao_jiao_current_seat = -1
 	debug_last_message = "开局报叫/报杠询问完成，庄家准备首打。"
-	_emit_state_changed()
 	_finish_opening_discard_after_bao_jiao_window()
+	_emit_state_changed()
 
 
 func _build_ai_bao_jiao_decision(seat: int, plan: Dictionary) -> Dictionary:
@@ -2827,7 +2962,7 @@ func _enter_settlement_due_to_draw() -> void:
 	settlement_data["end_reason"] = "draw_wall_empty"
 	_build_draw_settlement_assessment()
 	_rebuild_settlement_summary()
-	debug_last_message = "Wall is empty. Draw game settlement is not implemented yet."
+	debug_last_message = "牌墙摸完，已进入流局查叫/退税结算。"
 
 
 func _enter_settlement_due_to_battle_end() -> void:
@@ -2837,7 +2972,7 @@ func _enter_settlement_due_to_battle_end() -> void:
 	settlement_data["end_reason"] = "battle_end"
 	_build_draw_settlement_assessment()
 	_rebuild_settlement_summary()
-	debug_last_message = "Blood battle reached end state. Winners: %s. Settlement details are not implemented yet." % [_format_winner_list()]
+	debug_last_message = "血战终局，已进入结算。赢家：%s" % [_format_winner_list()]
 
 
 func _draw_from_wall() -> Dictionary:
@@ -3248,6 +3383,12 @@ func _bind_native_csharp_runtime_if_available() -> bool:
 
 
 func _on_ai_turn_analysis_ready(request_id: int, seat_index: int, analysis: Dictionary) -> void:
+	if request_id == pending_trainer_hint_request_id:
+		if seat_index == pending_trainer_hint_request_seat and human_trainer_hint_enabled:
+			_apply_trainer_hint_analysis(seat_index, analysis)
+		_clear_pending_trainer_hint_request()
+		_emit_state_changed()
+		return
 	if request_id != pending_ai_turn_request_id:
 		_record_ai_chain_debug("turn_async_ready_ignored id=%d pending=%d seat=%d" % [
 			request_id,
@@ -3885,8 +4026,18 @@ func _build_turn_diagnostic_profile(seat: int, analysis: Dictionary, selected_ti
 		selected_rank,
 		strategy_profile
 	)
+	var quality_metrics := _build_turn_quality_metrics(
+		selected_candidate,
+		best_score_candidate,
+		best_safe_alternative,
+		best_speed_alternative,
+		best_big_route_alternative,
+		strategy_profile
+	)
+	for flag in Array(quality_metrics.get("quality_flags", [])):
+		_append_unique_string(flags, str(flag))
 	return {
-		"schema_version": 2,
+		"schema_version": 3,
 		"seat": seat,
 		"selected": _compact_turn_candidate_for_training(selected_candidate),
 		"selected_tile": selected_tile.duplicate(true),
@@ -3898,6 +4049,7 @@ func _build_turn_diagnostic_profile(seat: int, analysis: Dictionary, selected_ti
 		"best_speed_alternative": _compact_turn_candidate_for_training(best_speed_alternative),
 		"best_big_route_alternative": _compact_turn_candidate_for_training(best_big_route_alternative),
 		"score_gap_to_best": int(best_score_candidate.get("score", 0)) - int(selected_candidate.get("score", 0)),
+		"quality_metrics": quality_metrics,
 		"selected_score_components": _build_candidate_score_components(selected_candidate),
 		"strategy_profile": strategy_profile.duplicate(true),
 		"belief_summary": analysis.get("belief_summary", {}).duplicate(true),
@@ -3972,7 +4124,7 @@ func _build_self_action_diagnostic_profile(seat: int, decision: Dictionary) -> D
 
 
 func _build_round_diagnostic_summary() -> Dictionary:
-	var ai_core_debug := _build_ai_core_debug_snapshot()
+	var ai_core_debug := _build_full_ai_core_debug_snapshot()
 	var backend_status: Dictionary = ai_core_debug.get("backend_status", {})
 	return {
 		"schema_version": 2,
@@ -4097,6 +4249,69 @@ func _build_turn_diagnostic_flags(
 	if int(best_score.get("score", 0)) - int(selected.get("score", 0)) >= 900:
 		_append_unique_string(flags, "large_score_gap_to_best")
 	return flags
+
+
+func _build_turn_quality_metrics(
+	selected: Dictionary,
+	best_score: Dictionary,
+	best_safe: Dictionary,
+	best_speed: Dictionary,
+	best_big_route: Dictionary,
+	strategy_profile: Dictionary
+) -> Dictionary:
+	var selected_score := int(selected.get("score", 0))
+	var best_score_value := int(best_score.get("score", selected_score))
+	var score_gap := maxi(0, best_score_value - selected_score)
+	var selected_expected_net := float(selected.get("expected_net_score", 0.0))
+	var best_expected_net := float(best_score.get("expected_net_score", selected_expected_net))
+	var expected_net_gap := maxf(0.0, best_expected_net - selected_expected_net)
+	var selected_danger := int(selected.get("risk", 0))
+	var selected_shanten := int(selected.get("shanten", 8))
+	var safe_score_gap := 0
+	var safe_danger_gap := 0
+	if not best_safe.is_empty():
+		safe_score_gap = selected_score - int(best_safe.get("score", selected_score))
+		safe_danger_gap = selected_danger - int(best_safe.get("risk", selected_danger))
+	var speed_shanten_gap := 0
+	if not best_speed.is_empty():
+		speed_shanten_gap = selected_shanten - int(best_speed.get("shanten", selected_shanten))
+	var big_route_score_gap := 0
+	if not best_big_route.is_empty():
+		big_route_score_gap = int(best_big_route.get("score", selected_score)) - selected_score
+
+	var mode := str(selected.get("strategy_mode", strategy_profile.get("strategy_mode", strategy_profile.get("mode", ""))))
+	var flags: Array[String] = []
+	var opportunity_loss := minf(100.0, float(score_gap) / 18.0 + expected_net_gap * 16.0)
+	var mode_consistency := 100.0
+	if mode in ["defense", "fold"] and selected_danger >= 58 and not best_safe.is_empty() and safe_score_gap <= 500 and safe_danger_gap >= 24:
+		_append_unique_string(flags, "defense_mode_ignored_safe_alternative")
+		opportunity_loss += 18.0
+		mode_consistency -= 28.0
+	if mode == "chase" and not best_big_route.is_empty() and not _candidate_has_big_route(selected) and big_route_score_gap >= -200:
+		_append_unique_string(flags, "chase_mode_missed_big_route_value")
+		opportunity_loss += 14.0
+		mode_consistency -= 20.0
+	if mode in ["attack", "chase"] and speed_shanten_gap > 0 and score_gap < 450:
+		_append_unique_string(flags, "attack_mode_missed_speed_without_score_gain")
+		opportunity_loss += 10.0
+		mode_consistency -= 16.0
+	if score_gap >= 900:
+		_append_unique_string(flags, "large_ev_opportunity_loss")
+	if expected_net_gap >= 2.0:
+		_append_unique_string(flags, "expected_net_opportunity_loss")
+
+	opportunity_loss = clampf(opportunity_loss, 0.0, 100.0)
+	return {
+		"quality_score": int(round(100.0 - opportunity_loss)),
+		"opportunity_loss_score": int(round(opportunity_loss)),
+		"mode_consistency_score": int(round(clampf(mode_consistency, 0.0, 100.0))),
+		"expected_net_gap_to_best": snappedf(expected_net_gap, 0.001),
+		"score_gap_to_best": score_gap,
+		"risk_gap_to_best_safe": safe_danger_gap,
+		"speed_shanten_gap": speed_shanten_gap,
+		"big_route_score_gap": big_route_score_gap,
+		"quality_flags": flags,
+	}
 
 
 func _compact_turn_candidates_for_training(candidates: Array, limit: int) -> Array:
@@ -5763,7 +5978,7 @@ func _record_ai_analysis_event(event_type: String, payload: Dictionary) -> void:
 		"preset": "" if ai_tuning_config == null else str(ai_tuning_config.preset_name),
 		"tuning": {} if ai_tuning_config == null else ai_tuning_config.to_debug_dict(),
 		"ai_metrics": ai_decision_metrics.duplicate(true),
-		"backend": _build_ai_core_debug_snapshot(),
+		"backend": _build_full_ai_core_debug_snapshot(),
 		"visible_state": _build_hell_visible_state_snapshot(),
 		"hidden_state": _build_hell_hidden_state_snapshot(),
 		"payload": payload.duplicate(true),
@@ -5876,7 +6091,7 @@ func _record_ai_decision_trace_event(event_type: String, payload: Dictionary) ->
 		"discard_count": discard_pile.size(),
 		"scores": _hell_score_snapshot(),
 		"ai_metrics": ai_decision_metrics.duplicate(true),
-		"backend": _build_ai_core_debug_snapshot(),
+		"backend": _build_full_ai_core_debug_snapshot(),
 		"visible_state": _build_hell_visible_state_snapshot(),
 		"hidden_state": _build_hell_hidden_state_snapshot(),
 		"payload": payload.duplicate(true),
@@ -6268,7 +6483,9 @@ func _apply_hell_oracle_to_discard_decision(
 
 func _is_direct_hell_challenge_analysis(analysis: Dictionary) -> bool:
 	var backend := str(analysis.get("backend_mode", ""))
-	return backend == "hell_challenge_direct" or backend == "hell_challenge_direct_async"
+	return backend == "hell_challenge_direct" \
+		or backend == "hell_challenge_direct_async" \
+		or backend == "hell_challenge_direct_sync_delivery"
 
 
 func _build_direct_hell_challenge_diagnostic(analysis: Dictionary, selected_tile: Dictionary) -> Dictionary:

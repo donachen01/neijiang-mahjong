@@ -9,6 +9,9 @@ public sealed class NeijiangLimitedLookaheadEngine
 
     public NeijiangLimitedLookaheadSummary Evaluate(int[] hand18AfterDiscard, int[] remaining18, int meldCount, int currentShanten, int currentLiveUkeire, int maxDrawTypes = 18)
     {
+        if (maxDrawTypes <= 0)
+            return new NeijiangLimitedLookaheadSummary();
+
         var totalRemaining = remaining18.Sum();
         if (totalRemaining <= 0)
             return new NeijiangLimitedLookaheadSummary { Reasons = new[] { "前瞻无牌墙" } };

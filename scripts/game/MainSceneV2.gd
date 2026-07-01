@@ -2482,6 +2482,9 @@ func _recover_stale_draw_transition(snapshot: Dictionary) -> void:
 	if current_phase == GameState.RoundPhase.REACTION:
 		_clear_draw_transition_block("entered_reaction_phase")
 		return
+	if bool(snapshot.get("human_can_bao_jiao", false)) or bool(snapshot.get("human_can_pass_opening_bao_jiao", false)):
+		_clear_draw_transition_block("human_opening_bao_jiao_action_available")
+		return
 	var human_can_discard := bool(snapshot.get("human_can_discard", false))
 	var current_turn_seat := int(snapshot.get("current_turn_seat", -1))
 	var timer_running := draw_transition_timer != null and not draw_transition_timer.is_stopped()
@@ -3567,9 +3570,6 @@ func _build_display_hand_tiles(hand_tiles: Array, _last_draw_tile_id: int, ding_
 
 
 func _refresh_action_panel(snapshot: Dictionary) -> void:
-	if draw_transition_active:
-		action_panel.visible = false
-		return
 	var reaction_options: Dictionary = snapshot.get("human_reaction_options", {})
 	var can_self_hu := bool(snapshot.get("human_can_self_hu", false))
 	var can_add_gang := bool(snapshot.get("human_can_add_gang", false))
@@ -3587,6 +3587,12 @@ func _refresh_action_panel(snapshot: Dictionary) -> void:
 		or bool(reaction_options.get("can_gang", false)) \
 		or bool(reaction_options.get("can_peng", false)) \
 		or bool(reaction_options.get("can_pass", false))
+	if draw_transition_active:
+		if show_panel:
+			_clear_draw_transition_block("human_action_panel_available")
+		else:
+			action_panel.visible = false
+			return
 
 	action_panel.visible = show_panel and int(snapshot.get("current_phase", 0)) != 7
 	if bool(_player_by_seat(snapshot.get("players", []), 0).get("has_won", false)):
@@ -7175,8 +7181,9 @@ func _on_top_ai_helper_button_pressed() -> void:
 	_save_ui_preferences()
 	if not ai_helper_enabled and discard_helper_panel != null:
 		discard_helper_panel.visible = false
-	_update_top_bar(game_manager.get_snapshot())
-	_on_snapshot_changed(game_manager.get_snapshot())
+	var snapshot: Dictionary = game_manager.get_fresh_snapshot()
+	_update_top_bar(snapshot)
+	_on_snapshot_changed(snapshot)
 
 
 func _on_top_opponent_hand_button_pressed() -> void:
@@ -7473,8 +7480,8 @@ func _ensure_bao_gang_dialog() -> void:
 	bao_gang_dialog.visible = false
 	bao_gang_dialog.min_size = BAO_GANG_DIALOG_MIN_SIZE
 	bao_gang_dialog.confirmed.connect(_finish_bao_gang_dialog_selection)
-	bao_gang_dialog.canceled.connect(_finish_bao_gang_dialog_selection)
-	bao_gang_dialog.close_requested.connect(_finish_bao_gang_dialog_selection)
+	bao_gang_dialog.canceled.connect(_cancel_bao_gang_dialog_selection)
+	bao_gang_dialog.close_requested.connect(_cancel_bao_gang_dialog_selection)
 	add_child(bao_gang_dialog)
 	_apply_bao_gang_dialog_chrome()
 
@@ -7518,7 +7525,7 @@ func _show_bao_gang_selection_dialog(options: Array) -> void:
 	close_button.offset_right = -16
 	close_button.offset_bottom = 70
 	_style_bao_gang_close_button(close_button)
-	close_button.pressed.connect(_finish_bao_gang_dialog_selection)
+	close_button.pressed.connect(_cancel_bao_gang_dialog_selection)
 	surface.add_child(close_button)
 	var title := Label.new()
 	title.text = "选择要声明的报杠"
@@ -7563,6 +7570,25 @@ func _show_bao_gang_selection_dialog(options: Array) -> void:
 			check.toggled.connect(_on_bao_gang_option_toggled.bind(check, tile_visual))
 		tile_row.add_child(check)
 		bao_gang_option_checks.append(check)
+	var footer := HBoxContainer.new()
+	footer.name = "BaoGangDialogFooter"
+	footer.alignment = BoxContainer.ALIGNMENT_CENTER
+	footer.add_theme_constant_override("separation", 22)
+	content_box.add_child(footer)
+	var cancel_button := Button.new()
+	cancel_button.name = "BaoGangCancelButton"
+	cancel_button.text = "取消"
+	cancel_button.focus_mode = Control.FOCUS_NONE
+	_style_bao_gang_dialog_button(cancel_button, false)
+	cancel_button.pressed.connect(_cancel_bao_gang_dialog_selection)
+	footer.add_child(cancel_button)
+	var confirm_button := Button.new()
+	confirm_button.name = "BaoGangConfirmButton"
+	confirm_button.text = "确认报叫"
+	confirm_button.focus_mode = Control.FOCUS_NONE
+	_style_bao_gang_dialog_button(confirm_button, true)
+	confirm_button.pressed.connect(_finish_bao_gang_dialog_selection)
+	footer.add_child(confirm_button)
 	bao_gang_dialog.add_child(surface)
 	bao_gang_dialog.popup_centered(BAO_GANG_DIALOG_MIN_SIZE)
 
@@ -7828,6 +7854,14 @@ func _finish_bao_gang_dialog_selection() -> void:
 		if check.button_pressed:
 			selected_keys.append(str(check.get_meta("bao_gang_key", "")))
 	_execute_human_bao_jiao_with_selection(selected_keys)
+
+
+func _cancel_bao_gang_dialog_selection() -> void:
+	if bao_gang_dialog_committed:
+		return
+	bao_gang_dialog_committed = true
+	if bao_gang_dialog != null:
+		bao_gang_dialog.hide()
 
 
 func _execute_human_bao_jiao_with_selection(selected_keys: Array) -> void:

@@ -36,7 +36,7 @@ var last_native_reaction_error: String = ""
 var last_native_turn_raw_summary: String = ""
 var last_native_reaction_raw_summary: String = ""
 var is_pumping_async_requests: bool = false
-var native_async_enabled: bool = true
+var native_async_enabled: bool = false
 
 
 func _should_use_csharp_backend(rules_config) -> bool:
@@ -91,7 +91,7 @@ func analyze_reaction(candidate: Dictionary, player_state: Dictionary, table_sta
 
 
 func analyze_turn_lightweight(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false) -> Dictionary:
-	var result := _compute_turn_analysis(player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, "lightweight", false)
+	var result := _compute_turn_analysis(player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, "lightweight", false, true, true)
 	_finalize_turn_analysis(int(player_state.get("seat", -1)), result)
 	return result.get("analysis", {}).duplicate(true)
 
@@ -383,15 +383,17 @@ func request_reaction_analysis_async(candidate: Dictionary, player_state: Dictio
 	return request_id
 
 
-func _analyze_discard_via_native_runtime(player_state: Dictionary, table_state: Dictionary, rules_config) -> Dictionary:
+func _analyze_discard_via_native_runtime(player_state: Dictionary, table_state: Dictionary, rules_config, force_lightweight: bool = false, compact_result: bool = false) -> Dictionary:
 	if not has_native_csharp_runtime():
 		last_native_turn_raw_summary = "native_runtime_unavailable"
 		return {}
-	var payload: Dictionary = csharp_bridge.build_discard_transport_payload(player_state, table_state, rules_config)
-	last_native_turn_raw_summary = "payload seat=%d hand_sum=%d wall=%d" % [
+	var payload: Dictionary = csharp_bridge.build_discard_transport_payload(player_state, table_state, rules_config, force_lightweight, compact_result)
+	last_native_turn_raw_summary = "payload seat=%d hand_sum=%d wall=%d light=%s compact=%s" % [
 		int(payload.get("seatIndex", -1)),
 		_sum_int_array(payload.get("hand18", [])),
 		int(payload.get("wallCount", -1)),
+		str(force_lightweight),
+		str(compact_result),
 	]
 	var raw := str(native_csharp_runtime.call("AnalyzeDiscardJson", JSON.stringify(payload)))
 	last_native_turn_raw_summary = "%s raw=%s" % [last_native_turn_raw_summary, raw.left(700)]
@@ -417,9 +419,9 @@ func _analyze_reaction_via_native_runtime(candidate: Dictionary, player_state: D
 	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
 
 
-func _start_native_turn_analysis_background(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config, request_key: String = "", hell_payload: Dictionary = {}) -> bool:
+func _start_native_turn_analysis_background(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config, request_key: String = "", hell_payload: Dictionary = {}, force_lightweight: bool = false, compact_result: bool = false) -> bool:
 	var payload_started_at := Time.get_ticks_msec()
-	var payload: Dictionary = csharp_bridge.build_discard_transport_payload(player_state, table_state, rules_config)
+	var payload: Dictionary = csharp_bridge.build_discard_transport_payload(player_state, table_state, rules_config, force_lightweight, compact_result)
 	var use_hell_challenge := not hell_payload.is_empty() and has_native_hell_challenge_runtime()
 	if use_hell_challenge:
 		for key in hell_payload.keys():
@@ -446,6 +448,8 @@ func _start_native_turn_analysis_background(request_id: int, player_state: Dicti
 		"table_state": table_state.duplicate(true),
 		"rules_config": rules_config,
 		"hell_challenge": use_hell_challenge,
+		"force_lightweight": force_lightweight,
+		"compact_result": compact_result,
 		"payload_ms": payload_ms,
 		"started_at_ms": Time.get_ticks_msec(),
 		"request_key": request_key,
@@ -454,12 +458,12 @@ func _start_native_turn_analysis_background(request_id: int, player_state: Dicti
 	return true
 
 
-func _start_native_turn_analysis_sync_delivery(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool, request_key: String = "", hell_payload: Dictionary = {}) -> bool:
+func _start_native_turn_analysis_sync_delivery(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool, request_key: String = "", hell_payload: Dictionary = {}, force_lightweight: bool = false, compact_result: bool = false) -> bool:
 	var started_at_ms := Time.get_ticks_msec()
 	var analysis: Dictionary = {}
 	var active_backend := "csharp_native_sync_delivery"
 	if not hell_payload.is_empty() and has_native_hell_challenge_runtime():
-		var payload: Dictionary = csharp_bridge.build_discard_transport_payload(player_state, table_state, rules_config)
+		var payload: Dictionary = csharp_bridge.build_discard_transport_payload(player_state, table_state, rules_config, force_lightweight, compact_result)
 		for key in hell_payload.keys():
 			payload[key] = hell_payload[key]
 		var raw := str(native_csharp_runtime.call("AnalyzeHellChallengeDiscardJson", JSON.stringify(payload)))
@@ -474,7 +478,7 @@ func _start_native_turn_analysis_sync_delivery(request_id: int, player_state: Di
 			analysis = _build_csharp_discard_analysis(player_state, native_result, rules_config, csharp_bridge, "hell_challenge_direct_sync_delivery", table_state)
 			active_backend = "hell_challenge_direct_sync_delivery"
 	else:
-		var result := _compute_turn_analysis(player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, "sync_delivery_%d" % request_id)
+		var result := _compute_turn_analysis(player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, "sync_delivery_%d" % request_id, false, force_lightweight, compact_result)
 		analysis = result.get("analysis", {}).duplicate(true)
 		active_backend = "csharp_native_sync_delivery" if str(result.get("active_backend", "")) == "csharp_native" else str(result.get("active_backend", "csharp_native_sync_delivery"))
 	if analysis.is_empty():
@@ -891,9 +895,9 @@ func _infer_csharp_turn_gang_subtype(player_state: Dictionary, tile_type: int, a
 	return ""
 
 
-func start_turn_analysis_background(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false, hell_payload: Dictionary = {}) -> int:
+func start_turn_analysis_background(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false, hell_payload: Dictionary = {}, force_lightweight: bool = false, compact_result: bool = false, force_native_async: bool = false, allow_sync_delivery: bool = true) -> int:
 	var seat := int(player_state.get("seat", -1))
-	var request_key := _build_active_turn_request_key(player_state, table_state, rules_config, allow_cheat)
+	var request_key := _build_active_turn_request_key(player_state, table_state, rules_config, allow_cheat, force_lightweight)
 	if not hell_payload.is_empty():
 		request_key = "%s|hell_challenge" % request_key
 	var existing_request_id := _find_active_async_request(request_key)
@@ -901,11 +905,14 @@ func start_turn_analysis_background(player_state: Dictionary, table_state: Dicti
 		_record_duplicate_async_request("turn", seat, existing_request_id, request_key)
 		return existing_request_id
 	var request_id := _begin_request("turn", seat)
+	if allow_sync_delivery and not force_native_async and _start_native_turn_analysis_sync_delivery(request_id, player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, request_key, hell_payload, force_lightweight, compact_result):
+		return request_id
 	if has_native_csharp_async_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
-		if should_use_native_async_requests() and _start_native_turn_analysis_background(request_id, player_state, table_state, rules_config, request_key, hell_payload):
+		if (force_native_async or should_use_native_async_requests()) and _start_native_turn_analysis_background(request_id, player_state, table_state, rules_config, request_key, hell_payload, force_lightweight, compact_result):
 			return request_id
-		if _start_native_turn_analysis_sync_delivery(request_id, player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, request_key, hell_payload):
-			return request_id
+		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
+		return 0
+	if allow_sync_delivery:
 		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
 		return 0
 	var thread := Thread.new()
@@ -924,7 +931,9 @@ func start_turn_analysis_background(player_state: Dictionary, table_state: Dicti
 		ai_config,
 		hu_checker,
 		risk_analyzer,
-		allow_cheat
+		allow_cheat,
+		force_lightweight,
+		compact_result
 	))
 	if started != OK:
 		_forget_active_async_request(request_id, active_async_requests.get(request_id, {}))
@@ -933,7 +942,7 @@ func start_turn_analysis_background(player_state: Dictionary, table_state: Dicti
 	return request_id
 
 
-func start_reaction_analysis_background(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, ai_config, hu_checker, allow_cheat: bool = false, hell_payload: Dictionary = {}) -> int:
+func start_reaction_analysis_background(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, ai_config, hu_checker, allow_cheat: bool = false, hell_payload: Dictionary = {}, force_native_async: bool = false, allow_sync_delivery: bool = true) -> int:
 	var seat := int(player_state.get("seat", -1))
 	var request_key := _build_active_reaction_request_key(candidate, player_state, table_state, discard_context, rules_config, allow_cheat)
 	if not hell_payload.is_empty():
@@ -943,11 +952,14 @@ func start_reaction_analysis_background(candidate: Dictionary, player_state: Dic
 		_record_duplicate_async_request("reaction", seat, existing_request_id, request_key)
 		return existing_request_id
 	var request_id := _begin_request("reaction", seat)
+	if allow_sync_delivery and not force_native_async and _start_native_reaction_analysis_sync_delivery(request_id, candidate, player_state, table_state, discard_context, rules_config, ai_config, hu_checker, allow_cheat, request_key, hell_payload):
+		return request_id
 	if has_native_csharp_async_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
-		if should_use_native_async_requests() and _start_native_reaction_analysis_background(request_id, candidate, player_state, table_state, discard_context, rules_config, request_key, hell_payload):
+		if (force_native_async or should_use_native_async_requests()) and _start_native_reaction_analysis_background(request_id, candidate, player_state, table_state, discard_context, rules_config, request_key, hell_payload):
 			return request_id
-		if _start_native_reaction_analysis_sync_delivery(request_id, candidate, player_state, table_state, discard_context, rules_config, ai_config, hu_checker, allow_cheat, request_key, hell_payload):
-			return request_id
+		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
+		return 0
+	if allow_sync_delivery:
 		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
 		return 0
 	var thread := Thread.new()
@@ -1364,8 +1376,8 @@ func _record_duplicate_async_request(kind: String, seat: int, request_id: int, r
 	}
 
 
-func _build_active_turn_request_key(player_state: Dictionary, table_state: Dictionary, rules_config, allow_cheat: bool) -> String:
-	return "turn|%s" % _build_turn_cache_key(player_state, table_state, rules_config, allow_cheat, false)
+func _build_active_turn_request_key(player_state: Dictionary, table_state: Dictionary, rules_config, allow_cheat: bool, force_lightweight: bool = false) -> String:
+	return "turn|%s" % _build_turn_cache_key(player_state, table_state, rules_config, allow_cheat, false, force_lightweight)
 
 
 func _build_active_reaction_request_key(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, allow_cheat: bool) -> String:
@@ -1480,8 +1492,8 @@ func _finish_request(kind: String, request_id: int, seat: int, analysis: Diction
 		}
 
 
-func _compute_turn_analysis(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool, request_tag: String, force_gdscript: bool = false) -> Dictionary:
-	var cache_key := _build_turn_cache_key(player_state, table_state, rules_config, allow_cheat, force_gdscript)
+func _compute_turn_analysis(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool, request_tag: String, force_gdscript: bool = false, force_lightweight: bool = false, compact_result: bool = false) -> Dictionary:
+	var cache_key := _build_turn_cache_key(player_state, table_state, rules_config, allow_cheat, force_gdscript, force_lightweight)
 	var cached := _get_cached_turn_analysis(cache_key)
 	if not cached.is_empty():
 		performance_metrics["turn_cache_hits"] = int(performance_metrics.get("turn_cache_hits", 0)) + 1
@@ -1496,7 +1508,7 @@ func _compute_turn_analysis(player_state: Dictionary, table_state: Dictionary, r
 	var active_backend := "csharp_required"
 	last_native_turn_error = ""
 	if not force_gdscript and has_native_csharp_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
-		var native_result := _analyze_discard_via_native_runtime(player_state, table_state, rules_config)
+		var native_result := _analyze_discard_via_native_runtime(player_state, table_state, rules_config, force_lightweight, compact_result)
 		var native_error := _validate_native_discard_result(native_result)
 		if native_error.is_empty():
 			analysis = _build_csharp_discard_analysis(player_state, native_result, rules_config, local_csharp_bridge, "csharp_native", table_state)
@@ -1515,7 +1527,7 @@ func _compute_turn_analysis(player_state: Dictionary, table_state: Dictionary, r
 					"native_error": native_error,
 				}
 	elif not force_gdscript and _should_use_csharp_backend(rules_config) and local_csharp_bridge.is_available():
-		var csharp_result := local_csharp_bridge.analyze_discard(player_state, table_state, rules_config, request_tag)
+		var csharp_result := local_csharp_bridge.analyze_discard(player_state, table_state, rules_config, request_tag, force_lightweight, compact_result)
 		if not csharp_result.is_empty():
 			analysis = _build_csharp_discard_analysis(player_state, csharp_result, rules_config, local_csharp_bridge, "csharp_cli", table_state)
 			active_backend = "csharp_cli"
@@ -1642,12 +1654,12 @@ func _finalize_reaction_analysis(seat: int, result: Dictionary) -> void:
 	}
 
 
-func _thread_compute_turn(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool) -> Dictionary:
+func _thread_compute_turn(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool, force_lightweight: bool = false, compact_result: bool = false) -> Dictionary:
 	return {
 		"request_id": request_id,
 		"kind": "turn",
 		"seat": int(player_state.get("seat", -1)),
-		"result": _compute_turn_analysis(player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, "bg_%d" % request_id),
+		"result": _compute_turn_analysis(player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, "bg_%d" % request_id, false, force_lightweight, compact_result),
 	}
 
 
@@ -1682,7 +1694,7 @@ func _deliver_async_payload(payload: Dictionary) -> int:
 	return 0
 
 
-func _build_turn_cache_key(player_state: Dictionary, table_state: Dictionary, rules_config, allow_cheat: bool, force_gdscript: bool) -> String:
+func _build_turn_cache_key(player_state: Dictionary, table_state: Dictionary, rules_config, allow_cheat: bool, force_gdscript: bool, force_lightweight: bool = false) -> String:
 	var active_suits: Array = csharp_bridge.tile_codec.resolve_active_suits(rules_config)
 	var parts: Array[String] = []
 	parts.append("seat=%d" % int(player_state.get("seat", -1)))
@@ -1691,6 +1703,7 @@ func _build_turn_cache_key(player_state: Dictionary, table_state: Dictionary, ru
 	parts.append("dealer=%d" % int(table_state.get("dealer_seat", -1)))
 	parts.append("cheat=%d" % int(allow_cheat))
 	parts.append("force_gd=%d" % int(force_gdscript))
+	parts.append("light=%d" % int(force_lightweight))
 	parts.append("prefer_csharp=%d" % int(prefer_csharp_backend))
 	parts.append("self_bao=%d" % int(bool(player_state.get("bao_jiao", false))))
 	var last_draw: Dictionary = table_state.get("last_draw_tile", {})

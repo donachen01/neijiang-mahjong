@@ -9,7 +9,6 @@ This document defines the current test gate for the Neijiang Mahjong project. Th
 | Rule Smoke | Current Neijiang rule and round-flow invariants | `tests/current/NeijiangCurrentSmokeRunner.gd` | Every change |
 | C# Contract | C# result mapping into Godot analysis/execution fields | `tests/current/NeijiangCSharpContractRunner.gd` | Every AI or bridge change |
 | BaoJiao/BaoGang | Opening bao jiao/bao gang and whitelist lock behavior | `tests/current/NeijiangBaoJiaoBaoGangRunner.gd` | Rule and AI self-action changes |
-| AI Decision | C# discard/reaction/self-action targeted cases | `tests/current/NeijiangAiDecisionRunner.gd` | AI algorithm changes |
 | AI Panel | UI helper text and C# candidate detail display | `tests/current/NeijiangAiPanelRunner.gd` | UI/helper changes |
 | Benchmark Smoke | Fixed-seed AI round pressure checks | `tests/current/NeijiangAiBenchmarkSmokeRunner.gd` | Release or major AI changes |
 
@@ -18,8 +17,8 @@ This document defines the current test gate for the Neijiang Mahjong project. Th
 ```bash
 /Applications/Godot.NET.app/Contents/MacOS/Godot --headless --path . --script res://tests/current/NeijiangCurrentSmokeRunner.gd
 /Applications/Godot.NET.app/Contents/MacOS/Godot --headless --path . --script res://tests/current/NeijiangCSharpContractRunner.gd
-/Applications/Godot.NET.app/Contents/MacOS/Godot --headless --path . --script res://tests/current/NeijiangBaoJiaoBaoGangRunner.gd
 /Applications/Godot.NET.app/Contents/MacOS/Godot --headless --path . --script res://tests/current/NeijiangAiPanelRunner.gd
+/Applications/Godot.NET.app/Contents/MacOS/Godot --headless --path . --script res://tests/current/NeijiangBaoJiaoBaoGangRunner.gd
 dotnet run --project dotnet/AI.Core.Smoke/AI.Core.Smoke.csproj
 ```
 
@@ -35,16 +34,31 @@ Release A/B calibration:
 /Applications/Godot.NET.app/Contents/MacOS/Godot --headless --path . --script res://tests/current/NeijiangAiBenchmarkSmokeRunner.gd -- --rounds=40 --max-steps=5000 --preset=bone_ash --compare-preset=advanced --seed=20260514
 ```
 
-## Existing Test Inventory
+## Current Test Inventory
 
 | Runner | Count | Current Role | Migration Decision |
 |---|---:|---|---|
-| `tests/NeijiangRegressionRunner.gd` | 82 | Monolithic mixed suite for Neijiang rules, AI, bridge, async, learning, and host mode | Migrate useful cases into focused current suites; keep temporarily as legacy reference. |
-| `tests/DingQueRegressionRunner.gd` | 29 | Sichuan/ding-que and older shared rule expectations | Keep as legacy/shared-rule reference; not a primary Neijiang acceptance gate. |
-| `tests/NeijiangUiRegressionRunner.gd` | 6 | Current UI smoke and AI helper panel checks | Migrate into AI Panel and UI smoke suites. |
-| `tests/NeijiangBaoGangRegressionRunner.gd` | 6 | Current bao jiao/bao gang focused regression | Migrate directly into current BaoJiao/BaoGang suite. |
-| `tests/ding_que_regression.gd` | 5 | Older ding-que helper tests | Keep as legacy/shared-rule reference. |
-| `tests/ai_pressure_benchmark.gd` | N/A | Existing round benchmark harness | Refactor into fixed-seed benchmark smoke and release benchmark. |
+| `tests/current/NeijiangCurrentSmokeRunner.gd` | 22 | Current Neijiang rules, startup defaults, bao-jiao queue, stale decision rejection | Primary rule and round-flow gate. |
+| `tests/current/NeijiangCSharpContractRunner.gd` | 19 | C# to Godot action/candidate/reaction/self-action mapping | Primary AI bridge gate. |
+| `tests/current/NeijiangBaoJiaoBaoGangRunner.gd` | inherited | Opening bao-jiao/bao-gang and whitelist lock behavior | Current focused bao-jiao gate; extends `tests/NeijiangBaoGangRegressionRunner.gd` until fully flattened. |
+| `tests/current/NeijiangAiPanelRunner.gd` | inherited | Helper text, selected candidate detail, and UI command surface | Current UI/helper gate; extends `tests/NeijiangUiRegressionRunner.gd` until fully flattened. |
+| `tests/current/NeijiangAiBenchmarkSmokeRunner.gd` | N/A | Fixed-seed AI pressure benchmark wrapper | Current benchmark gate; extends `tests/ai_pressure_benchmark.gd`. |
+| `tests/tools/test_training_tools.py` | 8 | Training index, replay comparison, and discard-audit tooling | Python tooling gate. |
+
+## Retired Legacy Test Files
+
+The following old one-off or monolithic runners were removed after the cases they still need are covered by the current gates above or by C# smoke tests:
+
+- `tests/NeijiangRegressionRunner.gd`
+- `tests/NeijiangRegressionRunner.tscn`
+- `tests/DingQueRegressionRunner.gd`
+- `tests/DingQueRegressionRunner.tscn`
+- `tests/ding_que_regression.gd`
+- `tests/VerifySixIssues.gd`
+- `tests/V17LayoutContract.gd`
+- `tests/TopOpponentMeldLayoutRegressionRunner.gd`
+- `tests/OpeningBaoJiaoLiveReplayRunner.gd`
+- `tests/current/NeijiangStaleAiTurnDecisionRunner.gd`
 
 ## Phase 0 Migration Groups
 

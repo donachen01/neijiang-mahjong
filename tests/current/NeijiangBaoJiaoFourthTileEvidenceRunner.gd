@@ -40,6 +40,8 @@ func _run() -> void:
 		"generated_at": Time.get_datetime_string_from_system(),
 		"cases": cases,
 	}
+	var output_dir := ProjectSettings.globalize_path(OUTPUT_PATH.get_base_dir())
+	DirAccess.make_dir_recursive_absolute(output_dir)
 	var file := FileAccess.open(OUTPUT_PATH, FileAccess.WRITE)
 	if file == null:
 		push_error("failed to write evidence to %s" % OUTPUT_PATH)
@@ -199,7 +201,11 @@ func _run_native_backend_path_check(runtime: Object, hand_tiles: Array, last_dra
 		null,
 		null,
 		false,
-		{}
+		{},
+		false,
+		false,
+		native_async_enabled,
+		not native_async_enabled
 	)
 	var delivered := 0
 	if request_id > 0:
