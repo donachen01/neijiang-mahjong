@@ -15,6 +15,17 @@ class PendingNativeRuntime:
 		start_count += 1
 		return 901
 
+	func AnalyzeDiscardJson(_payload_json: String) -> String:
+		return JSON.stringify({
+			"ok": true,
+			"action": "discard",
+			"tileType": 0,
+			"score": 100,
+			"candidates": [
+				{"tileType": 0, "score": 100, "shanten": 2, "ukeire": 8}
+			],
+		})
+
 	func StartAnalyzeReactionJson(_payload_json: String) -> int:
 		start_count += 1
 		return 902
@@ -47,15 +58,14 @@ func _run() -> void:
 	_run_test("native_runtime_mobile_compact_discard_returns_action_candidate", _test_native_runtime_mobile_compact_discard_returns_action_candidate, failures)
 	_run_test("ai_manager_sync_hell_challenge_preserves_pressure_diagnostics", _test_ai_manager_sync_hell_challenge_preserves_pressure_diagnostics, failures)
 	_run_test("ai_manager_sync_hell_challenge_bao_jiao_uses_last_draw", _test_ai_manager_sync_hell_challenge_bao_jiao_uses_last_draw, failures)
-	_run_test("ai_manager_native_async_bao_jiao_unreported_fourth_discards_last_draw", _test_ai_manager_native_async_bao_jiao_unreported_fourth_discards_last_draw, failures)
-	_run_test("ai_manager_sync_delivery_bao_jiao_unreported_fourth_discards_last_draw", _test_ai_manager_sync_delivery_bao_jiao_unreported_fourth_discards_last_draw, failures)
+	_run_test("ai_manager_sync_compat_bao_jiao_unreported_fourth_discards_last_draw", _test_ai_manager_sync_compat_bao_jiao_unreported_fourth_discards_last_draw, failures)
 	_run_test("ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction", _test_ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction, failures)
-	_run_test("ai_manager_uses_native_async_hell_challenge_discard_path", _test_ai_manager_uses_native_async_hell_challenge_discard_path, failures)
+	_run_test("ai_manager_uses_sync_compat_hell_challenge_discard_path", _test_ai_manager_uses_sync_compat_hell_challenge_discard_path, failures)
 	_run_test("ai_manager_sync_hell_challenge_reaction_blocks_human", _test_ai_manager_sync_hell_challenge_reaction_blocks_human, failures)
-	_run_test("ai_manager_async_hell_challenge_reaction_blocks_human", _test_ai_manager_async_hell_challenge_reaction_blocks_human, failures)
-	_run_test("ai_manager_uses_native_async_reaction_path", _test_ai_manager_uses_native_async_reaction_path, failures)
-	_run_test("ai_manager_reuses_duplicate_native_reaction_request", _test_ai_manager_reuses_duplicate_native_reaction_request, failures)
-	_run_test("ai_manager_preserves_pending_native_turn_request", _test_ai_manager_preserves_pending_native_turn_request, failures)
+	_run_test("ai_manager_sync_compat_hell_challenge_reaction_blocks_human", _test_ai_manager_sync_compat_hell_challenge_reaction_blocks_human, failures)
+	_run_test("ai_manager_uses_sync_compat_reaction_path", _test_ai_manager_uses_sync_compat_reaction_path, failures)
+	_run_test("ai_manager_sync_compat_reaction_does_not_create_pending_request", _test_ai_manager_sync_compat_reaction_does_not_create_pending_request, failures)
+	_run_test("ai_manager_sync_compat_turn_does_not_call_native_start", _test_ai_manager_sync_compat_turn_does_not_call_native_start, failures)
 	if failures.is_empty():
 		print("NEIJIANG CSHARP CONTRACT OK")
 		quit(0)
@@ -404,7 +414,7 @@ func _test_native_runtime_mobile_compact_discard_returns_action_candidate():
 	return "timed out waiting for native compact discard result"
 
 
-func _test_ai_manager_uses_native_async_hell_challenge_discard_path():
+func _test_ai_manager_uses_sync_compat_hell_challenge_discard_path():
 	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
 	if runtime == null:
 		return "expected native C# runtime autoload"
@@ -427,32 +437,30 @@ func _test_ai_manager_uses_native_async_hell_challenge_discard_path():
 		false
 	)
 	if request_id <= 0:
-		return "expected AIManager native async hell challenge request id"
-	for _attempt in range(400):
-		if ai_manager.pump_async_requests() > 0:
-			var snapshot: Dictionary = ai_manager.latest_turn_snapshot
-			var analysis: Dictionary = snapshot.get("analysis", {})
-			var recommended: Dictionary = analysis.get("recommended", {})
-			if str(snapshot.get("active_backend", "")) != "hell_challenge_direct_async":
-				return "expected hell challenge async backend, got %s" % [snapshot]
-			if str(analysis.get("backend_mode", "")) != "hell_challenge_direct_async":
-				return "expected mapped hell challenge backend_mode, got %s" % [analysis]
-			if int(recommended.get("csharp_tile_type", -1)) == 5:
-				return "expected direct hell challenge to avoid feeding human peng tile 5, got %s" % [recommended]
-			var native: Dictionary = analysis.get("csharp_result", {})
-			if str(native.get("category", "")) != "hell_challenge_direct":
-				return "expected native category hell_challenge_direct, got %s" % [native]
-			if int(native.get("humanPressureLevel", 0)) != 4:
-				return "expected leading human pressure level 4, got %s" % [native]
-			if str(native.get("teamRole", "")) != "lead_suppressor":
-				return "expected async hell challenge team role lead_suppressor, got %s" % [native]
-			if int(native.get("teamPressureBonus", 0)) <= 0:
-				return "expected async hell challenge team pressure bonus, got %s" % [native]
-			if bool(native.get("oracleFeedsHumanPeng", true)):
-				return "expected selected direct discard not to feed human peng, got %s" % [native]
-			return true
-		OS.delay_msec(10)
-	return "timed out waiting for AIManager native async hell challenge discard"
+		return "expected AIManager sync compat hell challenge request id"
+	if ai_manager.has_pending_async_requests():
+		return "expected sync compat hell challenge discard to avoid pending async requests"
+	var snapshot: Dictionary = ai_manager.latest_turn_snapshot
+	var analysis: Dictionary = snapshot.get("analysis", {})
+	var recommended: Dictionary = analysis.get("recommended", {})
+	if str(snapshot.get("active_backend", "")) != "hell_challenge_direct":
+		return "expected hell challenge direct backend, got %s" % [snapshot]
+	if str(analysis.get("backend_mode", "")) != "hell_challenge_direct":
+		return "expected mapped hell challenge backend_mode, got %s" % [analysis]
+	if int(recommended.get("csharp_tile_type", -1)) == 5:
+		return "expected direct hell challenge to avoid feeding human peng tile 5, got %s" % [recommended]
+	var native: Dictionary = analysis.get("csharp_result", {})
+	if str(native.get("category", "")) != "hell_challenge_direct":
+		return "expected native category hell_challenge_direct, got %s" % [native]
+	if int(native.get("humanPressureLevel", 0)) != 4:
+		return "expected leading human pressure level 4, got %s" % [native]
+	if str(native.get("teamRole", "")) != "lead_suppressor":
+		return "expected hell challenge team role lead_suppressor, got %s" % [native]
+	if int(native.get("teamPressureBonus", 0)) <= 0:
+		return "expected hell challenge team pressure bonus, got %s" % [native]
+	if bool(native.get("oracleFeedsHumanPeng", true)):
+		return "expected selected direct discard not to feed human peng, got %s" % [native]
+	return true
 
 
 func _test_ai_manager_sync_hell_challenge_preserves_pressure_diagnostics():
@@ -560,21 +568,17 @@ func _test_ai_manager_sync_hell_challenge_bao_jiao_uses_last_draw():
 	return true
 
 
-func _test_ai_manager_native_async_bao_jiao_unreported_fourth_discards_last_draw():
-	return _assert_ai_manager_bao_jiao_unreported_fourth_discards_last_draw(true, "csharp_native_async")
+func _test_ai_manager_sync_compat_bao_jiao_unreported_fourth_discards_last_draw():
+	return _assert_ai_manager_bao_jiao_unreported_fourth_discards_last_draw()
 
 
-func _test_ai_manager_sync_delivery_bao_jiao_unreported_fourth_discards_last_draw():
-	return _assert_ai_manager_bao_jiao_unreported_fourth_discards_last_draw(false, "csharp_native_sync_delivery")
-
-
-func _assert_ai_manager_bao_jiao_unreported_fourth_discards_last_draw(use_native_async: bool, expected_backend: String):
+func _assert_ai_manager_bao_jiao_unreported_fourth_discards_last_draw():
 	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
 	if runtime == null:
 		return "expected native C# runtime autoload"
 	var ai_manager = AI_MANAGER_SCRIPT.new()
 	ai_manager.set_native_csharp_runtime(runtime)
-	ai_manager.set_native_async_enabled(use_native_async)
+	ai_manager.set_native_async_enabled(true)
 	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
 	var locked_9tong_a := _make_tile(601, "tong", 9)
 	var locked_9tong_b := _make_tile(602, "tong", 9)
@@ -632,29 +636,25 @@ func _assert_ai_manager_bao_jiao_unreported_fourth_discards_last_draw(use_native
 		{},
 		false,
 		false,
-		use_native_async,
-		not use_native_async
+		true,
+		false
 	)
 	if request_id <= 0:
 		return "expected turn request id, status=%s" % [ai_manager.get_backend_status()]
-	for _attempt in range(400):
-		var delivered := ai_manager.pump_async_requests()
-		if delivered <= 0:
-			OS.delay_msec(10)
-			continue
-		var latest: Dictionary = ai_manager.latest_turn_snapshot
-		var analysis: Dictionary = latest.get("analysis", {})
-		if str(analysis.get("backend_mode", "")) != expected_backend:
-			return "expected backend %s, got %s" % [expected_backend, analysis]
-		var native: Dictionary = analysis.get("csharp_result", {})
-		if int(native.get("tileType", -1)) != 17:
-			return "expected C# backend tileType=17 for last-draw 9筒, got %s" % [native]
-		var recommended: Dictionary = analysis.get("recommended", {})
-		var tile: Dictionary = recommended.get("tile", {})
-		if int(tile.get("id", -1)) != int(last_draw_9tong.get("id", -1)):
-			return "expected recommended tile to be last draw 604, got %s" % [recommended]
-		return true
-	return "timed out waiting for bao-jiao discard via %s; status=%s" % [expected_backend, ai_manager.get_backend_status()]
+	if ai_manager.has_pending_async_requests():
+		return "expected sync compat bao-jiao discard to avoid pending async requests"
+	var latest: Dictionary = ai_manager.latest_turn_snapshot
+	var analysis: Dictionary = latest.get("analysis", {})
+	if str(analysis.get("backend_mode", "")) != "csharp_native":
+		return "expected backend csharp_native, got %s" % [analysis]
+	var native: Dictionary = analysis.get("csharp_result", {})
+	if int(native.get("tileType", -1)) != 17:
+		return "expected C# backend tileType=17 for last-draw 9筒, got %s" % [native]
+	var recommended: Dictionary = analysis.get("recommended", {})
+	var tile: Dictionary = recommended.get("tile", {})
+	if int(tile.get("id", -1)) != int(last_draw_9tong.get("id", -1)):
+		return "expected recommended tile to be last draw 604, got %s" % [recommended]
+	return true
 
 
 func _test_ai_manager_sync_hell_challenge_allows_ordinary_peng_interaction():
@@ -705,7 +705,7 @@ func _test_ai_manager_sync_hell_challenge_reaction_blocks_human():
 	return _assert_hell_challenge_reaction_analysis(analysis, "hell_challenge_reaction_direct")
 
 
-func _test_ai_manager_async_hell_challenge_reaction_blocks_human():
+func _test_ai_manager_sync_compat_hell_challenge_reaction_blocks_human():
 	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
 	if runtime == null:
 		return "expected native C# runtime autoload"
@@ -727,15 +727,13 @@ func _test_ai_manager_async_hell_challenge_reaction_blocks_human():
 		false
 	)
 	if request_id <= 0:
-		return "expected AIManager native async hell challenge reaction request id"
-	for _attempt in range(400):
-		if ai_manager.pump_async_requests() > 0:
-			var snapshot: Dictionary = ai_manager.latest_reaction_snapshot
-			if str(snapshot.get("active_backend", "")) != "hell_challenge_reaction_direct_async":
-				return "expected hell challenge reaction async backend, got %s" % [snapshot]
-			return _assert_hell_challenge_reaction_analysis(snapshot.get("analysis", {}), "hell_challenge_reaction_direct_async")
-		OS.delay_msec(10)
-	return "timed out waiting for AIManager native async hell challenge reaction"
+		return "expected AIManager sync compat hell challenge reaction request id"
+	if ai_manager.has_pending_async_requests():
+		return "expected sync compat hell challenge reaction to avoid pending async requests"
+	var snapshot: Dictionary = ai_manager.latest_reaction_snapshot
+	if str(snapshot.get("active_backend", "")) != "hell_challenge_reaction_direct":
+		return "expected hell challenge reaction direct backend, got %s" % [snapshot]
+	return _assert_hell_challenge_reaction_analysis(snapshot.get("analysis", {}), "hell_challenge_reaction_direct")
 
 
 func _assert_hell_challenge_reaction_analysis(analysis: Dictionary, expected_backend: String):
@@ -756,7 +754,7 @@ func _assert_hell_challenge_reaction_analysis(analysis: Dictionary, expected_bac
 	return true
 
 
-func _test_ai_manager_uses_native_async_reaction_path():
+func _test_ai_manager_uses_sync_compat_reaction_path():
 	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
 	if runtime == null:
 		return "expected native C# runtime autoload"
@@ -793,21 +791,19 @@ func _test_ai_manager_uses_native_async_reaction_path():
 		false
 	)
 	if request_id <= 0:
-		return "expected AIManager native async request id"
-	for _attempt in range(80):
-		if ai_manager.pump_async_requests() > 0:
-			var snapshot: Dictionary = ai_manager.latest_reaction_snapshot
-			var analysis: Dictionary = snapshot.get("analysis", {})
-			if str(snapshot.get("active_backend", "")) != "hybrid_csharp_native_async":
-				return "expected async backend, got %s" % [snapshot]
-			if str(analysis.get("action", "")) != "hu":
-				return "expected async mapped hu analysis, got %s" % [analysis]
-			return true
-		OS.delay_msec(10)
-	return "timed out waiting for AIManager native async reaction"
+		return "expected AIManager sync compat request id"
+	if ai_manager.has_pending_async_requests():
+		return "expected sync compat reaction to avoid pending async requests"
+	var snapshot: Dictionary = ai_manager.latest_reaction_snapshot
+	var analysis: Dictionary = snapshot.get("analysis", {})
+	if str(snapshot.get("active_backend", "")) != "hybrid_csharp_native":
+		return "expected sync native backend, got %s" % [snapshot]
+	if str(analysis.get("action", "")) != "hu":
+		return "expected sync mapped hu analysis, got %s" % [analysis]
+	return true
 
 
-func _test_ai_manager_reuses_duplicate_native_reaction_request():
+func _test_ai_manager_sync_compat_reaction_does_not_create_pending_request():
 	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
 	if runtime == null:
 		return "expected native C# runtime autoload"
@@ -846,29 +842,20 @@ func _test_ai_manager_reuses_duplicate_native_reaction_request():
 	var first_id := ai_manager.start_reaction_analysis_background(candidate, player_state, table_state, discard_context, rules, null, null, false)
 	var second_id := ai_manager.start_reaction_analysis_background(candidate, player_state, table_state, discard_context, rules, null, null, false)
 	if first_id <= 0:
-		return "expected first async request id"
-	if second_id != first_id:
-		return "expected duplicate request to reuse id %d, got %d" % [first_id, second_id]
+		return "expected first sync compat request id"
+	if second_id <= first_id:
+		return "expected second sync compat request to complete independently, got first=%d second=%d" % [first_id, second_id]
 	var request_state: Dictionary = ai_manager.request_state
-	if int(request_state.get("inflight_count", -1)) != 1:
-		return "expected one inflight request after duplicate reuse, got %s" % [request_state]
-	if int(request_state.get("active_key_count", -1)) != 1:
-		return "expected one active request key after duplicate reuse, got %s" % [request_state]
-	if int(request_state.get("duplicate_reuse_count", 0)) < 1:
-		return "expected duplicate reuse metric, got %s" % [request_state]
-	for _attempt in range(400):
-		if ai_manager.pump_async_requests() > 0:
-			var after_state: Dictionary = ai_manager.request_state
-			if int(after_state.get("inflight_count", -1)) != 0:
-				return "expected no inflight requests after delivery, got %s" % [after_state]
-			if int(after_state.get("active_key_count", -1)) != 0:
-				return "expected active request key cleanup after delivery, got %s" % [after_state]
-			return true
-		OS.delay_msec(10)
-	return "timed out waiting for reused native reaction request"
+	if int(request_state.get("inflight_count", -1)) != 0:
+		return "expected no inflight request after sync compat reactions, got %s" % [request_state]
+	if int(request_state.get("active_key_count", -1)) != 0:
+		return "expected no active request keys after sync compat reactions, got %s" % [request_state]
+	if ai_manager.has_pending_async_requests():
+		return "expected sync compat reactions to avoid pending async requests"
+	return true
 
 
-func _test_ai_manager_preserves_pending_native_turn_request():
+func _test_ai_manager_sync_compat_turn_does_not_call_native_start():
 	var ai_manager = AI_MANAGER_SCRIPT.new()
 	var runtime := PendingNativeRuntime.new()
 	ai_manager.set_native_csharp_runtime(runtime)
@@ -907,28 +894,15 @@ func _test_ai_manager_preserves_pending_native_turn_request():
 		false
 	)
 	if request_id <= 0:
-		return "expected native pending turn request id"
-	if runtime.start_count != 1:
-		return "expected one native start call, got %d" % runtime.start_count
-	if ai_manager.pump_async_requests() != 0:
-		return "expected pending native request not to deliver"
-	if runtime.poll_count != 1:
-		return "expected one native poll call, got %d" % runtime.poll_count
-	if not ai_manager.has_pending_async_requests():
-		return "expected pending request to stay active"
-	var status: Dictionary = ai_manager.get_backend_status()
-	if str(status.get("last_native_turn_raw_summary", "")).find("async_pending") == -1:
-		return "expected pending diagnostic summary, got %s" % [status]
-	ai_manager.set_native_csharp_runtime(null)
-	if ai_manager.pump_async_requests() != 0:
-		return "expected unavailable native runtime not to deliver"
-	if not ai_manager.has_pending_async_requests():
-		return "expected request to stay active while native runtime is temporarily unavailable"
-	status = ai_manager.get_backend_status()
-	if str(status.get("last_native_turn_error", "")) != "native_async_runtime_unavailable_while_pending":
-		return "expected native runtime unavailable diagnostic, got %s" % [status]
-	if int(ai_manager.request_state.get("inflight_count", -1)) != 1:
-		return "expected inflight request count to remain 1, got %s" % [ai_manager.request_state]
+		return "expected sync compat turn request id"
+	if runtime.start_count != 0:
+		return "expected no native async start call, got %d" % runtime.start_count
+	if runtime.poll_count != 0:
+		return "expected no native async poll call, got %d" % runtime.poll_count
+	if ai_manager.has_pending_async_requests():
+		return "expected sync compat turn to avoid pending async requests"
+	if int(ai_manager.request_state.get("inflight_count", -1)) != 0:
+		return "expected no inflight request after sync compat turn, got %s" % [ai_manager.request_state]
 	return true
 
 

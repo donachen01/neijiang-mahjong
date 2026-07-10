@@ -563,12 +563,7 @@ func _setup_opening_roll_timers() -> void:
 
 
 func _process(_delta: float) -> void:
-	if game_manager == null:
-		return
-	var delivered_count := int(game_manager.pump_ai_background_requests())
-	if delivered_count <= 0:
-		return
-	_kick_ai_timers_after_background_delivery()
+	pass
 
 
 func _kick_ai_timers_after_background_delivery() -> void:
@@ -1730,6 +1725,7 @@ func _apply_floating_action_button_style(button: Button, bg: Color, tooltip: Str
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", pressed)
 	button.add_theme_stylebox_override("focus", hover)
+	button.add_theme_font_override("font", UIStyleConfig.body_font())
 	button.add_theme_font_size_override("font_size", 24)
 	button.add_theme_color_override("font_color", Color(0.99, 0.98, 0.88, 1.0))
 	button.add_theme_color_override("font_outline_color", Color(0.04, 0.12, 0.09, 0.94))
@@ -1763,6 +1759,7 @@ func _apply_ai_drawer_entry_button_style(button: Button) -> void:
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", style)
 	button.add_theme_stylebox_override("focus", hover)
+	button.add_theme_font_override("font", UIStyleConfig.body_font())
 	button.add_theme_font_size_override("font_size", 24)
 	button.add_theme_color_override("font_color", IVORY_SOFT)
 	button.add_theme_color_override("font_outline_color", Color(0.03, 0.10, 0.08, 0.92))
@@ -3870,17 +3867,7 @@ func _apply_self_score_style() -> void:
 	style.shadow_size = 11
 	style.shadow_offset = Vector2(0, 4)
 	self_score_label.add_theme_stylebox_override("normal", style)
-	var calligraphy_font := SystemFont.new()
-	calligraphy_font.font_names = PackedStringArray([
-		"FZXingKJW-B",
-		"FZXingKJW-M",
-		"STKaiti",
-		"Kaiti SC",
-		"Songti SC",
-	])
-	calligraphy_font.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
-	calligraphy_font.hinting = TextServer.HINTING_LIGHT
-	self_score_label.add_theme_font_override("font", calligraphy_font)
+	self_score_label.add_theme_font_override("font", UIStyleConfig.body_font())
 	self_score_label.add_theme_font_size_override("font_size", 34)
 	self_score_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.48, 1.0))
 	self_score_label.add_theme_color_override("font_outline_color", Color(0.05, 0.08, 0.05, 0.98))
@@ -3955,6 +3942,7 @@ func _setup_self_dealer_badge() -> void:
 	style.shadow_size = 6
 	style.shadow_offset = Vector2(0, 2)
 	self_dealer_badge.add_theme_stylebox_override("normal", style)
+	self_dealer_badge.add_theme_font_override("font", UIStyleConfig.body_font())
 	self_dealer_badge.add_theme_font_size_override("font_size", 36)
 	self_dealer_badge.add_theme_color_override("font_color", Color(1.0, 0.92, 0.42, 1.0))
 	self_dealer_badge.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.95))
@@ -6281,6 +6269,7 @@ func _apply_top_bar_button_style(button: Button, bg: Color, border: Color, font_
 	button.add_theme_color_override("font_outline_color", Color(0.08, 0.06, 0.03, 0.92))
 	button.add_theme_color_override("font_disabled_outline_color", Color(0.08, 0.06, 0.03, 0.48))
 	button.add_theme_constant_override("outline_size", 2)
+	button.add_theme_font_override("font", UIStyleConfig.body_font())
 	button.add_theme_font_size_override("font_size", 17 if button in [top_bar_button, top_ai_tuning_button, top_ai_helper_button, top_settlement_info_button, top_next_round_button, top_exit_button] else font_size)
 	_ensure_button_gloss_overlay(button, 0.56 if not emphasized else 0.74)
 
@@ -7268,6 +7257,13 @@ func _build_diagnostic_export_message(result: Dictionary) -> String:
 
 func _on_top_exit_pressed() -> void:
 	get_tree().quit()
+	if OS.has_feature("ios"):
+		call_deferred("_force_quit_ios_after_exit_request")
+
+
+func _force_quit_ios_after_exit_request() -> void:
+	if OS.has_feature("ios"):
+		OS.kill(OS.get_process_id())
 
 
 func _load_ui_preferences() -> void:

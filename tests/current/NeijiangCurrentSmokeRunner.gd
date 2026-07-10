@@ -26,7 +26,7 @@ func _run() -> void:
 	_run_test("ai_bao_jiao_unreported_fourth_same_type_discards_last_draw", _test_ai_bao_jiao_unreported_fourth_same_type_discards_last_draw, failures)
 	_run_test("ai_bao_jiao_reported_fourth_8tiao_gangs_not_discards", _test_ai_bao_jiao_reported_fourth_8tiao_gangs_not_discards, failures)
 	_run_test("ai_bao_jiao_signature_tracks_last_draw", _test_ai_bao_jiao_signature_tracks_last_draw, failures)
-	_run_test("ai_helper_snapshot_starts_async_without_debug_bloat", _test_ai_helper_snapshot_starts_async_without_debug_bloat, failures)
+	_run_test("ai_helper_snapshot_builds_sync_without_debug_bloat", _test_ai_helper_snapshot_builds_sync_without_debug_bloat, failures)
 	_run_test("opening_bao_jiao_queue_stops_at_human_after_ai_declares", _test_opening_bao_jiao_queue_stops_at_human_after_ai_declares, failures)
 	_run_test("opening_bao_jiao_pass_resumes_dealer_first_discard", _test_opening_bao_jiao_pass_resumes_dealer_first_discard, failures)
 	_run_test("opening_human_bao_jiao_declare_allows_ai_dealer_first_discard", _test_opening_human_bao_jiao_declare_allows_ai_dealer_first_discard, failures)
@@ -437,7 +437,7 @@ func _test_ai_async_decisions_reject_changed_hand_signature():
 	return true
 
 
-func _test_ai_helper_snapshot_starts_async_without_debug_bloat():
+func _test_ai_helper_snapshot_builds_sync_without_debug_bloat():
 	var game_state = _build_game_state()
 	game_state.ai_tuning_config.set_diagnostics_recording_enabled(false)
 	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.DISCARD
@@ -465,26 +465,15 @@ func _test_ai_helper_snapshot_starts_async_without_debug_bloat():
 	if ai_core_debug.has("performance_metrics") or ai_core_debug.has("request_state") or ai_core_debug.has("active_async_requests"):
 		return "expected ai helper snapshot to avoid full AI debug payload, got %s" % [ai_core_debug.keys()]
 	var hint: Dictionary = snapshot.get("trainer_hint", {})
-	if not bool(hint.get("request_pending", false)):
-		return "expected trainer hint snapshot to start async request instead of blocking, got %s" % [hint]
-	if int(game_state.pending_trainer_hint_request_id) <= 0:
-		return "expected pending trainer hint request id"
+	if bool(hint.get("request_pending", false)):
+		return "expected trainer hint snapshot to be built synchronously, got pending hint %s" % [hint]
+	if int(hint.get("recommended_tile_id", -1)) < 0:
+		return "expected synchronous trainer hint to include C# recommended tile, got %s" % [hint]
+	if int(game_state.pending_trainer_hint_request_id) != 0:
+		return "expected no pending trainer hint request after synchronous build"
 	if int(game_state.pending_ai_turn_request_id) != 0:
 		return "expected trainer hint request not to occupy AI turn execution slot"
-	for _attempt in range(2000):
-		if game_state.pump_ai_background_requests() > 0:
-			var ready_snapshot: Dictionary = game_state.get_debug_snapshot()
-			var ready_hint: Dictionary = ready_snapshot.get("trainer_hint", {})
-			if bool(ready_hint.get("request_pending", false)):
-				return "expected trainer hint request to clear pending flag after delivery"
-			if int(ready_hint.get("recommended_tile_id", -1)) < 0:
-				return "expected delivered trainer hint to include C# recommended tile, got %s" % [ready_hint]
-			return true
-		OS.delay_msec(10)
-	return "timed out waiting for trainer hint async result; pending=%s backend=%s" % [
-		game_state.pending_trainer_hint_request_id,
-		game_state.ai_manager.get_backend_status(),
-	]
+	return true
 
 
 func _test_opening_bao_jiao_queue_stops_at_human_after_ai_declares():

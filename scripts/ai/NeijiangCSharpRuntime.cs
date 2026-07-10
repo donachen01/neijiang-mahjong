@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -153,16 +155,12 @@ public partial class NeijiangCSharpRuntime : Node
     {
         try
         {
-            var payload = JsonSerializer.Deserialize<ReactionPayload>(payloadJson, JsonOptions);
-            if (payload is null)
-                return "{\"ok\":false,\"error\":\"invalid_reaction_payload\"}";
-
-            var output = BuildReactionObject(payload);
-            return JsonSerializer.Serialize(output, JsonOptions);
+            var payload = ParseReactionPayloadJson(payloadJson);
+            return BuildReactionJson(payload);
         }
         catch (Exception ex)
         {
-            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+            return BuildErrorJson("reaction_exception", ex);
         }
     }
 
@@ -170,16 +168,12 @@ public partial class NeijiangCSharpRuntime : Node
     {
         try
         {
-            var payload = JsonSerializer.Deserialize<HellChallengeReactionPayload>(payloadJson, JsonOptions);
-            if (payload is null)
-                return "{\"ok\":false,\"error\":\"invalid_hell_challenge_reaction_payload\"}";
-
-            var output = BuildHellChallengeReactionObject(payload);
-            return JsonSerializer.Serialize(output, JsonOptions);
+            var payload = ParseHellChallengeReactionPayloadJson(payloadJson);
+            return BuildHellChallengeReactionJson(payload);
         }
         catch (Exception ex)
         {
-            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+            return BuildErrorJson("hell_challenge_reaction_exception", ex);
         }
     }
 
@@ -289,21 +283,29 @@ public partial class NeijiangCSharpRuntime : Node
     {
         try
         {
-            var payload = JsonSerializer.Deserialize<HellChallengePayload>(payloadJson, JsonOptions);
-            if (payload is null)
-                return "{\"ok\":false,\"error\":\"invalid_hell_challenge_payload\"}";
+            var payload = ParseHellChallengePayloadJson(payloadJson);
+            var payloadError = ValidateHellChallengePayload(payload);
+            if (!string.IsNullOrEmpty(payloadError))
+                return BuildHellChallengePayloadErrorJson(payloadError, payload);
 
             var state = BuildState(payload);
+            var exactHands = BuildReadOnlyHands(payload.AllHands18);
             var result = _hellChallenge.DecideDiscard(
                 state,
-                payload.AllHands18.Select(item => (IReadOnlyList<int>)item).ToArray(),
+                exactHands,
                 payload.ExactWall18,
                 payload.CurrentScores);
-            return JsonSerializer.Serialize(BuildHellChallengeObject(result), JsonOptions);
+            if (result.Candidates.Count <= 0 && result.Action.TileType < 0)
+                return BuildHellChallengeNoCandidateJson(payload, result);
+            return BuildHellChallengeResultJson(result);
         }
         catch (Exception ex)
         {
-            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+            return "{\"ok\":false,\"error\":\"hell_challenge_exception\",\"message\":\""
+                + EscapeJsonString(ex.Message)
+                + "\",\"exceptionType\":\""
+                + EscapeJsonString(ex.GetType().FullName ?? "")
+                + "\"}";
         }
     }
 
@@ -454,6 +456,25 @@ public partial class NeijiangCSharpRuntime : Node
             candidates = result.Candidates.Select(BuildHellChallengeCandidateObject).ToArray()
         };
 
+    private static string ValidateHellChallengePayload(HellChallengePayload payload)
+    {
+        if (payload.Hand18.Length < 18)
+            return "hell_challenge_payload_hand18_short";
+        if (payload.Hand18.Sum() <= 0)
+            return "hell_challenge_payload_hand18_empty";
+        if (payload.SeatIndex is < 0 or > 3)
+            return "hell_challenge_payload_invalid_seat";
+        if (payload.AllHands18.Count < 4)
+            return "hell_challenge_payload_all_hands_short";
+        if (payload.AllHands18.Any(item => item.Count < 18))
+            return "hell_challenge_payload_all_hands_item_short";
+        if (payload.ExactWall18.Count < 18)
+            return "hell_challenge_payload_exact_wall_short";
+        if (payload.CurrentScores.Count > 0 && payload.CurrentScores.Count < 4)
+            return "hell_challenge_payload_scores_short";
+        return "";
+    }
+
     private static object BuildHellChallengeCandidateObject(NeijiangHellChallengeCandidate item)
         => new
         {
@@ -490,6 +511,516 @@ public partial class NeijiangCSharpRuntime : Node
             dealInTargetSeats = item.DealInTargetSeats,
             reasons = item.Reasons
         };
+
+    private static IReadOnlyList<int>[] BuildReadOnlyHands(IReadOnlyList<IReadOnlyList<int>> hands)
+    {
+        var result = new IReadOnlyList<int>[hands.Count];
+        for (var i = 0; i < hands.Count; i++)
+            result[i] = hands[i];
+        return result;
+    }
+
+    private static void PopulateDiscardPayloadFromJson(JsonElement root, DiscardPayload payload)
+    {
+        payload.SeatIndex = GetJsonInt(root, "seatIndex");
+        payload.DealerSeat = GetJsonInt(root, "dealerSeat");
+        payload.CurrentSeat = GetJsonInt(root, "currentSeat");
+        payload.WallCount = GetJsonInt(root, "wallCount");
+        payload.RoundIndex = GetJsonInt(root, "roundIndex");
+        payload.TotalRounds = GetJsonInt(root, "totalRounds");
+        payload.RemainingRounds = GetJsonInt(root, "remainingRounds");
+        payload.VisibleVersion = GetJsonInt(root, "visibleVersion");
+        payload.HandVersion = GetJsonInt(root, "handVersion");
+        payload.StrategyContextVersion = GetJsonInt(root, "strategyContextVersion");
+        payload.Scores = GetJsonIntList(root, "scores");
+        payload.Hand18 = GetJsonIntArray(root, "hand18");
+        payload.Visible18 = GetJsonIntArray(root, "visible18");
+        payload.Remaining18 = GetJsonIntArray(root, "remaining18");
+        payload.Discards18 = GetJsonIntMatrix(root, "discards18");
+        payload.Melds18 = GetJsonIntMatrix(root, "melds18");
+        payload.PassedHu18 = GetJsonIntMatrix(root, "passedHu18");
+        payload.PassedPeng18 = GetJsonIntMatrix(root, "passedPeng18");
+        payload.PassedGang18 = GetJsonIntMatrix(root, "passedGang18");
+        payload.IsCalled = GetJsonBoolArray(root, "isCalled");
+        payload.IsReady = GetJsonBoolArray(root, "isReady");
+        payload.HasHu = GetJsonBoolArray(root, "hasHu");
+        payload.IsBaoJiao = GetJsonBool(root, "isBaoJiao");
+        payload.LastDrawTileType = GetJsonInt(root, "lastDrawTileType", -1);
+        payload.BaoGangTileTypes = GetJsonIntList(root, "baoGangTileTypes");
+        payload.ForceLightweight = GetJsonBool(root, "forceLightweight");
+        payload.MobileSpeedMode = GetJsonBool(root, "mobileSpeedMode");
+        payload.CompactResult = GetJsonBool(root, "compactResult");
+    }
+
+    private static void PopulateHellChallengePayloadFromJson(JsonElement root, HellChallengePayload payload)
+    {
+        PopulateDiscardPayloadFromJson(root, payload);
+        payload.AllHands18 = GetJsonIntMatrix(root, "allHands18");
+        payload.ExactWall18 = GetJsonIntList(root, "exactWall18");
+        payload.CurrentScores = GetJsonIntList(root, "currentScores");
+    }
+
+    private static ReactionPayload ParseReactionPayloadJson(string payloadJson)
+    {
+        using var document = JsonDocument.Parse(payloadJson);
+        var root = document.RootElement;
+        var payload = new ReactionPayload();
+        PopulateDiscardPayloadFromJson(root, payload);
+        payload.ReactionTileType = GetJsonInt(root, "reactionTileType", -1);
+        payload.SourceSeat = GetJsonInt(root, "sourceSeat", -1);
+        payload.ReactionType = GetJsonString(root, "reactionType", "discard");
+        payload.CanHu = GetJsonBool(root, "canHu");
+        payload.CanPeng = GetJsonBool(root, "canPeng");
+        payload.CanGang = GetJsonBool(root, "canGang");
+        payload.MandatoryGang = GetJsonBool(root, "mandatoryGang");
+        return payload;
+    }
+
+    private static HellChallengePayload ParseHellChallengePayloadJson(string payloadJson)
+    {
+        using var document = JsonDocument.Parse(payloadJson);
+        var root = document.RootElement;
+        var payload = new HellChallengePayload();
+        PopulateHellChallengePayloadFromJson(root, payload);
+        return payload;
+    }
+
+    private static HellChallengeReactionPayload ParseHellChallengeReactionPayloadJson(string payloadJson)
+    {
+        using var document = JsonDocument.Parse(payloadJson);
+        var root = document.RootElement;
+        var payload = new HellChallengeReactionPayload();
+        PopulateHellChallengePayloadFromJson(root, payload);
+        payload.ReactionTileType = GetJsonInt(root, "reactionTileType", -1);
+        payload.SourceSeat = GetJsonInt(root, "sourceSeat", -1);
+        payload.ReactionType = GetJsonString(root, "reactionType", "discard");
+        payload.CanHu = GetJsonBool(root, "canHu");
+        payload.CanPeng = GetJsonBool(root, "canPeng");
+        payload.CanGang = GetJsonBool(root, "canGang");
+        payload.MandatoryGang = GetJsonBool(root, "mandatoryGang");
+        return payload;
+    }
+
+    private static string BuildHellChallengePayloadErrorJson(string error, HellChallengePayload payload)
+    {
+        var sb = new StringBuilder(256);
+        sb.Append("{\"ok\":false,\"error\":\"").Append(EscapeJsonString(error)).Append('"');
+        sb.Append(",\"payload\":");
+        AppendHellPayloadSummaryJson(sb, payload);
+        sb.Append('}');
+        return sb.ToString();
+    }
+
+    private static string BuildHellChallengeNoCandidateJson(HellChallengePayload payload, NeijiangHellOracleResult result)
+    {
+        var sb = new StringBuilder(512);
+        sb.Append("{\"ok\":false,\"error\":\"hell_challenge_no_candidates\"");
+        sb.Append(",\"payload\":");
+        AppendHellPayloadSummaryJson(sb, payload);
+        sb.Append(",\"action\":\"").Append(EscapeJsonString(result.Action.ActionType.ToString().ToLowerInvariant())).Append('"');
+        sb.Append(",\"tileType\":").Append(result.Action.TileType);
+        sb.Append(",\"score\":").Append(result.Action.Score);
+        sb.Append(",\"reasons\":");
+        AppendJsonStringArray(sb, result.Reasons);
+        sb.Append('}');
+        return sb.ToString();
+    }
+
+    private static string BuildHellChallengeResultJson(NeijiangHellOracleResult result)
+    {
+        var sb = new StringBuilder(4096);
+        sb.Append("{\"ok\":true");
+        sb.Append(",\"action\":\"").Append(EscapeJsonString(result.Action.ActionType.ToString().ToLowerInvariant())).Append('"');
+        sb.Append(",\"tileType\":").Append(result.Action.TileType);
+        sb.Append(",\"score\":").Append(result.Action.Score);
+        sb.Append(",\"shanten\":").Append(result.SelectedShanten);
+        sb.Append(",\"ukeire\":").Append(result.SelectedLiveUkeire);
+        sb.Append(",\"liveUkeire\":").Append(result.SelectedLiveUkeire);
+        sb.Append(",\"waitCount\":").Append(result.SelectedWaitCount);
+        sb.Append(",\"winProbability\":0.0");
+        sb.Append(",\"dealInProbability\":").Append(result.OracleExactDealIn ? "1.0" : "0.0");
+        sb.Append(",\"searchUsed\":false,\"searchSimulations\":0");
+        sb.Append(",\"currentRoutes\":[]");
+        sb.Append(",\"strategyProfile\":{\"mode_label\":\"地狱挑战\",\"round_stage\":0,\"round_stage_label\":\"明牌压制\",\"threat_level\":")
+            .Append(result.HumanPressureLevel)
+            .Append(",\"reasons\":");
+        AppendJsonStringArray(sb, result.Reasons);
+        sb.Append('}');
+        sb.Append(",\"beliefSummary\":{\"compact\":true,\"ready_posteriors\":[],\"hold_summary\":{\"top_holders\":[]},\"wall_summary\":{\"top_tiles\":[]},\"wait_summary\":{\"top_waiters\":[]},\"unknown_summary\":{\"top_tiles\":[]}}");
+        sb.Append(",\"elapsedMs\":0,\"mobileSpeedMode\":true,\"compactResult\":true");
+        sb.Append(",\"backendMode\":\"hell_challenge_direct\"");
+        sb.Append(",\"category\":\"").Append(EscapeJsonString(result.Category)).Append('"');
+        sb.Append(",\"severity\":\"").Append(EscapeJsonString(result.Severity)).Append('"');
+        sb.Append(",\"exactDealIn\":").Append(JsonBool(result.ExactDealIn));
+        sb.Append(",\"oracleExactDealIn\":").Append(JsonBool(result.OracleExactDealIn));
+        sb.Append(",\"oracleFeedsHumanHu\":").Append(JsonBool(result.OracleFeedsHumanHu));
+        sb.Append(",\"oracleFeedsHumanPeng\":").Append(JsonBool(result.OracleFeedsHumanPeng));
+        sb.Append(",\"oracleFeedsHumanGang\":").Append(JsonBool(result.OracleFeedsHumanGang));
+        sb.Append(",\"humanPressureLevel\":").Append(result.HumanPressureLevel);
+        sb.Append(",\"oracleDealInTargetSeats\":");
+        AppendJsonIntArray(sb, result.OracleDealInTargetSeats);
+        sb.Append(",\"exactKeepsReady\":").Append(JsonBool(result.ExactKeepsReady));
+        sb.Append(",\"exactWallRemaining\":").Append(result.ExactWallRemaining);
+        sb.Append(",\"selectedTier\":\"").Append(EscapeJsonString(result.SelectedTier)).Append('"');
+        sb.Append(",\"teamRole\":\"").Append(EscapeJsonString(result.TeamRole)).Append('"');
+        sb.Append(",\"teamPressureBonus\":").Append(result.TeamPressureBonus);
+        sb.Append(",\"teamPlanSummary\":");
+        AppendJsonStringArray(sb, result.TeamPlanSummary);
+        sb.Append(",\"reasons\":");
+        AppendJsonStringArray(sb, result.Reasons);
+        sb.Append(",\"candidates\":[");
+        for (var i = 0; i < result.Candidates.Count; i++)
+        {
+            if (i > 0)
+                sb.Append(',');
+            AppendHellCandidateJson(sb, result.Candidates[i]);
+        }
+        sb.Append("]}");
+        return sb.ToString();
+    }
+
+    private static void AppendHellCandidateJson(StringBuilder sb, NeijiangHellChallengeCandidate item)
+    {
+        sb.Append('{');
+        sb.Append("\"tileType\":").Append(item.TileType);
+        sb.Append(",\"score\":").Append(item.Score);
+        sb.Append(",\"shanten\":").Append(item.Shanten);
+        sb.Append(",\"ukeire\":0");
+        sb.Append(",\"liveUkeire\":").Append(item.LiveUkeire);
+        sb.Append(",\"danger\":").Append(item.ExactDealIn || item.FeedsHumanHu ? 100 : item.FeedsHumanGang ? 80 : item.FeedsHumanPeng ? 35 : 0);
+        sb.Append(",\"waitCount\":").Append(item.WaitCount);
+        var riskLabel = item.FeedsHumanHu || item.ExactDealIn ? "点炮" : item.FeedsHumanGang ? "给杠" : item.FeedsHumanPeng ? "给碰" : "明牌";
+        sb.Append(",\"riskLabel\":\"").Append(EscapeJsonString(riskLabel)).Append('"');
+        sb.Append(",\"strategyTag\":\"hell_challenge\",\"strategyMode\":\"地狱挑战\"");
+        sb.Append(",\"explanationHint\":\"").Append(EscapeJsonString(item.Reasons.FirstOrDefault() ?? "")).Append('"');
+        sb.Append(",\"exactDealIn\":").Append(JsonBool(item.ExactDealIn));
+        sb.Append(",\"feedsHumanHu\":").Append(JsonBool(item.FeedsHumanHu));
+        sb.Append(",\"feedsHumanPeng\":").Append(JsonBool(item.FeedsHumanPeng));
+        sb.Append(",\"feedsHumanGang\":").Append(JsonBool(item.FeedsHumanGang));
+        sb.Append(",\"humanPengThreat\":").Append(item.HumanPengThreat);
+        sb.Append(",\"humanPengPenalty\":").Append(item.HumanPengPenalty);
+        sb.Append(",\"tempoPengAllowanceBonus\":").Append(item.TempoPengAllowanceBonus);
+        sb.Append(",\"pengOnlyInteractionBonus\":").Append(item.PengOnlyInteractionBonus);
+        sb.Append(",\"keepsReady\":").Append(JsonBool(item.KeepsReady));
+        sb.Append(",\"exactWallRemaining\":").Append(item.ExactWallRemaining);
+        sb.Append(",\"tier\":\"").Append(EscapeJsonString(item.Tier)).Append('"');
+        sb.Append(",\"tierRank\":").Append(item.TierRank);
+        sb.Append(",\"tierAdjustment\":").Append(item.TierAdjustment);
+        sb.Append(",\"dealInTargetSeats\":");
+        AppendJsonIntArray(sb, item.DealInTargetSeats);
+        sb.Append(",\"reasons\":");
+        AppendJsonStringArray(sb, item.Reasons);
+        sb.Append('}');
+    }
+
+    private static void AppendHellPayloadSummaryJson(StringBuilder sb, HellChallengePayload payload)
+    {
+        sb.Append('{');
+        sb.Append("\"seatIndex\":").Append(payload.SeatIndex);
+        sb.Append(",\"currentSeat\":").Append(payload.CurrentSeat);
+        sb.Append(",\"wallCount\":").Append(payload.WallCount);
+        sb.Append(",\"hand18Length\":").Append(payload.Hand18.Length);
+        sb.Append(",\"hand18Sum\":").Append(SumInts(payload.Hand18));
+        sb.Append(",\"allHandsCount\":").Append(payload.AllHands18.Count);
+        sb.Append(",\"allHandSums\":[");
+        for (var i = 0; i < payload.AllHands18.Count; i++)
+        {
+            if (i > 0)
+                sb.Append(',');
+            sb.Append(SumFirstInts(payload.AllHands18[i], 18));
+        }
+        sb.Append(']');
+        sb.Append(",\"exactWallLength\":").Append(payload.ExactWall18.Count);
+        sb.Append(",\"exactWallSum\":").Append(SumFirstInts(payload.ExactWall18, 18));
+        sb.Append(",\"currentScoresCount\":").Append(payload.CurrentScores.Count);
+        sb.Append('}');
+    }
+
+    private static int SumInts(IReadOnlyList<int> values)
+    {
+        var sum = 0;
+        for (var i = 0; i < values.Count; i++)
+            sum += values[i];
+        return sum;
+    }
+
+    private static int SumFirstInts(IReadOnlyList<int> values, int limit)
+    {
+        var sum = 0;
+        var count = Math.Min(values.Count, limit);
+        for (var i = 0; i < count; i++)
+            sum += values[i];
+        return sum;
+    }
+
+    private static void AppendJsonIntArray(StringBuilder sb, IReadOnlyList<int> values)
+    {
+        sb.Append('[');
+        for (var i = 0; i < values.Count; i++)
+        {
+            if (i > 0)
+                sb.Append(',');
+            sb.Append(values[i]);
+        }
+        sb.Append(']');
+    }
+
+    private static void AppendJsonStringArray(StringBuilder sb, IReadOnlyList<string> values)
+    {
+        sb.Append('[');
+        for (var i = 0; i < values.Count; i++)
+        {
+            if (i > 0)
+                sb.Append(',');
+            sb.Append('"').Append(EscapeJsonString(values[i])).Append('"');
+        }
+        sb.Append(']');
+    }
+
+    private static void AppendJsonStringIntDictionary(StringBuilder sb, IReadOnlyDictionary<string, int> values)
+    {
+        sb.Append('{');
+        var first = true;
+        foreach (var item in values)
+        {
+            if (!first)
+                sb.Append(',');
+            first = false;
+            sb.Append('"').Append(EscapeJsonString(item.Key)).Append("\":").Append(item.Value);
+        }
+        sb.Append('}');
+    }
+
+    private static string BuildErrorJson(string error, Exception ex)
+        => "{\"ok\":false,\"error\":\""
+            + EscapeJsonString(error)
+            + "\",\"message\":\""
+            + EscapeJsonString(ex.Message)
+            + "\",\"exceptionType\":\""
+            + EscapeJsonString(ex.GetType().FullName ?? "")
+            + "\"}";
+
+    private static string JsonDouble(double value)
+        => value.ToString("0.########", CultureInfo.InvariantCulture);
+
+    private static int GetJsonInt(JsonElement root, string name, int defaultValue = 0)
+    {
+        if (!TryGetJsonProperty(root, name, out var value))
+            return defaultValue;
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt32(out var intValue) => intValue,
+            JsonValueKind.True => 1,
+            JsonValueKind.False => 0,
+            JsonValueKind.String when int.TryParse(value.GetString(), out var intValue) => intValue,
+            _ => defaultValue
+        };
+    }
+
+    private static bool GetJsonBool(JsonElement root, string name, bool defaultValue = false)
+    {
+        if (!TryGetJsonProperty(root, name, out var value))
+            return defaultValue;
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Number when value.TryGetInt32(out var intValue) => intValue != 0,
+            JsonValueKind.String when bool.TryParse(value.GetString(), out var boolValue) => boolValue,
+            _ => defaultValue
+        };
+    }
+
+    private static string GetJsonString(JsonElement root, string name, string defaultValue = "")
+    {
+        if (!TryGetJsonProperty(root, name, out var value))
+            return defaultValue;
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? defaultValue,
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => value.ToString(),
+            _ => defaultValue
+        };
+    }
+
+    private static int[] GetJsonIntArray(JsonElement root, string name)
+        => GetJsonIntList(root, name).ToArray();
+
+    private static List<int> GetJsonIntList(JsonElement root, string name)
+    {
+        if (!TryGetJsonProperty(root, name, out var value) || value.ValueKind != JsonValueKind.Array)
+            return new List<int>();
+        return ReadJsonIntList(value);
+    }
+
+    private static List<List<int>> GetJsonIntMatrix(JsonElement root, string name)
+    {
+        var result = new List<List<int>>();
+        if (!TryGetJsonProperty(root, name, out var value) || value.ValueKind != JsonValueKind.Array)
+            return result;
+        foreach (var row in value.EnumerateArray())
+            result.Add(row.ValueKind == JsonValueKind.Array ? ReadJsonIntList(row) : new List<int>());
+        return result;
+    }
+
+    private static bool[] GetJsonBoolArray(JsonElement root, string name)
+    {
+        if (!TryGetJsonProperty(root, name, out var value) || value.ValueKind != JsonValueKind.Array)
+            return Array.Empty<bool>();
+        var result = new List<bool>();
+        foreach (var item in value.EnumerateArray())
+        {
+            result.Add(item.ValueKind switch
+            {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Number when item.TryGetInt32(out var intValue) => intValue != 0,
+                JsonValueKind.String when bool.TryParse(item.GetString(), out var boolValue) => boolValue,
+                _ => false
+            });
+        }
+        return result.ToArray();
+    }
+
+    private static List<int> ReadJsonIntList(JsonElement array)
+    {
+        var result = new List<int>();
+        foreach (var item in array.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out var intValue))
+                result.Add(intValue);
+            else if (item.ValueKind == JsonValueKind.True)
+                result.Add(1);
+            else if (item.ValueKind == JsonValueKind.False)
+                result.Add(0);
+            else if (item.ValueKind == JsonValueKind.String && int.TryParse(item.GetString(), out var stringValue))
+                result.Add(stringValue);
+        }
+        return result;
+    }
+
+    private static bool TryGetJsonProperty(JsonElement root, string name, out JsonElement value)
+    {
+        if (root.TryGetProperty(name, out value))
+            return true;
+        foreach (var property in root.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+        value = default;
+        return false;
+    }
+
+    private static string JsonBool(bool value) => value ? "true" : "false";
+
+    private static string EscapeJsonString(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "";
+        return value
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\r", "\\r")
+            .Replace("\n", "\\n")
+            .Replace("\t", "\\t");
+    }
+
+    private string BuildReactionJson(ReactionPayload payload)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var state = BuildState(payload);
+        var result = _facade.DecideReaction(
+            state,
+            payload.ReactionTileType,
+            payload.CanHu,
+            payload.CanPeng,
+            payload.CanGang,
+            payload.SourceSeat,
+            payload.ReactionType,
+            payload.MobileSpeedMode,
+            payload.MandatoryGang);
+        stopwatch.Stop();
+
+        return BuildReactionResultJson(
+            result,
+            stopwatch.ElapsedMilliseconds,
+            payload.MobileSpeedMode,
+            0,
+            "hybrid_csharp_native");
+    }
+
+    private string BuildHellChallengeReactionJson(HellChallengeReactionPayload payload)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var state = BuildState(payload);
+        var result = _hellChallengeReaction.DecideReaction(
+            state,
+            payload.ReactionTileType,
+            payload.CanHu,
+            payload.CanPeng,
+            payload.CanGang,
+            payload.SourceSeat,
+            payload.ReactionType,
+            payload.AllHands18.Select(item => (IReadOnlyList<int>)item).ToArray(),
+            payload.ExactWall18,
+            payload.CurrentScores,
+            payload.MandatoryGang);
+        stopwatch.Stop();
+
+        var teamPlanPressure = result.ActionScores.TryGetValue("team_plan_pressure", out var pressure)
+            ? pressure
+            : 0;
+        return BuildReactionResultJson(
+            result,
+            stopwatch.ElapsedMilliseconds,
+            true,
+            teamPlanPressure,
+            "hell_challenge_reaction_direct");
+    }
+
+    private static string BuildReactionResultJson(
+        NeijiangReactionDecisionResult result,
+        long elapsedMs,
+        bool mobileSpeedMode,
+        int teamPlanPressure,
+        string backendMode)
+    {
+        var sb = new StringBuilder(2048);
+        sb.Append("{\"ok\":true");
+        sb.Append(",\"action\":\"").Append(EscapeJsonString(result.Action.ActionType.ToString().ToLowerInvariant())).Append('"');
+        sb.Append(",\"tileType\":").Append(result.Action.TileType);
+        sb.Append(",\"score\":").Append(result.Action.Score);
+        sb.Append(",\"reason\":\"").Append(EscapeJsonString(result.Action.Reason)).Append('"');
+        sb.Append(",\"shantenAfter\":").Append(result.ShantenAfter);
+        sb.Append(",\"ukeireAfter\":").Append(result.UkeireAfter);
+        sb.Append(",\"liveUkeireAfter\":").Append(result.LiveUkeireAfter);
+        sb.Append(",\"currentShanten\":").Append(result.CurrentShanten);
+        sb.Append(",\"currentLiveUkeire\":").Append(result.CurrentLiveUkeire);
+        sb.Append(",\"threatLevel\":").Append(result.ThreatLevel);
+        sb.Append(",\"roundStage\":").Append(result.RoundStage);
+        sb.Append(",\"roundStageLabel\":\"").Append(EscapeJsonString(RoundStageLabel(result.RoundStage))).Append('"');
+        sb.Append(",\"maxReadyPosterior\":").Append(JsonDouble(result.MaxReadyPosterior));
+        sb.Append(",\"reasons\":");
+        AppendJsonStringArray(sb, result.Reasons);
+        sb.Append(",\"posteriorSummary\":");
+        AppendJsonStringArray(sb, result.PosteriorSummary);
+        sb.Append(",\"futureSummary\":");
+        AppendJsonStringArray(sb, result.FutureSummary);
+        sb.Append(",\"searchBonus\":").Append(JsonDouble(result.SearchBonus));
+        sb.Append(",\"searchSimulations\":").Append(result.SearchSimulations);
+        sb.Append(",\"searchUsed\":").Append(JsonBool(result.SearchUsed));
+        sb.Append(",\"actionScores\":");
+        AppendJsonStringIntDictionary(sb, result.ActionScores);
+        sb.Append(",\"elapsedMs\":").Append(elapsedMs);
+        sb.Append(",\"mobileSpeedMode\":").Append(JsonBool(mobileSpeedMode));
+        sb.Append(",\"teamPlanPressure\":").Append(teamPlanPressure);
+        sb.Append(",\"backendMode\":\"").Append(EscapeJsonString(backendMode)).Append("\"}");
+        return sb.ToString();
+    }
 
     private object BuildReactionObject(ReactionPayload payload)
     {

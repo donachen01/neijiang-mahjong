@@ -65,6 +65,7 @@ const DIAGNOSTIC_MAX_DICT_KEYS := 120
 const DIAGNOSTIC_MAX_STRING_LENGTH := 4000
 const DIAGNOSTIC_MAX_TEXT_FILE_CHARS := 120000
 const DIAGNOSTIC_MAX_DIR_TEXT_FILES := 160
+const IOS_STATE_PROBE_LOG_PATH := "user://ios_state_probe.log"
 
 var current_phase: RoundPhase = RoundPhase.BOOT
 var current_dealer_seat: int = 0
@@ -174,6 +175,10 @@ func _ready() -> void:
 	ai_manager.set_strict_native_runtime_required(true)
 	ai_manager.set_prefer_csharp_backend(true)
 	_bind_native_csharp_runtime_if_available()
+	_record_ios_state_probe("ready native=%s backend=%s" % [
+		str(_has_native_csharp_runtime()),
+		JSON.stringify(ai_manager.get_backend_status()).left(500),
+	])
 	ai_manager.ai_turn_analysis_ready.connect(_on_ai_turn_analysis_ready)
 	ai_manager.ai_reaction_analysis_ready.connect(_on_ai_reaction_analysis_ready)
 	if _is_ai_analysis_recording_enabled():
@@ -613,7 +618,9 @@ func set_ai_level(level: int) -> bool:
 
 func complete_opening_roll() -> bool:
 	if current_phase != RoundPhase.TABLE_SETUP or not opening_roll_pending_completion:
+		_record_ios_state_probe("complete_opening_roll rejected phase=%d pending=%s" % [int(current_phase), str(opening_roll_pending_completion)])
 		return false
+	_record_ios_state_probe("complete_opening_roll start")
 	_deal_initial_hands()
 	wall_count = wall.size()
 	opening_roll_pending_completion = false
@@ -624,6 +631,7 @@ func complete_opening_roll() -> bool:
 		str(opening_roll_data.get("opening_side_label", "自家")),
 	]
 	_enter_ding_que_phase()
+	_record_ios_state_probe("complete_opening_roll done phase=%d turn=%d wall=%d" % [int(current_phase), current_turn_seat, wall_count])
 	return true
 
 
@@ -1074,57 +1082,59 @@ func discard_tile_by_id(seat: int, tile_id: int) -> bool:
 
 func run_ai_turn() -> bool:
 	if not is_ai_turn_ready():
+		_record_ios_state_probe("run_ai_turn rejected phase=%d turn=%d opening_bao=%s" % [int(current_phase), current_turn_seat, str(opening_bao_jiao_pending)])
 		return false
-	_pump_ai_background_requests()
 
-	var decision: Dictionary = _get_or_prepare_ai_turn_decision()
+	var decision: Dictionary = _build_ai_turn_decision(false)
+	_record_ios_state_probe("run_ai_turn sync_decision_empty=%s msg=%s" % [
+		str(decision.is_empty()),
+		debug_last_message,
+	])
 	if decision.is_empty():
-		decision = _build_ai_turn_decision(true)
-		if decision.is_empty():
-			return false
+		_record_ios_state_probe("run_ai_turn no sync decision msg=%s backend=%s" % [
+			debug_last_message,
+			JSON.stringify(ai_manager.get_backend_status()).left(500) if ai_manager != null else "{}",
+		])
+		if ai_manager != null:
+			var backend_status: Dictionary = ai_manager.get_backend_status()
+			_record_ios_state_probe("run_ai_turn native_error=%s raw=%s" % [
+				str(backend_status.get("last_native_turn_error", "")),
+				str(backend_status.get("last_native_turn_raw_summary", "")).left(1800),
+			])
+		return false
 	pending_ai_turn_decision.clear()
 	_clear_pending_ai_turn_request()
 	if _execute_ai_turn_decision(decision):
 		return true
-	decision = _build_ai_turn_decision(true)
+	decision = _build_ai_turn_decision(false)
 	if not decision.is_empty() and _execute_ai_turn_decision(decision):
 		return true
 	debug_last_message = "AI seat %d could not complete a prepared turn decision; decision was refreshed but still invalid." % current_turn_seat
 	_emit_state_changed()
+	_record_ios_state_probe("run_ai_turn failed execute msg=%s" % debug_last_message)
 	return false
 
 
 func prepare_ai_turn_decision() -> bool:
-	if not is_ai_turn_ready():
-		return false
-	_pump_ai_background_requests()
-	if not _get_or_prepare_ai_turn_decision().is_empty():
-		return true
-	return _is_pending_ai_turn_request_valid()
+	return is_ai_turn_ready()
 
 
 func prepare_ai_reaction_decision() -> bool:
-	if not is_ai_reaction_pending():
-		return false
-	_pump_ai_background_requests()
-	if not _get_or_prepare_ai_reaction_decision().is_empty():
-		return true
-	return _is_pending_ai_reaction_request_valid()
+	return is_ai_reaction_pending()
 
 
 func _get_or_prepare_ai_turn_decision() -> Dictionary:
 	if _is_pending_ai_turn_decision_valid():
+		_record_ios_state_probe("turn_decision use_pending_decision seat=%d" % current_turn_seat)
 		return pending_ai_turn_decision.duplicate(true)
-	if _is_pending_ai_turn_request_valid():
-		return {}
-	if _start_ai_turn_background_request():
-		if _is_pending_ai_turn_decision_valid():
-			return pending_ai_turn_decision.duplicate(true)
-		return {}
 	if OS.has_feature("android") or OS.has_feature("ios") or OS.has_feature("web"):
-		debug_last_message = "C# AI 运行时未就绪，严格模式下暂停 AI 出牌。"
-		return {}
-	return {}
+		if not _has_native_csharp_runtime():
+			debug_last_message = "C# AI 运行时未就绪，严格模式下暂停 AI 出牌。"
+			_record_ios_state_probe("turn_decision mobile_runtime_not_ready native=false backend=%s" % [
+				JSON.stringify(ai_manager.get_backend_status()).left(500) if ai_manager != null else "{}",
+			])
+			return {}
+	return _build_ai_turn_decision(false)
 
 
 func _is_pending_ai_turn_decision_valid() -> bool:
@@ -1243,10 +1253,12 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 		return base
 	var analysis: Dictionary = {}
 	if ai_manager != null:
-		if _is_hell_challenge_mode() and ai_manager.has_native_hell_challenge_runtime():
+		if _is_hell_challenge_mode() and ai_manager.has_method("has_native_hell_challenge_runtime") and ai_manager.has_native_hell_challenge_runtime():
 			analysis = ai_manager.analyze_hell_challenge_discard(player_state, table_state, rules, _build_hell_challenge_payload())
-		else:
+		elif force_lightweight and ai_manager.has_method("analyze_turn_lightweight"):
 			analysis = ai_manager.analyze_turn_lightweight(player_state, table_state, rules, ai_tuning_config, hu_checker, risk_analyzer, allow_cheat) if force_lightweight else ai_manager.analyze_turn(player_state, table_state, rules, ai_tuning_config, hu_checker, risk_analyzer, allow_cheat)
+		elif ai_manager.has_method("analyze_turn"):
+			analysis = ai_manager.analyze_turn(player_state, table_state, rules, ai_tuning_config, hu_checker, risk_analyzer, allow_cheat)
 	if analysis.is_empty():
 		var native_error := ""
 		if ai_manager != null:
@@ -1355,6 +1367,8 @@ func _build_ai_self_action_decision(seat: int, player_state: Dictionary, table_s
 	var mandatory_types := _mandatory_gang_tile_types_for_seat(seat, an_options, add_options)
 	var can_self_hu := _can_seat_self_hu_now(seat)
 	if not can_self_hu and an_types.is_empty() and add_types.is_empty():
+		return {}
+	if not ai_manager.has_method("analyze_self_action"):
 		return {}
 	var csharp_decision: Dictionary = ai_manager.analyze_self_action(player_state, table_state, rules, can_self_hu, an_types, add_types, add_qiang_counts, mandatory_types)
 	if csharp_decision.is_empty():
@@ -1607,7 +1621,7 @@ func run_ai_reaction() -> bool:
 	if current_phase != RoundPhase.REACTION:
 		return false
 
-	var prepared: Dictionary = _get_or_prepare_ai_reaction_decision()
+	var prepared: Dictionary = _build_ai_reaction_decision(false)
 	if prepared.is_empty():
 		return false
 
@@ -1713,15 +1727,11 @@ func run_ai_reaction() -> bool:
 func _get_or_prepare_ai_reaction_decision() -> Dictionary:
 	if _is_pending_ai_reaction_decision_valid():
 		return pending_ai_reaction_decision.duplicate(true)
-	if _is_pending_ai_reaction_request_valid():
-		return {}
 	if OS.has_feature("android") or OS.has_feature("ios") or OS.has_feature("web"):
 		if not _has_native_csharp_runtime():
 			debug_last_message = "C# AI 运行时未就绪，严格模式下暂停 AI 响应。"
 			return {}
-	if _start_ai_reaction_background_request() and _is_pending_ai_reaction_decision_valid():
-		return pending_ai_reaction_decision.duplicate(true)
-	return {}
+	return _build_ai_reaction_decision(false)
 
 
 func _is_pending_ai_reaction_decision_valid() -> bool:
@@ -1842,44 +1852,20 @@ func _start_ai_turn_background_request() -> bool:
 			])
 			_clear_pending_ai_turn_request()
 			return true
-	if _is_pending_ai_turn_request_valid():
-		return true
-	var seat: int = current_turn_seat
-	var player_state := _build_player_state(seat)
-	var table_state := _build_table_state()
-	var allow_cheat: bool = int(players[seat].get("ai_level", int(ai_level))) == int(AILevel.CHEATING)
-	_record_ai_chain_debug("turn_async_request_start seat=%d hand=%d wall=%d native=%s" % [
-		seat,
-		int(players[seat].get("hand_count", 0)),
-		wall_count,
-		str(_has_native_csharp_runtime()),
-	])
-	var request_id: int = 0 if ai_manager == null else ai_manager.start_turn_analysis_background(
-		player_state,
-		table_state,
-		rules,
-		ai_tuning_config,
-		hu_checker,
-		risk_analyzer,
-		allow_cheat,
-		_build_hell_challenge_payload() if _is_hell_challenge_mode() and ai_manager.has_native_hell_challenge_runtime() else {}
-	)
-	if request_id <= 0:
-		_record_ai_chain_debug("turn_async_request_failed seat=%d" % seat)
+	var decision := _build_ai_turn_decision(false)
+	if decision.is_empty():
+		_record_ai_chain_debug("turn_sync_prepare_failed seat=%d hand=%d wall=%d native=%s" % [
+			current_turn_seat,
+			int(players[current_turn_seat].get("hand_count", 0)),
+			wall_count,
+			str(_has_native_csharp_runtime()),
+		])
 		return false
-	pending_ai_turn_request_id = request_id
-	pending_ai_turn_request_meta = {
-		"round_index": round_index,
-		"seat": seat,
-		"phase": int(current_phase),
-		"wall_count": wall_count,
-		"hand_count": int(players[seat].get("hand_count", 0)),
-		"state_signature": _ai_turn_state_signature(seat),
-		"started_at_ms": Time.get_ticks_msec(),
-	}
-	_record_ai_chain_debug("turn_async_request_queued id=%d seat=%d wall=%d" % [
-		request_id,
-		seat,
+	pending_ai_turn_decision = decision.duplicate(true)
+	_clear_pending_ai_turn_request()
+	_record_ai_chain_debug("turn_sync_prepare_ready seat=%d action=%s wall=%d" % [
+		current_turn_seat,
+		str(decision.get("action", "")),
 		wall_count,
 	])
 	return true
@@ -1888,55 +1874,19 @@ func _start_ai_turn_background_request() -> bool:
 func _start_ai_reaction_background_request() -> bool:
 	if current_phase != RoundPhase.REACTION:
 		return false
-	if _is_pending_ai_reaction_request_valid():
-		return true
-	var candidate: Dictionary = _get_next_ai_reaction_candidate()
-	if candidate.is_empty():
+	var decision := _build_ai_reaction_decision(false)
+	if decision.is_empty():
+		_record_ai_chain_debug("reaction_sync_prepare_failed source=%d pending=%d native=%s" % [
+			int(current_discard_context.get("source_seat", -1)),
+			pending_reactions.size(),
+			str(_has_native_csharp_runtime()),
+		])
 		return false
-	var seat: int = int(candidate.get("seat", -1))
-	if seat < 0 or seat >= players.size():
-		return false
-	var allow_cheat: bool = int(players[seat].get("ai_level", int(ai_level))) == int(AILevel.CHEATING)
-	var player_state := _build_player_state(seat)
-	var table_state := _build_table_state()
-	var tile: Dictionary = current_discard_context.get("tile", {})
-	_record_ai_chain_debug("reaction_async_request_start seat=%d source=%d tile=%s pending=%d native=%s" % [
-		seat,
+	pending_ai_reaction_decision = decision.duplicate(true)
+	_clear_pending_ai_reaction_request()
+	_record_ai_chain_debug("reaction_sync_prepare_ready seat=%d source=%d pending=%d" % [
+		int(decision.get("seat", -1)),
 		int(current_discard_context.get("source_seat", -1)),
-		str(tile.get("display_name", tile.get("id", ""))),
-		pending_reactions.size(),
-		str(_has_native_csharp_runtime()),
-	])
-	var request_id: int = 0 if ai_manager == null else ai_manager.start_reaction_analysis_background(
-		candidate,
-		player_state,
-		table_state,
-		current_discard_context,
-		rules,
-		ai_tuning_config,
-		hu_checker,
-		allow_cheat,
-		_build_hell_challenge_payload() if _is_hell_challenge_mode() and ai_manager.has_native_hell_challenge_reaction_runtime() else {}
-	)
-	if request_id <= 0:
-		_record_ai_chain_debug("reaction_async_request_failed seat=%d" % seat)
-		return false
-	pending_ai_reaction_request_id = request_id
-	pending_ai_reaction_request_meta = {
-		"round_index": round_index,
-		"phase": int(current_phase),
-		"source_seat": int(current_discard_context.get("source_seat", -1)),
-		"tile_id": int(tile.get("id", -1)),
-		"pending_count": pending_reactions.size(),
-		"seat": seat,
-		"state_signature": _ai_reaction_state_signature(seat),
-		"candidate": candidate.duplicate(true),
-		"started_at_ms": Time.get_ticks_msec(),
-	}
-	_record_ai_chain_debug("reaction_async_request_queued id=%d seat=%d tile_id=%d pending=%d" % [
-		request_id,
-		seat,
-		int(tile.get("id", -1)),
 		pending_reactions.size(),
 	])
 	return true
@@ -2335,7 +2285,7 @@ func _build_trainer_hint_for_seat(seat: int) -> Dictionary:
 	var table_state := _build_table_state()
 	var analysis: Dictionary = {}
 	if rules != null and bool(rules.is_neijiang_mode()):
-		if ai_manager == null:
+		if ai_manager == null or not ai_manager.has_method("analyze_turn"):
 			return {}
 		analysis = ai_manager.analyze_turn(
 			_build_player_state(seat),
@@ -2424,25 +2374,9 @@ func _get_human_trainer_hint_snapshot() -> Dictionary:
 	var cache_key: String = _build_trainer_hint_cache_key(seat)
 	if cache_key == latest_trainer_hint_cache_key and not latest_trainer_hint.is_empty():
 		return latest_trainer_hint.duplicate(true)
-	if pending_trainer_hint_request_id > 0 and pending_trainer_hint_request_cache_key == cache_key:
-		var pending_snapshot := latest_trainer_hint.duplicate(true)
-		if not pending_snapshot.is_empty():
-			pending_snapshot["request_pending"] = true
-			return pending_snapshot
-		return {
-			"request_pending": true,
-			"request_id": pending_trainer_hint_request_id,
-		}
 	latest_trainer_hint_cache_key = cache_key
 	if _start_human_trainer_hint_request(seat, cache_key):
-		if not latest_trainer_hint.is_empty():
-			var pending_snapshot := latest_trainer_hint.duplicate(true)
-			pending_snapshot["request_pending"] = true
-			return pending_snapshot
-		return {
-			"request_pending": true,
-			"request_id": pending_trainer_hint_request_id,
-		}
+		return latest_trainer_hint.duplicate(true)
 	return _build_trainer_hint_for_seat(seat)
 
 
@@ -2465,30 +2399,26 @@ func _build_trainer_hint_cache_key(seat: int) -> String:
 
 
 func _start_human_trainer_hint_request(seat: int, cache_key: String) -> bool:
-	if ai_manager == null or rules == null or not bool(rules.is_neijiang_mode()):
+	if ai_manager == null or not ai_manager.has_method("analyze_turn") or rules == null or not bool(rules.is_neijiang_mode()):
 		return false
 	var player_state := _build_player_state(seat)
 	var table_state := _build_table_state()
 	var allow_cheat := int(players[seat].get("ai_level", int(ai_level))) == int(AILevel.CHEATING)
-	var request_id: int = ai_manager.start_turn_analysis_background(
+	var analysis: Dictionary = ai_manager.analyze_turn(
 		player_state,
 		table_state,
 		rules,
 		ai_tuning_config,
 		hu_checker,
 		risk_analyzer,
-		allow_cheat,
-		{},
-		false,
-		true,
-		true,
-		false
+		allow_cheat
 	)
-	if request_id <= 0:
+	if analysis.is_empty():
 		return false
-	pending_trainer_hint_request_id = request_id
-	pending_trainer_hint_request_cache_key = cache_key
-	pending_trainer_hint_request_seat = seat
+	if not _apply_trainer_hint_analysis(seat, analysis):
+		return false
+	latest_trainer_hint_cache_key = cache_key
+	_clear_pending_trainer_hint_request()
 	return true
 
 
@@ -2706,9 +2636,16 @@ func _enter_ding_que_phase() -> void:
 		_begin_opening_discard_phase()
 		_emit_state_changed()
 		return
+	_record_ios_state_probe("enter_ding_que before_auto dealer=%d turn=%d" % [current_dealer_seat, current_turn_seat])
 	current_phase = RoundPhase.DING_QUE
 	_auto_select_ai_ding_que()
 	_complete_ding_que_if_ready()
+	_record_ios_state_probe("enter_ding_que after_complete phase=%d turn=%d human_pending=%s dealer_deferred=%s" % [
+		int(current_phase),
+		current_turn_seat,
+		str(is_human_ding_que_pending(0)),
+		str(_is_dealer_ding_que_deferred()),
+	])
 	_emit_state_changed()
 
 
@@ -2722,6 +2659,13 @@ func _auto_select_ai_ding_que() -> void:
 			continue
 		var decision := _build_ai_ding_que_decision(player["hand_tiles"])
 		var suit := str(decision.get("suit", ""))
+		_record_ios_state_probe("ai_ding_que seat=%d suit=%s empty=%s backend=%s err=%s" % [
+			int(player["seat"]),
+			suit,
+			str(decision.is_empty()),
+			str(decision.get("backend_mode", "")),
+			str(ai_manager.get_backend_status().get("last_native_turn_error", "")) if ai_manager != null else "",
+		])
 		if suit == "" or not _active_suits().has(suit):
 			debug_last_message = "C# AI 未返回有效定缺结果，暂停自动定缺。"
 			continue
@@ -2739,12 +2683,20 @@ func _complete_ding_que_if_ready() -> void:
 		_begin_opening_discard_phase()
 		return
 	if not ding_que_resolver.can_finish_opening_ding_que(players, current_dealer_seat):
+		_record_ios_state_probe("ding_que_not_ready dealer=%d choices=%s" % [
+			current_dealer_seat,
+			JSON.stringify(_debug_ding_que_choices()).left(300),
+		])
 		return
 
 	if _is_dealer_ding_que_deferred():
 		debug_last_message = "Non-dealers finished ding que. Dealer seat %d will lock ding que on first discard and discard first with 14 tiles." % current_turn_seat
 	else:
 		debug_last_message = "All required ding que choices are done. Dealer seat %d will discard first." % current_turn_seat
+	_record_ios_state_probe("ding_que_ready msg=%s choices=%s" % [
+		debug_last_message,
+		JSON.stringify(_debug_ding_que_choices()).left(300),
+	])
 	_begin_opening_discard_phase()
 	_emit_state_changed()
 
@@ -2784,6 +2736,7 @@ func _build_opening_bao_jiao_queue() -> Array[int]:
 
 func _start_opening_bao_jiao_window() -> bool:
 	opening_bao_jiao_queue = _build_opening_bao_jiao_queue()
+	_record_ios_state_probe("opening_bao_queue built=%s" % JSON.stringify(opening_bao_jiao_queue))
 	if opening_bao_jiao_queue.is_empty():
 		opening_bao_jiao_pending = false
 		opening_bao_jiao_current_seat = -1
@@ -2797,6 +2750,7 @@ func _start_opening_bao_jiao_window() -> bool:
 func _process_opening_bao_jiao_queue() -> void:
 	if not opening_bao_jiao_pending:
 		return
+	_record_ios_state_probe("opening_bao_process queue=%s current=%d" % [JSON.stringify(opening_bao_jiao_queue), opening_bao_jiao_current_seat])
 	while not opening_bao_jiao_queue.is_empty():
 		var seat := int(opening_bao_jiao_queue.pop_front())
 		if seat < 0 or seat >= players.size():
@@ -2810,6 +2764,13 @@ func _process_opening_bao_jiao_queue() -> void:
 		opening_bao_jiao_current_seat = seat
 		if bool(players[seat].get("is_ai", false)):
 			var ai_decision := _build_ai_bao_jiao_decision(seat, plan)
+			_record_ios_state_probe("opening_bao_ai seat=%d decision_empty=%s action=%s declare=%s err=%s" % [
+				seat,
+				str(ai_decision.is_empty()),
+				str(ai_decision.get("action", "")),
+				str(ai_decision.get("declare", false)),
+				str(ai_manager.get_backend_status().get("last_native_turn_error", "")) if ai_manager != null and ai_manager.has_method("get_backend_status") else "",
+			])
 			if _should_execute_ai_bao_jiao_decision(ai_decision):
 				var selected_keys := _sanitize_bao_gang_selection(plan, ai_decision.get("selected_bao_gang_keys", []))
 				if execute_human_bao_jiao(seat, selected_keys, false):
@@ -2822,6 +2783,7 @@ func _process_opening_bao_jiao_queue() -> void:
 				debug_last_message = "%s 放弃开局报叫/报杠。" % _seat_display_name(seat)
 			continue
 		debug_last_message = "%s 起手可报叫/报杠，请先选择报叫或过牌，之后庄家再首打。" % _seat_display_name(seat)
+		_record_ios_state_probe("opening_bao_human_pending seat=%d msg=%s" % [seat, debug_last_message])
 		_emit_state_changed()
 		return
 	opening_bao_jiao_pending = false
@@ -2870,13 +2832,18 @@ func _mark_opening_bao_jiao_reviewed(seat: int) -> void:
 
 func _finish_opening_discard_after_bao_jiao_window() -> void:
 	if current_phase != RoundPhase.DISCARD:
+		_record_ios_state_probe("finish_opening_discard rejected phase=%d" % int(current_phase))
 		return
 	if opening_bao_jiao_pending:
+		_record_ios_state_probe("finish_opening_discard waiting_bao current=%d queue=%s" % [opening_bao_jiao_current_seat, JSON.stringify(opening_bao_jiao_queue)])
 		return
 	var seat: int = current_turn_seat
 	debug_last_message = "%s 为庄家，起手 14 张，先行出牌。" % _seat_display_name(seat)
-	if bool(players[seat].get("is_ai", false)):
-		_start_ai_turn_background_request()
+	_record_ios_state_probe("finish_opening_discard seat=%d is_ai=%s native=%s" % [
+		seat,
+		str(bool(players[seat].get("is_ai", false))),
+		str(_has_native_csharp_runtime()),
+	])
 
 
 func _begin_opening_discard_phase() -> void:
@@ -2898,9 +2865,43 @@ func _begin_opening_discard_phase() -> void:
 	}
 	self_hu_pass_locks.erase(str(seat))
 	current_phase = RoundPhase.DISCARD
+	_record_ios_state_probe("begin_opening_discard phase=DISCARD turn=%d human_can_discard=%s" % [
+		current_turn_seat,
+		str(can_human_discard(0)),
+	])
 	if _start_opening_bao_jiao_window():
 		return
 	_finish_opening_discard_after_bao_jiao_window()
+
+
+func _debug_ding_que_choices() -> Array:
+	var result: Array = []
+	for player in players:
+		result.append({
+			"seat": int(player.get("seat", -1)),
+			"is_ai": bool(player.get("is_ai", false)),
+			"ding_que": str(player.get("ding_que", "")),
+			"hand_count": int(player.get("hand_count", 0)),
+		})
+	return result
+
+
+func _record_ios_state_probe(message: String) -> void:
+	if not OS.has_feature("ios"):
+		return
+	var line := "%d R%d P%d T%d %s" % [
+		Time.get_ticks_msec(),
+		round_index,
+		int(current_phase),
+		current_turn_seat,
+		message,
+	]
+	var file := FileAccess.open(IOS_STATE_PROBE_LOG_PATH, FileAccess.READ_WRITE if FileAccess.file_exists(IOS_STATE_PROBE_LOG_PATH) else FileAccess.WRITE)
+	if file == null:
+		return
+	file.seek_end()
+	file.store_line(line)
+	file.close()
 
 
 func _begin_turn() -> void:
@@ -2953,9 +2954,6 @@ func _begin_turn() -> void:
 			draw_reason_text,
 			draw_tile["display_name"],
 		]
-	if bool(players[seat].get("is_ai", false)):
-		_start_ai_turn_background_request()
-
 
 func _enter_settlement_due_to_draw() -> void:
 	current_phase = RoundPhase.SETTLEMENT
@@ -3068,7 +3066,6 @@ func _lock_dealer_ding_que_from_first_discard(tile_id: int) -> bool:
 
 
 func _emit_state_changed() -> void:
-	_pump_ai_background_requests()
 	state_changed.emit(get_debug_snapshot())
 
 
@@ -3333,10 +3330,8 @@ func _compact_diagnostic_leaf(value):
 
 
 func _pump_ai_background_requests() -> int:
-	var delivered := 0 if ai_manager == null else int(ai_manager.pump_async_requests())
-	if delivered > 0:
-		_record_ai_chain_debug("ai_pump_delivered count=%d" % delivered)
-	return delivered
+	_record_ai_chain_debug("ai_pump_ignored_strict_sync")
+	return 0
 
 
 func pump_ai_background_requests() -> int:
@@ -4646,7 +4641,6 @@ func _execute_peng(seat: int) -> bool:
 	_clear_reaction_context()
 	if bool(players[seat].get("is_ai", false)):
 		pending_ai_turn_decision.clear()
-		_start_ai_turn_background_request()
 	_emit_state_changed()
 	return true
 
@@ -6023,7 +6017,11 @@ func _ensure_debug_decision_trace_session() -> void:
 	if not debug_decision_trace_session_id.is_empty():
 		_ensure_debug_decision_trace_output_dirs()
 		return
-	debug_decision_trace_session_id = "%s_debug_%s" % [_hell_timestamp_slug(), str(OS.get_unique_id()).substr(0, 8)]
+	debug_decision_trace_session_id = "%s_debug_%s_%d" % [
+		_hell_timestamp_slug(),
+		str(OS.get_unique_id()).substr(0, 8),
+		Time.get_ticks_usec(),
+	]
 	debug_decision_trace_event_count = 0
 	latest_debug_decision_trace_event.clear()
 	_ensure_debug_decision_trace_output_dirs()

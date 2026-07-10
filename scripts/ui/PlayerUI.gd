@@ -1520,7 +1520,7 @@ func _apply_player_win_state(player: Dictionary) -> void:
 func _apply_identity_name_style() -> void:
 	var style := _build_identity_plate_style(Color(0.08, 0.30, 0.23, 0.82), Color(0.92, 1.0, 0.88, 0.24), 18, 8)
 	identity_name_label.add_theme_stylebox_override("normal", style)
-	identity_name_label.remove_theme_font_override("font")
+	identity_name_label.add_theme_font_override("font", UIStyleConfig.body_font())
 	identity_name_label.add_theme_font_size_override("font_size", _identity_name_font_size())
 	identity_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	identity_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1560,6 +1560,7 @@ func _apply_identity_win_stamp_style() -> void:
 	stamp_style.shadow_size = 10
 	stamp_style.shadow_offset = Vector2(0, 4)
 	identity_win_stamp.add_theme_stylebox_override("normal", stamp_style)
+	identity_win_stamp.add_theme_font_override("font", UIStyleConfig.body_font())
 	identity_win_stamp.add_theme_font_size_override("font_size", 48 if seat_dock == SeatDock.TOP else 42)
 	identity_win_stamp.add_theme_color_override("font_color", Color(0.97, 0.16, 0.10, 0.98))
 	identity_win_stamp.add_theme_color_override("font_outline_color", Color(1.0, 0.84, 0.80, 0.54))
@@ -1596,6 +1597,7 @@ func _apply_identity_dealer_badge_style() -> void:
 	style.shadow_size = 6
 	style.shadow_offset = Vector2(0, 2)
 	identity_dealer_badge.add_theme_stylebox_override("normal", style)
+	identity_dealer_badge.add_theme_font_override("font", UIStyleConfig.body_font())
 	identity_dealer_badge.add_theme_font_size_override("font_size", 36)
 	identity_dealer_badge.add_theme_color_override("font_color", Color(1.0, 0.92, 0.42, 1.0))
 	identity_dealer_badge.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.01, 0.95))
@@ -1635,6 +1637,7 @@ func _apply_identity_ding_que_style(suit: String) -> void:
 	style.content_margin_top = 7
 	style.content_margin_bottom = 7
 	identity_ding_que_label.add_theme_stylebox_override("normal", style)
+	identity_ding_que_label.add_theme_font_override("font", UIStyleConfig.body_font())
 	identity_ding_que_label.add_theme_font_size_override("font_size", 19 if seat_dock == SeatDock.SELF else (18 if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else 17))
 	identity_ding_que_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	identity_ding_que_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

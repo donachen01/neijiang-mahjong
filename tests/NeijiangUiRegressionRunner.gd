@@ -28,7 +28,7 @@ func _run() -> void:
 	_run_test("opening_reported_ai_reaction_uses_real_manager_without_stall", _test_opening_reported_ai_reaction_uses_real_manager_without_stall.bind(root_node), failures)
 	_run_test("bao_gang_dialog_confirm_advances_opening_bao_jiao", _test_bao_gang_dialog_confirm_advances_opening_bao_jiao.bind(root_node), failures)
 	_run_test("opening_ai_bao_gang_before_human_pass_does_not_stick_ui", _test_opening_ai_bao_gang_before_human_pass_does_not_stick_ui.bind(root_node), failures)
-	_run_test("opening_ai_bao_gang_after_human_pass_publishes_ai_request", _test_opening_ai_bao_gang_after_human_pass_publishes_ai_request.bind(root_node), failures)
+	_run_test("opening_ai_bao_gang_after_human_pass_schedules_sync_ai_discard", _test_opening_ai_bao_gang_after_human_pass_schedules_sync_ai_discard.bind(root_node), failures)
 	_run_test("opening_ai_bao_gang_before_human_confirm_does_not_stick_ui", _test_opening_ai_bao_gang_before_human_confirm_does_not_stick_ui.bind(root_node), failures)
 	_run_test("opening_ai_bao_gang_before_human_dealer_first_discard_does_not_stick_ui", _test_opening_ai_bao_gang_before_human_dealer_first_discard_does_not_stick_ui.bind(root_node), failures)
 	_run_test("opening_ai_bao_jiao_only_before_human_pass_does_not_stick_ui", _test_opening_ai_bao_jiao_only_before_human_pass_does_not_stick_ui.bind(root_node), failures)
@@ -672,27 +672,9 @@ func _test_opening_reported_ai_reaction_uses_real_manager_without_stall(root_nod
 			after_dealer,
 		]
 	root_node.call("_on_ai_reaction_timer_timeout")
-	if game_state.pending_ai_reaction_decision.is_empty() and game_state.pending_ai_reaction_request_id <= 0:
-		return "expected first AI reaction timer tick to start or resolve real-manager request, snapshot=%s debug=%s ai_core=%s" % [
-			game_manager.get_fresh_snapshot(),
-			game_state.debug_last_message,
-			game_manager.get_fresh_snapshot().get("ai_core_debug", {}),
-		]
-	for _attempt in range(6):
-		game_state.pump_ai_background_requests()
-		if not game_state.pending_ai_reaction_decision.is_empty():
-			break
-		OS.delay_msec(10)
-	if game_state.pending_ai_reaction_decision.is_empty():
-		return "expected real-manager AI reaction decision to be delivered, pending_meta=%s snapshot=%s ai_core=%s" % [
-			game_state.pending_ai_reaction_request_meta,
-			after_dealer,
-			after_dealer.get("ai_core_debug", {}),
-		]
-	root_node.call("_on_ai_reaction_timer_timeout")
 	var latest: Dictionary = game_manager.get_fresh_snapshot()
 	if int(latest.get("current_phase", -1)) == 6 and bool(game_state.is_ai_reaction_pending()):
-		return "reported AI seat 1 stayed stuck after real-manager reaction, debug=%s pending_meta=%s pending_decision=%s snapshot=%s ai_core=%s" % [
+		return "reported AI seat 1 stayed stuck after synchronous real-manager reaction, debug=%s pending_meta=%s pending_decision=%s snapshot=%s ai_core=%s" % [
 			game_state.debug_last_message,
 			game_state.pending_ai_reaction_request_meta,
 			game_state.pending_ai_reaction_decision,
@@ -799,16 +781,16 @@ func _test_opening_ai_bao_gang_before_human_pass_does_not_stick_ui(root_node: No
 			game_state.debug_last_message,
 			game_state.get_debug_snapshot(),
 		]
-	var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "human pass")
-	if first_discard_result != true:
-		return first_discard_result
+		var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "human pass")
+		if not (first_discard_result is bool and first_discard_result):
+			return str(first_discard_result)
 	var latest: Dictionary = root_node.get("last_snapshot")
 	if bool(latest.get("human_can_pass_opening_bao_jiao", false)) or bool(latest.get("human_can_bao_jiao", false)):
 		return "expected UI snapshot to clear opening prompt after pass, got %s" % [latest]
 	return true
 
 
-func _test_opening_ai_bao_gang_after_human_pass_publishes_ai_request(root_node: Node):
+func _test_opening_ai_bao_gang_after_human_pass_schedules_sync_ai_discard(root_node: Node):
 	var setup_result := _setup_opening_ai_bao_gang_before_human(root_node, 6600)
 	if setup_result.has("error"):
 		return setup_result["error"]
@@ -818,18 +800,15 @@ func _test_opening_ai_bao_gang_after_human_pass_publishes_ai_request(root_node: 
 	if pass_button == null or not pass_button.visible:
 		return "expected pass button while human is asked after AI declarations"
 	pass_button.pressed.emit()
-	if int(game_state.pending_ai_turn_request_id) <= 0 and game_state.pending_ai_turn_decision.is_empty():
-		return "expected GameState to start AI dealer first-discard request after human pass"
 	var latest: Dictionary = game_manager.get_snapshot()
-	var latest_request_id := int(latest.get("pending_ai_turn_request_id", 0))
-	var latest_decision: Dictionary = latest.get("pending_ai_turn_decision", {})
-	if latest_request_id <= 0 and latest_decision.is_empty():
-		return "expected published snapshot to include AI first-discard pending state, latest=%s state_request=%s state_decision=%s debug=%s" % [
+	if int(game_state.current_turn_seat) != 3 or not bool(game_state.is_ai_turn_ready()):
+		return "expected GameState to publish AI dealer first-discard readiness after human pass, latest=%s debug=%s" % [
 			latest,
-			game_state.pending_ai_turn_request_id,
-			game_state.pending_ai_turn_decision,
 			game_state.debug_last_message,
 		]
+	var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "human pass sync")
+	if not (first_discard_result is bool and first_discard_result):
+		return str(first_discard_result)
 	return true
 
 
@@ -868,9 +847,9 @@ func _test_opening_ai_bao_gang_before_human_confirm_does_not_stick_ui(root_node:
 			game_state.debug_last_message,
 			game_state.get_debug_snapshot(),
 		]
-	var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "human confirm")
-	if first_discard_result != true:
-		return first_discard_result
+		var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "human confirm")
+		if not (first_discard_result is bool and first_discard_result):
+			return str(first_discard_result)
 	var latest: Dictionary = root_node.get("last_snapshot")
 	if bool(latest.get("human_can_pass_opening_bao_jiao", false)) or bool(latest.get("human_can_bao_jiao", false)):
 		return "expected UI snapshot to clear opening prompt after confirm, got %s" % [latest]
@@ -966,9 +945,9 @@ func _test_opening_ai_bao_jiao_only_before_human_pass_does_not_stick_ui(root_nod
 			game_state.debug_last_message,
 			game_state.get_debug_snapshot(),
 		]
-	var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "bao-jiao-only human pass")
-	if first_discard_result != true:
-		return first_discard_result
+		var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "bao-jiao-only human pass")
+		if not (first_discard_result is bool and first_discard_result):
+			return str(first_discard_result)
 	var latest: Dictionary = root_node.get("last_snapshot")
 	if bool(latest.get("human_can_pass_opening_bao_jiao", false)) or bool(latest.get("human_can_bao_jiao", false)):
 		return "expected UI snapshot to clear opening bao-jiao-only prompt after pass, got %s" % [latest]
@@ -1009,9 +988,9 @@ func _test_opening_ai_bao_jiao_only_before_human_confirm_does_not_stick_ui(root_
 			game_state.debug_last_message,
 			game_state.get_debug_snapshot(),
 		]
-	var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "bao-jiao-only human confirm")
-	if first_discard_result != true:
-		return first_discard_result
+		var first_discard_result = _assert_ai_dealer_first_discard_from_ui_timer(root_node, game_state, "bao-jiao-only human confirm")
+		if not (first_discard_result is bool and first_discard_result):
+			return str(first_discard_result)
 	var latest: Dictionary = root_node.get("last_snapshot")
 	if bool(latest.get("human_can_pass_opening_bao_jiao", false)) or bool(latest.get("human_can_bao_jiao", false)):
 		return "expected UI snapshot to clear opening bao-jiao-only prompt after confirm, got %s" % [latest]
@@ -1210,12 +1189,6 @@ func _assert_ai_dealer_first_discard_from_ui_timer(root_node: Node, game_state, 
 		return "expected AI turn timer to exist after %s" % context
 	if ai_turn_timer.is_stopped():
 		return "expected UI to schedule AI dealer first-discard timer after %s" % context
-	game_state.pump_ai_background_requests()
-	if game_state.pending_ai_turn_decision.is_empty():
-		return "expected background AI dealer discard decision to be delivered after %s, pending_meta=%s" % [
-			context,
-			game_state.pending_ai_turn_request_meta,
-		]
 	root_node.call("_on_ai_turn_timer_timeout")
 	if game_state.discard_pile.is_empty():
 		return "expected AI dealer first discard to enter discard pile after %s" % context
@@ -1435,10 +1408,29 @@ class FakeOpeningBaoJiaoManager:
 			"backend_mode": "ui_regression_fake_bao_jiao",
 		}
 
+	func analyze_turn(player_state: Dictionary, table_state: Dictionary, _rules_config, _ai_config, _hu_checker, _risk_analyzer, _allow_cheat: bool = false) -> Dictionary:
+		return _build_turn_analysis(player_state, table_state)
+
+	func analyze_turn_lightweight(player_state: Dictionary, table_state: Dictionary, _rules_config, _ai_config, _hu_checker, _risk_analyzer, _allow_cheat: bool = false) -> Dictionary:
+		return _build_turn_analysis(player_state, table_state)
+
 	func start_turn_analysis_background(player_state: Dictionary, table_state: Dictionary, _rules_config, _ai_config, _hu_checker, _risk_analyzer, _allow_cheat: bool = false, _hell_payload: Dictionary = {}, _force_lightweight: bool = false, _compact_result: bool = false, _force_native_async: bool = false, _allow_sync_delivery: bool = true) -> int:
+		var analysis := _build_turn_analysis(player_state, table_state)
+		if analysis.is_empty():
+			return 0
+		var request_id := next_request_id
+		next_request_id += 1
+		latest_turn_snapshot = {
+			"seat": int(player_state.get("seat", -1)),
+			"analysis": analysis.duplicate(true),
+		}
+		ai_turn_analysis_ready.emit(request_id, int(player_state.get("seat", -1)), analysis.duplicate(true))
+		return request_id
+
+	func _build_turn_analysis(player_state: Dictionary, table_state: Dictionary) -> Dictionary:
 		var hand_tiles: Array = player_state.get("hand_tiles", [])
 		if hand_tiles.is_empty():
-			return 0
+			return {}
 		var tile: Dictionary = hand_tiles[0].duplicate(true)
 		var last_draw: Dictionary = table_state.get("last_draw_tile", {})
 		var last_draw_tile: Dictionary = last_draw.get("tile", {})
@@ -1452,22 +1444,17 @@ class FakeOpeningBaoJiaoManager:
 					break
 		elif discard_from_end:
 			tile = Dictionary(hand_tiles[hand_tiles.size() - 1]).duplicate(true)
-		var request_id := next_request_id
-		next_request_id += 1
-		pending_turn_requests[request_id] = {
-			"seat": int(player_state.get("seat", -1)),
-			"analysis": {
-				"action": "discard",
-				"backend": "ui_regression_fake_turn",
-				"recommended": {
-					"tile": tile.duplicate(true),
-					"csharp_tile_type": _tile_type(tile),
-				},
-				"options": [],
-				"danger_tiles": [],
+		return {
+			"action": "discard",
+			"backend": "ui_regression_fake_turn",
+			"backend_mode": "ui_regression_fake_turn",
+			"recommended": {
+				"tile": tile.duplicate(true),
+				"csharp_tile_type": _tile_type(tile),
 			},
+			"options": [],
+			"danger_tiles": [],
 		}
-		return request_id
 
 	func pump_async_requests() -> int:
 		var delivered := 0

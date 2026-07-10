@@ -3,6 +3,9 @@ extends Resource
 class_name UIStyleConfig
 
 const NAMEPLATE_FONT := preload("res://res/fonts/nameplate_calligraphy.ttf")
+const BODY_FONT := preload("res://res/fonts/app_cjk.ttc")
+
+static var _cached_body_font: Font
 
 @export var table_bg: Color = Color("1B7049")
 @export var panel_bg: Color = Color(0.12, 0.38, 0.27, 0.88)
@@ -179,19 +182,20 @@ func apply_button(button: Button, primary: bool = false) -> void:
 	button.add_theme_font_override("font", _body_font())
 
 
-func _display_font() -> Font:
+static func _display_font() -> Font:
 	return NAMEPLATE_FONT
 
 
-func _body_font() -> Font:
-	var font := SystemFont.new()
-	font.font_names = PackedStringArray([
-		"PingFang SC",
-		"Hiragino Sans GB",
-		"Microsoft YaHei",
-		"Noto Sans CJK SC",
-		"Source Han Sans SC",
-	])
-	font.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
-	font.hinting = TextServer.HINTING_LIGHT
-	return font
+static func _body_font() -> Font:
+	if _cached_body_font != null:
+		return _cached_body_font
+	_cached_body_font = BODY_FONT
+	return _cached_body_font
+
+
+static func body_font() -> Font:
+	return _body_font()
+
+
+static func display_font() -> Font:
+	return NAMEPLATE_FONT

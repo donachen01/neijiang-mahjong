@@ -118,6 +118,10 @@ func _run() -> void:
 	_run_test("mandatory_reaction_bao_gang_is_csharp_decision", _test_mandatory_reaction_bao_gang_is_csharp_decision, failures)
 	_run_test("add_gang_requires_matching_last_draw_after_peng", _test_add_gang_requires_matching_last_draw_after_peng, failures)
 	_run_test("peng_does_not_reask_self_action_for_immediate_add_gang", _test_peng_does_not_reask_self_action_for_immediate_add_gang, failures)
+	_run_test("human_peng_enters_discard_without_stall", _test_human_peng_enters_discard_without_stall, failures)
+	_run_test("human_melded_gang_draws_and_can_discard", _test_human_melded_gang_draws_and_can_discard, failures)
+	_run_test("ai_peng_enters_ai_discard_without_stall", _test_ai_peng_enters_ai_discard_without_stall, failures)
+	_run_test("ai_melded_gang_draws_and_enters_ai_discard", _test_ai_melded_gang_draws_and_enters_ai_discard, failures)
 	_run_test("reaction_context_defers_native_ai_until_timer", _test_reaction_context_defers_native_ai_until_timer, failures)
 	if failures.is_empty():
 		print("NEIJIANG BAO GANG REGRESSION OK")
@@ -576,6 +580,124 @@ func _test_peng_does_not_reask_self_action_for_immediate_add_gang():
 		return "expected no immediate self-action after peng, got %s" % [decision]
 	if fake_ai.self_action_call_count != 0:
 		return "expected frontend not to ask C# self-action immediately after peng, call_count=%d" % fake_ai.self_action_call_count
+	return true
+
+
+func _test_human_peng_enters_discard_without_stall():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
+	game_state.current_turn_seat = 1
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, [
+			_make_tile(811, "tiao", 5), _make_tile(812, "tiao", 5),
+			_make_tile(813, "tong", 1), _make_tile(814, "tong", 2),
+		]),
+		_make_player_neijiang(1, []),
+		_make_player_neijiang(2, []),
+		_make_player_neijiang(3, []),
+	])
+	_set_discard_reaction(game_state, 1, _make_tile(810, "tiao", 5))
+	if not game_state.execute_human_peng(0):
+		return "expected human peng action to execute, message=%s" % game_state.debug_last_message
+	if int(game_state.current_phase) != int(GAME_STATE_SCRIPT.RoundPhase.DISCARD):
+		return "expected DISCARD phase after human peng, got %s" % game_state.current_phase
+	if int(game_state.current_turn_seat) != 0:
+		return "expected human seat 0 to own turn after peng, got %d" % game_state.current_turn_seat
+	if not game_state.can_human_discard(0):
+		return "expected human can discard after peng"
+	if not game_state.pending_reactions.is_empty() or not game_state.current_discard_context.is_empty():
+		return "expected reaction context cleared after peng"
+	return true
+
+
+func _test_human_melded_gang_draws_and_can_discard():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
+	game_state.current_turn_seat = 1
+	var wall_tiles: Array[Dictionary] = [_make_tile(829, "tong", 9)]
+	game_state.wall = wall_tiles
+	game_state.wall_count = game_state.wall.size()
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, [
+			_make_tile(821, "tiao", 5), _make_tile(822, "tiao", 5), _make_tile(823, "tiao", 5),
+			_make_tile(824, "tong", 1), _make_tile(825, "tong", 2),
+		]),
+		_make_player_neijiang(1, []),
+		_make_player_neijiang(2, []),
+		_make_player_neijiang(3, []),
+	])
+	_set_discard_reaction(game_state, 1, _make_tile(820, "tiao", 5))
+	if not game_state.execute_human_gang(0):
+		return "expected human melded gang action to execute, message=%s" % game_state.debug_last_message
+	if int(game_state.current_phase) != int(GAME_STATE_SCRIPT.RoundPhase.DISCARD):
+		return "expected DISCARD phase after human gang draw, got %s" % game_state.current_phase
+	if int(game_state.current_turn_seat) != 0:
+		return "expected human seat 0 to own turn after gang, got %d" % game_state.current_turn_seat
+	if not game_state.can_human_discard(0):
+		return "expected human can discard after gang supplement draw"
+	if int(game_state.last_draw_tile.get("seat", -1)) != 0:
+		return "expected last draw to belong to human gang claimant, got %s" % [game_state.last_draw_tile]
+	return true
+
+
+func _test_ai_peng_enters_ai_discard_without_stall():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
+	game_state.current_turn_seat = 0
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, []),
+		_make_player_neijiang(1, [
+			_make_tile(831, "tiao", 5), _make_tile(832, "tiao", 5),
+			_make_tile(833, "tong", 1), _make_tile(834, "tong", 2),
+		]),
+		_make_player_neijiang(2, []),
+		_make_player_neijiang(3, []),
+	])
+	var fake_ai := FakeNativeReactionAIManager.new()
+	fake_ai.decision = {"action": "peng", "score": 100, "reasons": ["test peng"]}
+	game_state.ai_manager = fake_ai
+	_set_discard_reaction(game_state, 0, _make_tile(830, "tiao", 5))
+	if not game_state.run_ai_reaction():
+		return "expected AI peng reaction to execute, message=%s" % game_state.debug_last_message
+	if int(game_state.current_phase) != int(GAME_STATE_SCRIPT.RoundPhase.DISCARD):
+		return "expected DISCARD phase after AI peng, got %s" % game_state.current_phase
+	if int(game_state.current_turn_seat) != 1:
+		return "expected AI seat 1 to own turn after peng, got %d" % game_state.current_turn_seat
+	if not game_state.is_ai_turn_ready():
+		return "expected AI turn ready after AI peng"
+	return true
+
+
+func _test_ai_melded_gang_draws_and_enters_ai_discard():
+	var game_state = _build_neijiang_test_game_state()
+	game_state.current_phase = GAME_STATE_SCRIPT.RoundPhase.REACTION
+	game_state.current_turn_seat = 0
+	var wall_tiles: Array[Dictionary] = [_make_tile(849, "tong", 9)]
+	game_state.wall = wall_tiles
+	game_state.wall_count = game_state.wall.size()
+	_set_test_players(game_state, [
+		_make_player_neijiang(0, []),
+		_make_player_neijiang(1, [
+			_make_tile(841, "tiao", 5), _make_tile(842, "tiao", 5), _make_tile(843, "tiao", 5),
+			_make_tile(844, "tong", 1), _make_tile(845, "tong", 2),
+		]),
+		_make_player_neijiang(2, []),
+		_make_player_neijiang(3, []),
+	])
+	var fake_ai := FakeNativeReactionAIManager.new()
+	fake_ai.decision = {"action": "gang", "score": 120, "reasons": ["test gang"]}
+	game_state.ai_manager = fake_ai
+	_set_discard_reaction(game_state, 0, _make_tile(840, "tiao", 5))
+	if not game_state.run_ai_reaction():
+		return "expected AI melded gang reaction to execute, message=%s" % game_state.debug_last_message
+	if int(game_state.current_phase) != int(GAME_STATE_SCRIPT.RoundPhase.DISCARD):
+		return "expected DISCARD phase after AI gang draw, got %s" % game_state.current_phase
+	if int(game_state.current_turn_seat) != 1:
+		return "expected AI seat 1 to own turn after gang, got %d" % game_state.current_turn_seat
+	if not game_state.is_ai_turn_ready():
+		return "expected AI turn ready after AI gang supplement draw"
+	if int(game_state.last_draw_tile.get("seat", -1)) != 1:
+		return "expected last draw to belong to AI gang claimant, got %s" % [game_state.last_draw_tile]
 	return true
 
 

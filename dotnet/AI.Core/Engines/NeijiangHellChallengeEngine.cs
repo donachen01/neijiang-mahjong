@@ -18,6 +18,31 @@ public sealed class NeijiangHellChallengeEngine
         var baoJiaoDecision = _baoJiaoAction.TryDecideDiscard(state);
         if (baoJiaoDecision is not null)
         {
+            var baoJiaoCandidates = baoJiaoDecision.Candidates
+                .Select(candidate => new NeijiangHellChallengeCandidate
+                {
+                    TileType = candidate.TileType,
+                    Score = candidate.Score,
+                    Shanten = candidate.Shanten,
+                    LiveUkeire = candidate.LiveUkeire,
+                    WaitCount = candidate.WaitCount,
+                    ExactDealIn = false,
+                    FeedsHumanHu = false,
+                    FeedsHumanPeng = false,
+                    FeedsHumanGang = false,
+                    HumanPengThreat = 0,
+                    HumanPengPenalty = 0,
+                    TempoPengAllowanceBonus = 0,
+                    PengOnlyInteractionBonus = 0,
+                    KeepsReady = candidate.Shanten <= 0,
+                    ExactWallRemaining = candidate.LiveUkeire,
+                    Tier = "A_BAO_JIAO_LOCK",
+                    TierRank = 0,
+                    TierAdjustment = 0,
+                    DealInTargetSeats = Array.Empty<int>(),
+                    Reasons = candidate.Reasons
+                })
+                .ToArray();
             return new NeijiangHellOracleResult
             {
                 DecisionType = "discard",
@@ -26,7 +51,12 @@ public sealed class NeijiangHellChallengeEngine
                 Severity = "none",
                 ExactKeepsReady = true,
                 ExactWallRemaining = baoJiaoDecision.LiveUkeire,
-                Reasons = baoJiaoDecision.Reasons
+                SelectedShanten = baoJiaoDecision.Shanten,
+                SelectedLiveUkeire = baoJiaoDecision.LiveUkeire,
+                SelectedWaitCount = baoJiaoDecision.Candidates.FirstOrDefault()?.WaitCount ?? 0,
+                SelectedTier = "A_BAO_JIAO_LOCK",
+                Reasons = baoJiaoDecision.Reasons,
+                Candidates = baoJiaoCandidates
             };
         }
 

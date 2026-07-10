@@ -60,22 +60,17 @@ func has_native_csharp_runtime() -> bool:
 
 
 func has_native_csharp_async_runtime() -> bool:
-	return has_native_csharp_runtime() \
-		and native_csharp_runtime.has_method("StartAnalyzeDiscardJson") \
-		and native_csharp_runtime.has_method("StartAnalyzeReactionJson") \
-		and native_csharp_runtime.has_method("PollAiResultJson")
+	return false
 
 
 func has_native_hell_challenge_runtime() -> bool:
 	return has_native_csharp_runtime() \
-		and native_csharp_runtime.has_method("AnalyzeHellChallengeDiscardJson") \
-		and native_csharp_runtime.has_method("StartAnalyzeHellChallengeDiscardJson")
+		and native_csharp_runtime.has_method("AnalyzeHellChallengeDiscardJson")
 
 
 func has_native_hell_challenge_reaction_runtime() -> bool:
 	return has_native_csharp_runtime() \
-		and native_csharp_runtime.has_method("AnalyzeHellChallengeReactionJson") \
-		and native_csharp_runtime.has_method("StartAnalyzeHellChallengeReactionJson")
+		and native_csharp_runtime.has_method("AnalyzeHellChallengeReactionJson")
 
 
 func analyze_turn(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false) -> Dictionary:
@@ -235,14 +230,42 @@ func analyze_hell_challenge_discard(player_state: Dictionary, table_state: Dicti
 	for key in hell_payload.keys():
 		payload[key] = hell_payload[key]
 	var raw := str(native_csharp_runtime.call("AnalyzeHellChallengeDiscardJson", JSON.stringify(payload)))
-	last_native_turn_raw_summary = "hell_challenge raw=%s" % raw.left(700)
-	var parsed = JSON.parse_string(raw)
-	var native_result: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+	last_native_turn_raw_summary = "hell_challenge payload=%s raw_len=%d raw=%s" % [
+		_build_hell_payload_summary(payload),
+		raw.length(),
+		raw.left(900),
+	]
+	if raw.is_empty():
+		last_native_turn_error = "hell_challenge_empty_raw_response"
+		return {}
+	var parser := JSON.new()
+	var parse_error := parser.parse(raw)
+	if parse_error != OK:
+		last_native_turn_error = "hell_challenge_invalid_json code=%d line=%d msg=%s" % [
+			parse_error,
+			parser.get_error_line(),
+			parser.get_error_message(),
+		]
+		return {}
+	var parsed = parser.data
+	if typeof(parsed) != TYPE_DICTIONARY:
+		last_native_turn_error = "hell_challenge_non_dictionary_json type=%d" % typeof(parsed)
+		return {}
+	var native_result: Dictionary = parsed
 	if native_result.is_empty() or not bool(native_result.get("ok", false)):
 		last_native_turn_error = str(native_result.get("error", "empty_hell_challenge_result"))
 		return {}
+	var analysis := _build_csharp_discard_analysis(player_state, native_result, rules_config, csharp_bridge, "hell_challenge_direct", table_state)
+	if analysis.is_empty():
+		last_native_turn_error = "hell_challenge_unmapped_result action=%s tileType=%d candidates=%d handTypes=%s" % [
+			str(native_result.get("action", "")),
+			int(native_result.get("tileType", -1)),
+			Array(native_result.get("candidates", [])).size(),
+			JSON.stringify(_summarize_hand_tile_types(player_state, rules_config)).left(220),
+		]
+		return {}
 	last_native_turn_error = ""
-	return _build_csharp_discard_analysis(player_state, native_result, rules_config, csharp_bridge, "hell_challenge_direct", table_state)
+	return analysis
 
 
 func analyze_hell_challenge_reaction(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, hell_payload: Dictionary) -> Dictionary:
@@ -253,14 +276,37 @@ func analyze_hell_challenge_reaction(candidate: Dictionary, player_state: Dictio
 	for key in hell_payload.keys():
 		payload[key] = hell_payload[key]
 	var raw := str(native_csharp_runtime.call("AnalyzeHellChallengeReactionJson", JSON.stringify(payload)))
-	last_native_reaction_raw_summary = "hell_challenge_reaction raw=%s" % raw.left(700)
-	var native_result = JSON.parse_string(raw)
-	var result: Dictionary = native_result if typeof(native_result) == TYPE_DICTIONARY else {}
+	last_native_reaction_raw_summary = "hell_challenge_reaction payload=%s raw_len=%d raw=%s" % [
+		_build_hell_payload_summary(payload),
+		raw.length(),
+		raw.left(900),
+	]
+	if raw.is_empty():
+		last_native_reaction_error = "hell_challenge_reaction_empty_raw_response"
+		return {}
+	var parser := JSON.new()
+	var parse_error := parser.parse(raw)
+	if parse_error != OK:
+		last_native_reaction_error = "hell_challenge_reaction_invalid_json code=%d line=%d msg=%s" % [
+			parse_error,
+			parser.get_error_line(),
+			parser.get_error_message(),
+		]
+		return {}
+	var native_result = parser.data
+	if typeof(native_result) != TYPE_DICTIONARY:
+		last_native_reaction_error = "hell_challenge_reaction_non_dictionary_json type=%d" % typeof(native_result)
+		return {}
+	var result: Dictionary = native_result
 	if result.is_empty() or not bool(result.get("ok", false)):
 		last_native_reaction_error = str(result.get("error", "empty_hell_challenge_reaction_result"))
 		return {}
+	var analysis := _build_csharp_reaction_analysis(result, "hell_challenge_reaction_direct")
+	if analysis.is_empty():
+		last_native_reaction_error = "hell_challenge_reaction_unmapped_result action=%s" % str(result.get("action", ""))
+		return {}
 	last_native_reaction_error = ""
-	return _build_csharp_reaction_analysis(result, "hell_challenge_reaction_direct")
+	return analysis
 
 
 func _build_csharp_self_action_analysis(csharp_result: Dictionary, default_backend: String) -> Dictionary:
@@ -420,42 +466,12 @@ func _analyze_reaction_via_native_runtime(candidate: Dictionary, player_state: D
 
 
 func _start_native_turn_analysis_background(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config, request_key: String = "", hell_payload: Dictionary = {}, force_lightweight: bool = false, compact_result: bool = false) -> bool:
-	var payload_started_at := Time.get_ticks_msec()
-	var payload: Dictionary = csharp_bridge.build_discard_transport_payload(player_state, table_state, rules_config, force_lightweight, compact_result)
-	var use_hell_challenge := not hell_payload.is_empty() and has_native_hell_challenge_runtime()
-	if use_hell_challenge:
-		for key in hell_payload.keys():
-			payload[key] = hell_payload[key]
-	var payload_ms := maxi(0, Time.get_ticks_msec() - payload_started_at)
-	var native_method := "StartAnalyzeHellChallengeDiscardJson" if use_hell_challenge and has_native_hell_challenge_runtime() else "StartAnalyzeDiscardJson"
-	var native_request_id := int(native_csharp_runtime.call(native_method, JSON.stringify(payload)))
-	if native_request_id <= 0:
-		last_native_turn_error = "native_async_turn_start_failed"
-		return false
-	last_native_turn_raw_summary = "async_payload seat=%d hand_sum=%d wall=%d payload_ms=%d native_id=%d method=%s" % [
-		int(payload.get("seatIndex", -1)),
-		_sum_int_array(payload.get("hand18", [])),
-		int(payload.get("wallCount", -1)),
-		payload_ms,
-		native_request_id,
-		native_method,
+	last_native_turn_error = "native_async_disabled_strict_sync"
+	last_native_turn_raw_summary = "strict_sync_disabled_async_start request=%d seat=%d" % [
+		request_id,
+		int(player_state.get("seat", -1)),
 	]
-	active_async_requests[request_id] = {
-		"kind": "turn",
-		"seat": int(player_state.get("seat", -1)),
-		"native_request_id": native_request_id,
-		"player_state": player_state.duplicate(true),
-		"table_state": table_state.duplicate(true),
-		"rules_config": rules_config,
-		"hell_challenge": use_hell_challenge,
-		"force_lightweight": force_lightweight,
-		"compact_result": compact_result,
-		"payload_ms": payload_ms,
-		"started_at_ms": Time.get_ticks_msec(),
-		"request_key": request_key,
-	}
-	_remember_active_async_request(request_id, request_key)
-	return true
+	return false
 
 
 func _start_native_turn_analysis_sync_delivery(request_id: int, player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool, request_key: String = "", hell_payload: Dictionary = {}, force_lightweight: bool = false, compact_result: bool = false) -> bool:
@@ -515,42 +531,12 @@ func _start_native_turn_analysis_sync_delivery(request_id: int, player_state: Di
 
 
 func _start_native_reaction_analysis_background(request_id: int, candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, request_key: String = "", hell_payload: Dictionary = {}) -> bool:
-	var payload_started_at := Time.get_ticks_msec()
-	var payload: Dictionary = csharp_bridge.build_reaction_transport_payload(candidate, player_state, table_state, discard_context, rules_config)
-	var use_hell_challenge := not hell_payload.is_empty() and has_native_hell_challenge_reaction_runtime()
-	if use_hell_challenge:
-		for key in hell_payload.keys():
-			payload[key] = hell_payload[key]
-	var payload_ms := maxi(0, Time.get_ticks_msec() - payload_started_at)
-	var native_method := "StartAnalyzeHellChallengeReactionJson" if use_hell_challenge else "StartAnalyzeReactionJson"
-	var native_request_id := int(native_csharp_runtime.call(native_method, JSON.stringify(payload)))
-	if native_request_id <= 0:
-		last_native_reaction_error = "native_async_reaction_start_failed"
-		return false
-	last_native_reaction_raw_summary = "async_payload seat=%d tile=%d can=%s/%s/%s payload_ms=%d native_id=%d method=%s" % [
-		int(payload.get("seatIndex", -1)),
-		int(payload.get("reactionTileType", -1)),
-		str(payload.get("canHu", false)),
-		str(payload.get("canPeng", false)),
-		str(payload.get("canGang", false)),
-		payload_ms,
-		native_request_id,
-		native_method,
+	last_native_reaction_error = "native_async_disabled_strict_sync"
+	last_native_reaction_raw_summary = "strict_sync_disabled_async_start request=%d seat=%d" % [
+		request_id,
+		int(player_state.get("seat", -1)),
 	]
-	active_async_requests[request_id] = {
-		"kind": "reaction",
-		"seat": int(player_state.get("seat", -1)),
-		"native_request_id": native_request_id,
-		"candidate": candidate.duplicate(true),
-		"player_state": player_state.duplicate(true),
-		"rules_config": rules_config,
-		"hell_challenge": use_hell_challenge,
-		"payload_ms": payload_ms,
-		"started_at_ms": Time.get_ticks_msec(),
-		"request_key": request_key,
-	}
-	_remember_active_async_request(request_id, request_key)
-	return true
+	return false
 
 
 func _start_native_reaction_analysis_sync_delivery(request_id: int, candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, ai_config, hu_checker, allow_cheat: bool, request_key: String = "", hell_payload: Dictionary = {}) -> bool:
@@ -610,47 +596,14 @@ func _start_native_reaction_analysis_sync_delivery(request_id: int, candidate: D
 
 
 func _poll_native_async_request(request_id: int, request: Dictionary) -> int:
-	if not has_native_csharp_async_runtime():
-		var kind_for_unavailable := str(request.get("kind", ""))
-		var age_ms := maxi(0, Time.get_ticks_msec() - int(request.get("started_at_ms", Time.get_ticks_msec())))
-		var unavailable_summary := "async_pending_native_runtime_unavailable request=%d native_id=%d age_ms=%d" % [
-			request_id,
-			int(request.get("native_request_id", 0)),
-			age_ms,
-		]
-		if kind_for_unavailable == "reaction":
-			last_native_reaction_error = "native_async_runtime_unavailable_while_pending"
-			last_native_reaction_raw_summary = unavailable_summary
-		else:
-			last_native_turn_error = "native_async_runtime_unavailable_while_pending"
-			last_native_turn_raw_summary = unavailable_summary
-		return -1
-	var native_request_id := int(request.get("native_request_id", 0))
-	var raw := str(native_csharp_runtime.call("PollAiResultJson", native_request_id))
-	var parsed = JSON.parse_string(raw)
-	var native_result: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
-	var kind := str(request.get("kind", ""))
-	if bool(native_result.get("pending", false)):
-		var age_ms := maxi(0, Time.get_ticks_msec() - int(request.get("started_at_ms", Time.get_ticks_msec())))
-		var pending_summary := "async_pending request=%d native_id=%d age_ms=%d status=%s native_elapsed=%d thread=%d raw=%s" % [
-			request_id,
-			native_request_id,
-			age_ms,
-			str(native_result.get("status", "")),
-			int(native_result.get("elapsedMs", -1)),
-			int(native_result.get("managedThreadId", -1)),
-			raw.left(260),
-		]
-		if kind == "reaction":
-			last_native_reaction_raw_summary = pending_summary
-		else:
-			last_native_turn_raw_summary = pending_summary
-		return -1
-	if kind == "turn":
-		return _deliver_native_turn_payload(request_id, request, native_result)
-	if kind == "reaction":
-		return _deliver_native_reaction_payload(request_id, request, native_result)
-	return 0
+	var kind_for_disabled := str(request.get("kind", ""))
+	if kind_for_disabled == "reaction":
+		last_native_reaction_error = "native_async_disabled_strict_sync"
+		last_native_reaction_raw_summary = "strict_sync_disabled_async_poll request=%d" % request_id
+	else:
+		last_native_turn_error = "native_async_disabled_strict_sync"
+		last_native_turn_raw_summary = "strict_sync_disabled_async_poll request=%d" % request_id
+	return -1
 
 
 func _deliver_native_turn_payload(request_id: int, request: Dictionary, native_result: Dictionary) -> int:
@@ -897,94 +850,53 @@ func _infer_csharp_turn_gang_subtype(player_state: Dictionary, tile_type: int, a
 
 func start_turn_analysis_background(player_state: Dictionary, table_state: Dictionary, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat: bool = false, hell_payload: Dictionary = {}, force_lightweight: bool = false, compact_result: bool = false, force_native_async: bool = false, allow_sync_delivery: bool = true) -> int:
 	var seat := int(player_state.get("seat", -1))
-	var request_key := _build_active_turn_request_key(player_state, table_state, rules_config, allow_cheat, force_lightweight)
-	if not hell_payload.is_empty():
-		request_key = "%s|hell_challenge" % request_key
-	var existing_request_id := _find_active_async_request(request_key)
-	if existing_request_id > 0:
-		_record_duplicate_async_request("turn", seat, existing_request_id, request_key)
-		return existing_request_id
 	var request_id := _begin_request("turn", seat)
-	if allow_sync_delivery and not force_native_async and _start_native_turn_analysis_sync_delivery(request_id, player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, request_key, hell_payload, force_lightweight, compact_result):
-		return request_id
-	if has_native_csharp_async_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
-		if (force_native_async or should_use_native_async_requests()) and _start_native_turn_analysis_background(request_id, player_state, table_state, rules_config, request_key, hell_payload, force_lightweight, compact_result):
-			return request_id
-		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
-		return 0
-	if allow_sync_delivery:
-		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
-		return 0
-	var thread := Thread.new()
-	active_async_requests[request_id] = {
-		"kind": "turn",
-		"seat": seat,
-		"thread": thread,
-		"request_key": request_key,
-	}
-	_remember_active_async_request(request_id, request_key)
-	var started := thread.start(Callable(self, "_thread_compute_turn").bind(
-		request_id,
-		player_state.duplicate(true),
-		table_state.duplicate(true),
-		rules_config,
-		ai_config,
-		hu_checker,
-		risk_analyzer,
-		allow_cheat,
-		force_lightweight,
-		compact_result
-	))
-	if started != OK:
-		_forget_active_async_request(request_id, active_async_requests.get(request_id, {}))
-		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
-		return 0
+	var started_at_ms := Time.get_ticks_msec()
+	var analysis: Dictionary = {}
+	var active_backend := "sync_turn_compat"
+	if not hell_payload.is_empty():
+		analysis = analyze_hell_challenge_discard(player_state, table_state, rules_config, hell_payload)
+		active_backend = str(analysis.get("backend_mode", "hell_challenge_direct"))
+	else:
+		var result := _compute_turn_analysis(player_state, table_state, rules_config, ai_config, hu_checker, risk_analyzer, allow_cheat, "sync_compat_%d" % request_id, false, force_lightweight, compact_result)
+		analysis = result.get("analysis", {}).duplicate(true)
+		active_backend = str(result.get("active_backend", active_backend))
+	var elapsed_ms := maxi(0, Time.get_ticks_msec() - started_at_ms)
+	_finalize_turn_analysis(seat, {
+		"analysis": analysis.duplicate(true),
+		"active_backend": active_backend,
+		"elapsed_ms": elapsed_ms,
+		"budget_ms": _resolve_budget_ms("turn", active_backend),
+		"over_budget": elapsed_ms > _resolve_budget_ms("turn", active_backend),
+	})
+	_finish_request("turn", request_id, seat, analysis)
+	ai_turn_analysis_ready.emit(request_id, seat, analysis.duplicate(true))
 	return request_id
 
 
 func start_reaction_analysis_background(candidate: Dictionary, player_state: Dictionary, table_state: Dictionary, discard_context: Dictionary, rules_config, ai_config, hu_checker, allow_cheat: bool = false, hell_payload: Dictionary = {}, force_native_async: bool = false, allow_sync_delivery: bool = true) -> int:
 	var seat := int(player_state.get("seat", -1))
-	var request_key := _build_active_reaction_request_key(candidate, player_state, table_state, discard_context, rules_config, allow_cheat)
-	if not hell_payload.is_empty():
-		request_key = "%s|hell_challenge" % request_key
-	var existing_request_id := _find_active_async_request(request_key)
-	if existing_request_id > 0:
-		_record_duplicate_async_request("reaction", seat, existing_request_id, request_key)
-		return existing_request_id
 	var request_id := _begin_request("reaction", seat)
-	if allow_sync_delivery and not force_native_async and _start_native_reaction_analysis_sync_delivery(request_id, candidate, player_state, table_state, discard_context, rules_config, ai_config, hu_checker, allow_cheat, request_key, hell_payload):
-		return request_id
-	if has_native_csharp_async_runtime() and rules_config != null and bool(rules_config.is_neijiang_mode()):
-		if (force_native_async or should_use_native_async_requests()) and _start_native_reaction_analysis_background(request_id, candidate, player_state, table_state, discard_context, rules_config, request_key, hell_payload):
-			return request_id
-		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
-		return 0
-	if allow_sync_delivery:
-		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
-		return 0
-	var thread := Thread.new()
-	active_async_requests[request_id] = {
-		"kind": "reaction",
-		"seat": seat,
-		"thread": thread,
-		"request_key": request_key,
-	}
-	_remember_active_async_request(request_id, request_key)
-	var started := thread.start(Callable(self, "_thread_compute_reaction").bind(
-		request_id,
-		candidate.duplicate(true),
-		player_state.duplicate(true),
-		table_state.duplicate(true),
-		discard_context.duplicate(true),
-		rules_config,
-		ai_config,
-		hu_checker,
-		allow_cheat
-	))
-	if started != OK:
-		_forget_active_async_request(request_id, active_async_requests.get(request_id, {}))
-		request_state["inflight_count"] = maxi(0, int(request_state.get("inflight_count", 0)) - 1)
-		return 0
+	var started_at_ms := Time.get_ticks_msec()
+	var analysis: Dictionary = {}
+	var active_backend := "sync_reaction_compat"
+	if not hell_payload.is_empty():
+		analysis = analyze_hell_challenge_reaction(candidate, player_state, table_state, discard_context, rules_config, hell_payload)
+		active_backend = str(analysis.get("backend_mode", "hell_challenge_reaction_direct"))
+	else:
+		var result := _compute_reaction_analysis(candidate, player_state, table_state, discard_context, rules_config, ai_config, hu_checker, allow_cheat)
+		analysis = result.get("analysis", {}).duplicate(true)
+		active_backend = str(result.get("active_backend", active_backend))
+	var elapsed_ms := maxi(0, Time.get_ticks_msec() - started_at_ms)
+	_finalize_reaction_analysis(seat, {
+		"analysis": analysis.duplicate(true),
+		"active_backend": active_backend,
+		"elapsed_ms": elapsed_ms,
+		"budget_ms": _resolve_budget_ms("reaction", active_backend),
+		"over_budget": elapsed_ms > _resolve_budget_ms("reaction", active_backend),
+	})
+	_finish_request("reaction", request_id, seat, analysis)
+	ai_reaction_analysis_ready.emit(request_id, seat, analysis.duplicate(true))
 	return request_id
 
 
@@ -1003,21 +915,11 @@ func pump_async_requests() -> int:
 			completed_ids.append(request_id)
 			delivered_count += _deliver_async_payload(completed_payload)
 			continue
-		if request.has("native_request_id"):
-			var native_delivery := _poll_native_async_request(int(request_id), request)
-			if native_delivery < 0:
-				continue
-			completed_ids.append(request_id)
-			delivered_count += native_delivery
-			continue
-		var thread: Thread = request.get("thread")
-		if thread == null or thread.is_alive():
-			continue
-		var payload = thread.wait_to_finish()
 		completed_ids.append(request_id)
-		delivered_count += _deliver_async_payload(payload if typeof(payload) == TYPE_DICTIONARY else {})
+		_forget_active_async_request(int(request_id), request)
 	for request_id in completed_ids:
-		_forget_active_async_request(int(request_id), active_async_requests.get(request_id, {}))
+		if active_async_requests.has(request_id):
+			_forget_active_async_request(int(request_id), active_async_requests.get(request_id, {}))
 	is_pumping_async_requests = false
 	return delivered_count
 
@@ -1466,6 +1368,30 @@ func _sum_int_array(values) -> int:
 		for value in values:
 			total += int(value)
 	return total
+
+
+func _build_hell_payload_summary(payload: Dictionary) -> String:
+	var all_hands: Array = payload.get("allHands18", [])
+	var hand_sums: Array = []
+	for hand_value in all_hands:
+		hand_sums.append(_sum_int_array(hand_value))
+	return "seat=%d current=%d wall=%d hand_sum=%d allHands=%s exactWallSum=%d scores=%s" % [
+		int(payload.get("seatIndex", -1)),
+		int(payload.get("currentSeat", -1)),
+		int(payload.get("wallCount", -1)),
+		_sum_int_array(payload.get("hand18", [])),
+		JSON.stringify(hand_sums),
+		_sum_int_array(payload.get("exactWall18", [])),
+		JSON.stringify(payload.get("currentScores", [])).left(120),
+	]
+
+
+func _summarize_hand_tile_types(player_state: Dictionary, rules_config) -> Array:
+	var active_suits: Array = csharp_bridge.tile_codec.resolve_active_suits(rules_config)
+	var result: Array = []
+	for tile in player_state.get("hand_tiles", []):
+		result.append(csharp_bridge.tile_codec.tile_type(tile, active_suits))
+	return result
 
 
 func _begin_request(kind: String, seat: int) -> int:
