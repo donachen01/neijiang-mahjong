@@ -33,9 +33,9 @@
 | AI-010 | P1 | 清一色、七对、平胡阈值阶跃大且路线重复加分 | RoutePlan 与候选路线调整叠加 | RoutePlanEngine、scorers | 路线有完成概率、转换成本和保持惯性 | 未处理 |
 | AI-011 | P1 | 尾盘防守可能破坏听牌，战略点小炮缺少统一损益比较 | 多个 late override | scorer、DealInPolicy | 可守叫时无理由退叫为 0；大牌点炮强惩罚 | 未处理 |
 | AI-012 | P1 | `forceLightweight` 只关闭搜索，仍计算全部指标 | DecisionEngine | DecisionEngine、scorers | 普通模式 P95 `<100ms` 且不降低正确性 | 未处理 |
-| EVAL-001 | P0 | 现有审计优先读取 AI 自己的 `quality_score`，形成自证循环 | `discard_audit.py` | 新独立裁判 | 篡改 AI 最终分数不改变裁判结果 | 未处理 |
-| EVAL-002 | P0 | `SHORT_ROUND_STEP_THRESHOLD=80` 把正常 29 步内江牌局判为短局 | 2026-07-10 固定种子烟测 | `ai_pressure_benchmark.gd` | 内江正常流局不再标短局 | 未处理 |
-| EVAL-003 | P1 | 长期报告策略模式统计全部为 0 | 固定种子报告 | benchmark、GameState metrics | 每次出牌都计入新 StrategyMode | 未处理 |
+| EVAL-001 | P0 | 现有审计优先读取 AI 自己的 `quality_score`，形成自证循环 | 独立裁判 8 项单测；篡改最终分不改变推荐或等级 | 新独立裁判 | 篡改 AI 最终分数不改变裁判结果 | 已验证 |
+| EVAL-002 | P0 | `SHORT_ROUND_STEP_THRESHOLD=80` 把正常 29 步内江牌局判为短局 | 固定种子 20260712：29 steps、short=0、forced=false | `ai_pressure_benchmark.gd` | 内江正常流局不再标短局 | 已验证 |
+| EVAL-003 | P1 | 长期报告策略模式统计全部为 0 | 同局成功出牌统计 attack=9、balanced=5、defense=4、fold=3 | benchmark、GameState metrics | 每次出牌都计入新 StrategyMode | 已验证 |
 | EVAL-004 | P1 | 四家使用同一版本不能证明候选 AI 相对基线更强 | 旧 30/300 局全 AI 报告 | benchmark、评估脚本 | 固定种子、座位轮换、冻结基线配对报告 | 未处理 |
 | EVAL-005 | P1 | 地狱训练报告只有 `none/not_evaluated`，不能证明棋力 | 20260710 report | 独立裁判、训练日志 | 逐张获得独立等级和后悔值 | 未处理 |
 | CODE-001 | P2 | `MainSceneV2.gd`、`GameState.gd`、AIManager 和 Smoke 文件过大 | 行数统计 | 对应模块 | 按责任拆分且行为不变 | 未处理 |
@@ -73,3 +73,6 @@
 - 存储烟测：`NEIJIANG HELL TRAINING OK`；最新训练 JSON 的 `realpath` 位于 `/Volumes/AI/NeijiangMahjongRuntime/内江麻将工程_20260502_103823_v2/test-data/hell_training`。
 - P0 事实层：`neijiang_context_regression=PASS`；Godot C# contract 新增 `transport_payload_preserves_exact_meld_group_counts` 并通过。
 - P0 构建：Godot 方案与 AI.Core.Cli 均 0 warning / 0 error；固定种子一局 29 steps、无 forced stop，报告写入 AI 盘。
+- 独立裁判：8 项 Python 单测通过；明确忽略 AI `score`、`quality_score`、`selected_rank_by_score`、`expected_net_score`。
+- 评估烟测：20260712 固定种子一局 29 steps、short=0、forced=false；21 次出牌均有独立等级；策略统计不再为 0。
+- 空间口径：单局完整逐牌诊断约 9.1MiB 且在 AI 盘；30 局保留完整诊断，200 局关闭逐牌 trace，仅保留聚合报告。

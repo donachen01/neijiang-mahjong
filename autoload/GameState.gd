@@ -57,6 +57,8 @@ const AI_CHAIN_DEBUG_ENABLED := false
 const DIAGNOSTIC_EXPORT_ENABLED := false
 const AI_ANALYSIS_DIR := "user://ai_analysis"
 const DEBUG_DECISION_TRACE_DIR := "user://ai_decision_trace"
+const DEBUG_DECISION_TRACE_DIR_ENV := "NEIJIANG_TRACE_DIR"
+const DEBUG_DECISION_TRACE_ENABLED_ENV := "NEIJIANG_TRACE_ENABLED"
 const DIAGNOSTIC_EXPORT_DIR := "user://diagnostic_exports"
 const DIAGNOSTIC_DOWNLOAD_SUBDIR := "NeijiangMahjongLogs"
 const DIAGNOSTIC_MAX_DEPTH := 5
@@ -1551,6 +1553,8 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 			var tile_type := _neijiang_tile_type(_tile_by_id_in_hand(seat, tile_id))
 			_record_hell_decision_snapshot(decision, "discard", tile_type)
 			var ok := _discard_tile_internal(seat, tile_id)
+			if ok:
+				_record_discard_strategy_metric(decision)
 			_record_ai_chain_debug("turn_execute_discard seat=%d tile_id=%d ok=%s msg=%s" % [
 				seat,
 				tile_id,
@@ -3941,16 +3945,28 @@ func _create_empty_ai_decision_metrics() -> Dictionary:
 		"bao_jiao_actions": 0,
 		"an_gang_attempts": 0,
 		"add_gang_attempts": 0,
-		"discard_strategy_全攻": 0,
-		"discard_strategy_进攻平衡": 0,
-		"discard_strategy_均衡": 0,
-		"discard_strategy_防守平衡": 0,
-		"discard_strategy_全守": 0,
+		"discard_strategy_attack": 0,
+		"discard_strategy_balanced": 0,
+		"discard_strategy_defense": 0,
+		"discard_strategy_fold": 0,
+		"discard_strategy_chase": 0,
 	}
 
 
 func _record_ai_metric(key: String, amount: int = 1) -> void:
 	ai_decision_metrics[key] = int(ai_decision_metrics.get(key, 0)) + amount
+
+
+func _record_discard_strategy_metric(decision: Dictionary) -> void:
+	var analysis: Dictionary = decision.get("analysis", {})
+	var strategy_profile: Dictionary = analysis.get("strategy_profile", {})
+	var strategy_mode := str(strategy_profile.get("mode_label", strategy_profile.get("strategy_mode", ""))).strip_edges().to_lower()
+	if strategy_mode == "":
+		var recommended: Dictionary = analysis.get("recommended", {})
+		strategy_mode = str(recommended.get("strategy_mode", "balanced")).strip_edges().to_lower()
+	if not strategy_mode in ["attack", "balanced", "defense", "fold", "chase"]:
+		strategy_mode = "balanced"
+	_record_ai_metric("discard_strategy_%s" % strategy_mode)
 
 func _resolve_ai_reaction_action(seat: int, candidate: Dictionary, requested_action: String) -> String:
 	if requested_action == "hu" and bool(candidate.get("can_hu", false)):
@@ -4040,6 +4056,7 @@ func _build_turn_diagnostic_profile(seat: int, analysis: Dictionary, selected_ti
 		"candidate_count": options.size(),
 		"top_score_candidates": _compact_turn_candidates_for_training(score_sorted, 8),
 		"top_speed_candidates": _compact_turn_candidates_for_training(speed_sorted, 5),
+		"candidates": _compact_turn_candidates_for_training(options, options.size()),
 		"best_safe_alternative": _compact_turn_candidate_for_training(best_safe_alternative),
 		"best_speed_alternative": _compact_turn_candidate_for_training(best_speed_alternative),
 		"best_big_route_alternative": _compact_turn_candidate_for_training(best_big_route_alternative),
@@ -6008,7 +6025,17 @@ func _write_ai_analysis_summary() -> void:
 
 
 func _is_debug_decision_trace_enabled() -> bool:
+	var override := OS.get_environment(DEBUG_DECISION_TRACE_ENABLED_ENV).strip_edges().to_lower()
+	if override in ["0", "false", "off", "no"]:
+		return false
+	if override in ["1", "true", "on", "yes"]:
+		return true
 	return OS.is_debug_build()
+
+
+func _debug_decision_trace_root() -> String:
+	var override := OS.get_environment(DEBUG_DECISION_TRACE_DIR_ENV).strip_edges()
+	return override if not override.is_empty() else DEBUG_DECISION_TRACE_DIR
 
 
 func _ensure_debug_decision_trace_session() -> void:
@@ -6030,8 +6057,8 @@ func _ensure_debug_decision_trace_session() -> void:
 		"session_id": debug_decision_trace_session_id,
 		"created_at": Time.get_datetime_string_from_system(),
 		"app_version": str(ProjectSettings.get_setting("application/config/version", "")),
-		"recording_dir": DEBUG_DECISION_TRACE_DIR,
-		"recording_dir_absolute": ProjectSettings.globalize_path(DEBUG_DECISION_TRACE_DIR),
+		"recording_dir": _debug_decision_trace_root(),
+		"recording_dir_absolute": ProjectSettings.globalize_path(_debug_decision_trace_root()),
 		"events_path": _debug_decision_trace_events_path(),
 		"events_path_absolute": ProjectSettings.globalize_path(_debug_decision_trace_events_path()),
 		"package_name": str(ProjectSettings.get_setting("application/config/name", "")),
@@ -6044,7 +6071,7 @@ func _ensure_debug_decision_trace_output_dirs() -> void:
 
 
 func _debug_decision_trace_session_dir() -> String:
-	return "%s/%s" % [DEBUG_DECISION_TRACE_DIR, debug_decision_trace_session_id if not debug_decision_trace_session_id.is_empty() else "pending"]
+	return "%s/%s" % [_debug_decision_trace_root(), debug_decision_trace_session_id if not debug_decision_trace_session_id.is_empty() else "pending"]
 
 
 func _debug_decision_trace_session_path() -> String:

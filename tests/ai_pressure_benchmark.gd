@@ -4,7 +4,7 @@ const GAME_STATE_SCRIPT := preload("res://autoload/GameState.gd")
 
 const DEFAULT_TOTAL_ROUNDS := 40
 const DEFAULT_MAX_STEPS_PER_ROUND := 5000
-const SHORT_ROUND_STEP_THRESHOLD := 80
+const SHORT_ROUND_STEP_THRESHOLD := 4
 
 
 func _init() -> void:
@@ -502,6 +502,7 @@ func _finalize_stats(stats: Dictionary, game_state: Node) -> void:
 		"final_score_spread": score_spread,
 	}
 	stats["report_version"] = 3
+	stats["debug_decision_trace"] = game_state.call("_build_debug_decision_trace_snapshot")
 	_finalize_terminal_metrics(stats)
 
 
@@ -705,12 +706,12 @@ func _build_comparison(stats_a: Dictionary, stats_b: Dictionary) -> Dictionary:
 			"b": int(stats_b.get("ai_metrics_total", {}).get("reaction_gang", 0)),
 		},
 		"strategy_full_attack": {
-			"a": int(stats_a.get("ai_metrics_total", {}).get("discard_strategy_全攻", 0)),
-			"b": int(stats_b.get("ai_metrics_total", {}).get("discard_strategy_全攻", 0)),
+			"a": int(stats_a.get("ai_metrics_total", {}).get("discard_strategy_attack", 0)),
+			"b": int(stats_b.get("ai_metrics_total", {}).get("discard_strategy_attack", 0)),
 		},
 		"strategy_full_defense": {
-			"a": int(stats_a.get("ai_metrics_total", {}).get("discard_strategy_全守", 0)),
-			"b": int(stats_b.get("ai_metrics_total", {}).get("discard_strategy_全守", 0)),
+			"a": int(stats_a.get("ai_metrics_total", {}).get("discard_strategy_fold", 0)),
+			"b": int(stats_b.get("ai_metrics_total", {}).get("discard_strategy_fold", 0)),
 		},
 	}
 	var score_a: Dictionary = stats_a.get("long_term_score_metrics", {})
