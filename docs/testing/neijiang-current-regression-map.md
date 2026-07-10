@@ -36,6 +36,8 @@ Long benchmark (large per-discard traces disabled):
 tools/run_neijiang_ai_evaluation.sh long 200 20260710
 ```
 
+Long mode runs one `candidate` seat against three frozen `baseline_v1` discard scorers and rotates the candidate seat by `round_index % 4`. The report includes per-round policy profiles, candidate deltas, deal-in loss, Mac decision percentiles, and a 95% confidence interval.
+
 `NEIJIANG_TRACE_DIR` overrides the old `user://ai_decision_trace` location. The evaluation wrapper always points it at `/Volumes/AI/NeijiangMahjongRuntime/...`; long runs set `NEIJIANG_TRACE_ENABLED=0` and retain only aggregate JSON, CSV and logs.
 
 ## Current Test Inventory

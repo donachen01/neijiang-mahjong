@@ -1521,6 +1521,9 @@ public partial class NeijiangCSharpRuntime : Node
         state.BaoGangTileTypes = payload.BaoGangTileTypes
             .Where(tile => tile is >= 0 and < 18)
             .ToHashSet();
+        state.PolicyProfile = string.IsNullOrWhiteSpace(payload.PolicyProfile)
+            ? "candidate"
+            : payload.PolicyProfile;
         return state;
     }
 
@@ -1531,6 +1534,7 @@ public partial class NeijiangCSharpRuntime : Node
         return new
         {
             enabled = true,
+            policyProfile = context.PolicyProfile,
             stage = context.Stage,
             roundGoal = context.RoundGoal,
             strategyMode = context.StrategyMode,
@@ -1723,6 +1727,7 @@ public partial class NeijiangCSharpRuntime : Node
         public int VisibleVersion { get; set; }
         public int HandVersion { get; set; }
         public int StrategyContextVersion { get; set; }
+        public string PolicyProfile { get; set; } = "candidate";
         public List<int> Scores { get; set; } = new();
         public int[] Hand18 { get; set; } = Array.Empty<int>();
         public int[] Visible18 { get; set; } = Array.Empty<int>();

@@ -89,10 +89,11 @@ public sealed class NeijiangHandShapeEngine
         for (var tileType = 0; tileType < 18; tileType++)
         {
             if (remaining18[tileType] <= 0 || hand18[tileType] >= 4) continue;
+            if (!ImprovesLocalShape(hand18, tileType)) continue;
             var probe = (int[])hand18.Clone();
             probe[tileType]++;
             var drawShanten = _shanten.CalcBestShanten(probe, meldCount);
-            if (drawShanten == shanten && ImprovesLocalShape(hand18, tileType))
+            if (drawShanten == shanten)
                 count += remaining18[tileType];
         }
         return count;

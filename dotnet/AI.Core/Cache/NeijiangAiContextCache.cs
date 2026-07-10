@@ -38,6 +38,7 @@ public sealed class NeijiangAiContextCache
 
         var samples = new List<NeijiangModulePerfSample>();
         var context = _lastContext is null ? new NeijiangAiContext() : CloneContextShell(_lastContext);
+        context.PolicyProfile = state.PolicyProfile;
         context.DirtyFlags = dirty;
 
         var stage = Measure("StageEvaluator", samples, () => dirty.Stage ? _stage.Evaluate(state, belief) : context.Stage);
@@ -104,6 +105,7 @@ public sealed class NeijiangAiContextCache
 
     private static NeijiangAiContext CloneContextShell(NeijiangAiContext source) => new()
     {
+        PolicyProfile = source.PolicyProfile,
         Stage = source.Stage,
         RoundGoal = source.RoundGoal,
         StrategyMode = source.StrategyMode,

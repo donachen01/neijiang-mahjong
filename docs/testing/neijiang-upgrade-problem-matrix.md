@@ -29,15 +29,15 @@
 | AI-006 | P0 | 手牌缓存键包含牌墙，手牌不变仍重算；场面风险又混在手形结果 | 纯手形快照缓存与动态进张/风险分离；专项命中测试通过 | HandEvaluator、ContextModels | 纯手形缓存命中，动态风险单独更新 | 已验证 |
 | AI-007 | P0 | 扁平副露牌列表通过 `/3` 猜副露组数，多个杠时可能错误 | C# 三杠推导测试与 Godot `meldGroupCounts` transport 合同通过 | StateView、codec、runtime、引擎 | 三杠等边界返回准确组数 | 已验证 |
 | AI-008 | P0 | 正式链路不能异步、fallback 或自动动作 | 项目 AGENTS 与现有同步回归 | GameState、AIManager、Runtime | current smoke 和合同证明全同步；正式路径无 fallback | 已验证 |
-| AI-009 | P1 | 所有模式运行同一套完整评分，再由后置覆盖推翻 | DecisionEngine 单一大循环和三组 override | DecisionEngine、DiscardScorers | 各模式只使用需要指标；非法外不靠冲突覆盖 | 未处理 |
+| AI-009 | P1 | 所有模式运行同一套完整评分，再由后置覆盖推翻 | 五种独立模式评分器；三组冲突后置 override 已删除；30 局严重率 0.17% | DecisionEngine、DiscardScorers | 各模式只使用需要指标；非法外不靠冲突覆盖 | 已验证 |
 | AI-010 | P1 | 清一色、七对、平胡阈值阶跃大且路线重复加分 | RoutePlan 与候选路线调整叠加 | RoutePlanEngine、scorers | 路线有完成概率、转换成本和保持惯性 | 未处理 |
-| AI-011 | P1 | 尾盘防守可能破坏听牌，战略点小炮缺少统一损益比较 | 多个 late override | scorer、DealInPolicy | 可守叫时无理由退叫为 0；大牌点炮强惩罚 | 未处理 |
-| AI-012 | P1 | `forceLightweight` 只关闭搜索，仍计算全部指标 | DecisionEngine | DecisionEngine、scorers | 普通模式 P95 `<100ms` 且不降低正确性 | 未处理 |
+| AI-011 | P1 | 尾盘防守可能破坏听牌，战略点小炮缺少统一损益比较 | 30 局 605 次出牌：破坏已成叫 0；FoldScorer 与 DealInPolicy 共同比较保叫/风险 | scorer、DealInPolicy | 可守叫时无理由退叫为 0；大牌点炮强惩罚 | 已验证 |
+| AI-012 | P1 | `forceLightweight` 只关闭搜索，仍计算全部指标 | 向听缓存后 63 次 P50 16.9ms、P95 46.9ms；长测可无 trace 聚合 | DecisionEngine、scorers | 普通模式 P95 `<100ms` 且不降低正确性 | 已验证 |
 | EVAL-001 | P0 | 现有审计优先读取 AI 自己的 `quality_score`，形成自证循环 | 独立裁判 8 项单测；篡改最终分不改变推荐或等级 | 新独立裁判 | 篡改 AI 最终分数不改变裁判结果 | 已验证 |
 | EVAL-002 | P0 | `SHORT_ROUND_STEP_THRESHOLD=80` 把正常 29 步内江牌局判为短局 | 固定种子 20260712：29 steps、short=0、forced=false | `ai_pressure_benchmark.gd` | 内江正常流局不再标短局 | 已验证 |
 | EVAL-003 | P1 | 长期报告策略模式统计全部为 0 | 同局成功出牌统计 attack=9、balanced=5、defense=4、fold=3 | benchmark、GameState metrics | 每次出牌都计入新 StrategyMode | 已验证 |
 | EVAL-004 | P1 | 四家使用同一版本不能证明候选 AI 相对基线更强 | 旧 30/300 局全 AI 报告 | benchmark、评估脚本 | 固定种子、座位轮换、冻结基线配对报告 | 未处理 |
-| EVAL-005 | P1 | 地狱训练报告只有 `none/not_evaluated`，不能证明棋力 | 20260710 report | 独立裁判、训练日志 | 逐张获得独立等级和后悔值 | 未处理 |
+| EVAL-005 | P1 | 地狱训练报告只有 `none/not_evaluated`，不能证明棋力 | 最终 30 局 605 次出牌均有独立等级、后悔值和分类 | 独立裁判、训练日志 | 逐张获得独立等级和后悔值 | 已验证 |
 | CODE-001 | P2 | `MainSceneV2.gd`、`GameState.gd`、AIManager 和 Smoke 文件过大 | 行数统计 | 对应模块 | 按责任拆分且行为不变 | 未处理 |
 | CODE-002 | P2 | current runner 多个文件只继承旧 runner | 三个 current 文件仅一行 extends | `tests/current/*` | current runner 自包含或调用明确共享库 | 未处理 |
 | CODE-003 | P2 | 内江无定缺但场景、Godot、C# 和工具仍保留定缺链 | `DingQueOverlay`、`DecideDingQue` 可检索 | scenes/scripts/dotnet/tools | 正式内江入口无定缺链；四川项目不受影响 | 未处理 |
@@ -76,3 +76,6 @@
 - 独立裁判：8 项 Python 单测通过；明确忽略 AI `score`、`quality_score`、`selected_rank_by_score`、`expected_net_score`。
 - 评估烟测：20260712 固定种子一局 29 steps、short=0、forced=false；21 次出牌均有独立等级；策略统计不再为 0。
 - 空间口径：单局完整逐牌诊断约 9.1MiB 且在 AI 盘；30 局保留完整诊断，200 局关闭逐牌 trace，仅保留聚合报告。
+- 最终 30 局诊断：`20260710_174250_diagnostic_30r_seed20260710`，605 次出牌，D/E `1/605 (0.17%)`，E=1，破坏已成叫=0，forced stop=0。
+- 性能：全局向听缓存与候选手形前置过滤后，63 次样本 P50 `16.852ms`、P95 `46.853ms`、max `76.522ms`。
+- 混合策略烟测：候选座位按 `round_index_mod_4` 轮换，4 局平均净胜分 `+2.0`，但 CI95 下界 `-0.117`，仅证明链路有效，不能证明长期优势。

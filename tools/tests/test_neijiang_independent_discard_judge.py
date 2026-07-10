@@ -62,6 +62,20 @@ class IndependentDiscardJudgeTests(unittest.TestCase):
         self.assertEqual("E_BLUNDER", result.grade)
         self.assertIn("READY_HAND_BROKEN", result.categories)
 
+    def test_extreme_ready_risk_can_be_declined(self):
+        safe_one_away = candidate(1, 1, 7, 0, 6)
+        dangerous_ready = candidate(2, 0, 4, 1, 56)
+        result = judge_event(event(safe_one_away, [safe_one_away, dangerous_ready], wall=5, mode="attack"))
+        self.assertEqual(1, result.recommended_tile)
+        self.assertNotIn("READY_HAND_BROKEN", result.categories)
+
+    def test_extreme_ready_tile_is_not_forced_over_high_non_extreme_tile(self):
+        high_one_away = candidate(1, 1, 21, 0, 77)
+        extreme_ready = candidate(2, 0, 3, 1, 88)
+        result = judge_event(event(high_one_away, [high_one_away, extreme_ready], wall=11, mode="attack"))
+        self.assertEqual(1, result.recommended_tile)
+        self.assertNotIn("READY_HAND_BROKEN", result.categories)
+
     def test_same_speed_extreme_risk_is_rejected(self):
         chosen = candidate(1, 1, 12, 0, 84)
         safe = candidate(2, 1, 11, 0, 30)
@@ -96,6 +110,13 @@ class IndependentDiscardJudgeTests(unittest.TestCase):
         result = judge_event(event(risky, [risky, safe], wall=5, mode="fold"))
         self.assertEqual(2, result.recommended_tile)
         self.assertIn("MODE_SAFETY_MISS", result.categories)
+
+    def test_fold_does_not_flag_speed_when_reference_keeps_safer_slow_tile(self):
+        safe_slow = candidate(1, 2, 30, 0, 10)
+        risky_fast = candidate(2, 1, 5, 0, 50)
+        result = judge_event(event(safe_slow, [safe_slow, risky_fast], wall=5, mode="fold"))
+        self.assertEqual(1, result.recommended_tile)
+        self.assertNotIn("SHANTEN_REGRESSION", result.categories)
 
     def test_ai_score_and_quality_do_not_change_judgment(self):
         chosen = candidate(1, 1, 8, 0, 70, score=999999)

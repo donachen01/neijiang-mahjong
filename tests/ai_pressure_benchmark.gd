@@ -17,6 +17,7 @@ func _run() -> void:
 	var seed_value := _read_int_arg("--seed=", 20260514)
 	var preset_name := _read_string_arg("--preset=", "bone_ash")
 	var compare_preset_name := _read_string_arg("--compare-preset=", "")
+	var paired_policy := _read_bool_arg("--paired-policy=", false)
 	var output_path := _read_string_arg("--output=", _build_default_report_path(total_rounds, preset_name, compare_preset_name, "json"))
 	var csv_output_path := _read_string_arg("--csv-output=", _build_default_report_path(total_rounds, preset_name, compare_preset_name, "csv"))
 	var game_state: Node = GAME_STATE_SCRIPT.new()
@@ -31,14 +32,14 @@ func _run() -> void:
 	if compare_preset_name != "":
 		report = await _run_ab_benchmark(game_state, preset_name, compare_preset_name, total_rounds, max_steps_per_round, seed_value)
 	else:
-		report = await _run_single_preset_benchmark(game_state, preset_name, total_rounds, max_steps_per_round, seed_value)
+		report = await _run_single_preset_benchmark(game_state, preset_name, total_rounds, max_steps_per_round, seed_value, paired_policy)
 	_print_summary(report)
 	_write_report(report, output_path)
 	_write_csv_report(report, csv_output_path)
 	quit()
 
 
-func _run_single_preset_benchmark(game_state: Node, preset_name: String, total_rounds: int, max_steps_per_round: int, seed_value: int) -> Dictionary:
+func _run_single_preset_benchmark(game_state: Node, preset_name: String, total_rounds: int, max_steps_per_round: int, seed_value: int, paired_policy: bool = false) -> Dictionary:
 	if game_state.has_method("set_test_seed"):
 		game_state.call("set_test_seed", seed_value)
 		game_state.call("start_new_round", true)
@@ -48,11 +49,14 @@ func _run_single_preset_benchmark(game_state: Node, preset_name: String, total_r
 	stats["benchmark_mode"] = "single"
 	stats["preset_name"] = preset_name
 	stats["seed"] = seed_value
+	stats["paired_policy"] = paired_policy
 	var round_counter := 0
 	while round_counter < total_rounds:
 		print("benchmark_round_start=", round_counter + 1, " preset=", preset_name)
-		_prepare_all_ai_table(game_state)
-		var result := await _play_single_round(game_state, round_counter + 1, max_steps_per_round)
+		var candidate_seat := round_counter % 4 if paired_policy else -1
+		_prepare_all_ai_table(game_state, candidate_seat)
+		var result := await _play_single_round(game_state, round_counter + 1, max_steps_per_round, candidate_seat)
+		result["candidate_seat"] = candidate_seat
 		_accumulate_round_stats(stats, result)
 		print("benchmark_round_end=", round_counter + 1, " steps=", int(result.get("steps", 0)), " end_reason=", str(result.get("end_reason", "")), " forced=", bool(result.get("forced_stop", false)))
 		round_counter += 1
@@ -71,21 +75,21 @@ func _run_ab_benchmark(game_state: Node, preset_a: String, preset_b: String, tot
 		"preset_b": preset_b,
 		"seed": seed_value,
 	}
-	var stats_a := await _run_single_preset_benchmark(game_state, preset_a, total_rounds, max_steps_per_round, seed_value)
+	var stats_a := await _run_single_preset_benchmark(game_state, preset_a, total_rounds, max_steps_per_round, seed_value, false)
 	game_state.call("start_new_round")
 	await process_frame
-	var stats_b := await _run_single_preset_benchmark(game_state, preset_b, total_rounds, max_steps_per_round, seed_value)
+	var stats_b := await _run_single_preset_benchmark(game_state, preset_b, total_rounds, max_steps_per_round, seed_value, false)
 	combined["report_a"] = stats_a
 	combined["report_b"] = stats_b
 	combined["comparison"] = _build_comparison(stats_a, stats_b)
 	return combined
 
 
-func _play_single_round(game_state: Node, round_no: int, max_steps_per_round: int) -> Dictionary:
+func _play_single_round(game_state: Node, round_no: int, max_steps_per_round: int, candidate_seat: int = -1) -> Dictionary:
 	var step := 0
 	var phase_counts := {}
 	while step < max_steps_per_round:
-		_prepare_all_ai_table(game_state)
+		_prepare_all_ai_table(game_state, candidate_seat)
 		if game_state.has_method("pump_ai_background_requests"):
 			game_state.call("pump_ai_background_requests")
 		var phase := int(game_state.get("current_phase"))
@@ -121,7 +125,7 @@ func _play_single_round(game_state: Node, round_no: int, max_steps_per_round: in
 	return forced_result
 
 
-func _prepare_all_ai_table(game_state: Node) -> void:
+func _prepare_all_ai_table(game_state: Node, candidate_seat: int = -1) -> void:
 	var players: Array = game_state.get("players")
 	if players.is_empty():
 		return
@@ -130,6 +134,7 @@ func _prepare_all_ai_table(game_state: Node) -> void:
 		var player: Dictionary = players[index]
 		player["is_ai"] = true
 		player["ai_level"] = ai_level
+		player["ai_policy_profile"] = "candidate" if candidate_seat < 0 or index == candidate_seat else "baseline_v1"
 		players[index] = player
 	game_state.set("players", players)
 
@@ -152,6 +157,7 @@ func _extract_round_result(game_state: Node, round_no: int, steps: int, forced_s
 		"gang_events": gang_events.duplicate(true),
 		"players": players,
 		"ai_decision_metrics": game_state.get("ai_decision_metrics").duplicate(true),
+		"ai_decision_performance_ms": game_state.get("ai_decision_performance_ms").duplicate(),
 	}
 
 
@@ -211,6 +217,10 @@ func _create_stats() -> Dictionary:
 		"total_steps": 0,
 		"seat_stats": seats,
 		"ai_metrics_total": {},
+		"choose_action_performance_ms": [],
+		"paired_candidate_deltas": [],
+		"paired_candidate_deal_in_count": 0,
+		"paired_candidate_deal_in_loss_abs": 0,
 		"round_summaries": [],
 		"generated_at_unix": Time.get_unix_time_from_system(),
 	}
@@ -310,6 +320,16 @@ func _accumulate_round_stats(stats: Dictionary, result: Dictionary) -> void:
 
 	stats["seat_stats"] = seat_stats
 	_accumulate_ai_metrics(stats, result.get("ai_decision_metrics", {}))
+	stats["choose_action_performance_ms"].append_array(result.get("ai_decision_performance_ms", []))
+	var candidate_seat := int(result.get("candidate_seat", -1))
+	if candidate_seat >= 0:
+		var candidate_delta := _score_change_for_seat(score_changes, candidate_seat)
+		stats["paired_candidate_deltas"].append(candidate_delta)
+		for win_event_value in result.get("win_events", []):
+			var win_event: Dictionary = win_event_value
+			if int(win_event.get("source_seat", -1)) == candidate_seat and int(win_event.get("seat", -1)) != candidate_seat:
+				stats["paired_candidate_deal_in_count"] = int(stats.get("paired_candidate_deal_in_count", 0)) + 1
+				stats["paired_candidate_deal_in_loss_abs"] = int(stats.get("paired_candidate_deal_in_loss_abs", 0)) + absi(candidate_delta)
 	stats["round_summaries"].append(
 		{
 			"round_no": int(result.get("round_no", 0)),
@@ -319,6 +339,9 @@ func _accumulate_round_stats(stats: Dictionary, result: Dictionary) -> void:
 			"score_change_nonzero": has_nonzero_score_change,
 			"winner_seats": result.get("winner_seats", []).duplicate(),
 			"score_changes": score_changes.duplicate(true),
+			"candidate_seat": candidate_seat,
+			"candidate_delta": _score_change_for_seat(score_changes, candidate_seat) if candidate_seat >= 0 else 0,
+			"policy_profiles": Array(result.get("players", [])).map(func(player): return str(player.get("ai_policy_profile", "candidate"))),
 			"ai_decision_metrics": result.get("ai_decision_metrics", {}).duplicate(true),
 			"phase_counts": result.get("phase_counts", {}).duplicate(true),
 			"final_debug_snapshot": result.get("final_debug_snapshot", {}).duplicate(true),
@@ -501,9 +524,66 @@ func _finalize_stats(stats: Dictionary, game_state: Node) -> void:
 		"deal_in_loss_abs_per_round": 0.0 if int(stats.get("total_rounds", 0)) <= 0 else float(total_deal_in_loss_abs) / float(stats.get("total_rounds", 0)),
 		"final_score_spread": score_spread,
 	}
+	stats["choose_action_performance"] = _build_performance_summary(stats.get("choose_action_performance_ms", []))
+	stats.erase("choose_action_performance_ms")
+	stats["paired_policy_metrics"] = _build_paired_policy_summary(stats)
 	stats["report_version"] = 3
 	stats["debug_decision_trace"] = game_state.call("_build_debug_decision_trace_snapshot")
 	_finalize_terminal_metrics(stats)
+
+
+func _build_performance_summary(samples_value) -> Dictionary:
+	var samples: Array = Array(samples_value).duplicate()
+	samples.sort()
+	if samples.is_empty():
+		return {"samples": 0, "p50_ms": 0.0, "p95_ms": 0.0, "max_ms": 0.0, "avg_ms": 0.0}
+	var total := 0.0
+	for value in samples:
+		total += float(value)
+	return {
+		"samples": samples.size(),
+		"p50_ms": float(samples[int(floor(float(samples.size() - 1) * 0.50))]),
+		"p95_ms": float(samples[int(floor(float(samples.size() - 1) * 0.95))]),
+		"max_ms": float(samples[-1]),
+		"avg_ms": total / float(samples.size()),
+		"warning": float(samples[int(floor(float(samples.size() - 1) * 0.95))]) >= 100.0,
+	}
+
+
+func _build_paired_policy_summary(stats: Dictionary) -> Dictionary:
+	var deltas: Array = stats.get("paired_candidate_deltas", [])
+	if deltas.is_empty():
+		return {"enabled": false, "samples": 0}
+	var total := 0.0
+	for value in deltas:
+		total += float(value)
+	var mean := total / float(deltas.size())
+	var variance := 0.0
+	for value in deltas:
+		variance += pow(float(value) - mean, 2.0)
+	var stddev := sqrt(variance / float(maxi(1, deltas.size() - 1)))
+	var margin := 1.96 * stddev / sqrt(float(deltas.size()))
+	return {
+		"enabled": true,
+		"baseline_profile": "baseline_v1",
+		"candidate_profile": "candidate",
+		"samples": deltas.size(),
+		"candidate_total_delta": total,
+		"candidate_mean_delta": mean,
+		"candidate_delta_ci95_lower": mean - margin,
+		"candidate_delta_ci95_upper": mean + margin,
+		"candidate_deal_in_count": int(stats.get("paired_candidate_deal_in_count", 0)),
+		"candidate_deal_in_loss_abs": int(stats.get("paired_candidate_deal_in_loss_abs", 0)),
+		"seat_rotation": "round_index_mod_4",
+	}
+
+
+func _score_change_for_seat(score_changes: Dictionary, seat: int) -> int:
+	if seat < 0:
+		return 0
+	if score_changes.has(seat):
+		return int(score_changes.get(seat, 0))
+	return int(score_changes.get(str(seat), 0))
 
 
 func _print_summary(stats: Dictionary) -> void:
@@ -527,6 +607,15 @@ func _print_summary(stats: Dictionary) -> void:
 	print("draw_nonzero_score_rounds=", stats.get("draw_nonzero_score_rounds", 0))
 	print("draw_zero_score_rounds=", stats.get("draw_zero_score_rounds", 0))
 	print("avg_steps_per_round=", "%.2f" % float(stats.get("avg_steps_per_round", 0.0)))
+	var performance: Dictionary = stats.get("choose_action_performance", {})
+	print("choose_action_p50_ms=", "%.3f" % float(performance.get("p50_ms", 0.0)))
+	print("choose_action_p95_ms=", "%.3f" % float(performance.get("p95_ms", 0.0)))
+	print("choose_action_max_ms=", "%.3f" % float(performance.get("max_ms", 0.0)))
+	var paired: Dictionary = stats.get("paired_policy_metrics", {})
+	if bool(paired.get("enabled", false)):
+		print("paired_candidate_mean_delta=", "%.3f" % float(paired.get("candidate_mean_delta", 0.0)))
+		print("paired_candidate_ci95_lower=", "%.3f" % float(paired.get("candidate_delta_ci95_lower", 0.0)))
+		print("paired_candidate_ci95_upper=", "%.3f" % float(paired.get("candidate_delta_ci95_upper", 0.0)))
 	var long_term: Dictionary = stats.get("long_term_score_metrics", {})
 	print("target_avg_delta_per_round=", "%.3f" % float(long_term.get("target_avg_delta_per_round", 0.0)))
 	print("avg_deal_in_rate_across_seats=", "%.3f" % float(long_term.get("avg_deal_in_rate_across_seats", 0.0)))
@@ -797,6 +886,14 @@ func _read_string_arg(prefix: String, fallback: String) -> String:
 		var arg_text := String(arg)
 		if arg_text.begins_with(prefix):
 			return arg_text.trim_prefix(prefix)
+	return fallback
+
+
+func _read_bool_arg(prefix: String, fallback: bool) -> bool:
+	for arg in OS.get_cmdline_user_args():
+		var arg_text := String(arg)
+		if arg_text.begins_with(prefix):
+			return arg_text.trim_prefix(prefix).to_lower() in ["1", "true", "yes", "on"]
 	return fallback
 
 

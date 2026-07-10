@@ -85,6 +85,15 @@ def independent_value(candidate: dict[str, Any], stage: str, mode: str) -> float
     if stage == "late":
         risk_weight *= 1.25
     value -= danger * risk_weight
+    if danger >= 70:
+        extreme_weight = {
+            "attack": 0.30,
+            "balanced": 0.50,
+            "defense": 1.00,
+            "fold": 1.30,
+            "chase": 0.20,
+        }.get(mode, 0.50)
+        value -= (danger - 70) ** 2 * extreme_weight
 
     routes = {str(item) for item in candidate.get("routes_after", [])}
     route_bonus = 0.0
@@ -113,22 +122,28 @@ def select_reference(candidates: list[dict[str, Any]], stage: str, mode: str) ->
         item for item in candidates
         if integer(item.get("shanten"), 8) <= 0 and integer(item.get("wait_count"), 0) > 0
     ]
+    eligible = candidates
     pool = candidates
     if ready:
-        # A ready hand is a hard strategic asset. Only fold mode may abandon it when
-        # every ready discard is dramatically more dangerous than a non-ready tile.
+        # Ready is preferred unless every ready discard crosses a materially larger
+        # deal-in risk. This keeps the judge from treating tenpai as risk-free.
         best_ready_danger = min(integer(item.get("danger", item.get("risk", 0))) for item in ready)
         best_all_danger = min(integer(item.get("danger", item.get("risk", 0))) for item in candidates)
-        if mode != "fold" or best_ready_danger <= best_all_danger + 35:
+        ready_risk_is_acceptable = best_ready_danger < 86 or best_all_danger >= 86
+        if ready_risk_is_acceptable and best_ready_danger <= best_all_danger + 35:
             pool = ready
-    elif mode in {"attack", "chase"}:
-        pool = [item for item in candidates if integer(item.get("shanten"), 8) == min_shanten]
-    elif mode == "balanced":
-        fast = [item for item in candidates if integer(item.get("shanten"), 8) == min_shanten]
+        else:
+            eligible = [item for item in candidates if item not in ready]
+            pool = eligible
+    min_shanten = min(integer(item.get("shanten"), 8) for item in eligible)
+    if pool is eligible and mode in {"attack", "chase"}:
+        pool = [item for item in eligible if integer(item.get("shanten"), 8) == min_shanten]
+    elif pool is eligible and mode == "balanced":
+        fast = [item for item in eligible if integer(item.get("shanten"), 8) == min_shanten]
         best_fast_danger = min(integer(item.get("danger", item.get("risk", 0))) for item in fast)
         # Balanced mode may spend one shanten only to avoid a clearly dangerous tile.
         pool = [
-            item for item in candidates
+            item for item in eligible
             if integer(item.get("shanten"), 8) == min_shanten
             or (
                 integer(item.get("shanten"), 8) == min_shanten + 1
@@ -159,19 +174,22 @@ def classify(
     selected_live = integer(selected.get("live_ukeire"), 0)
     selected_waits = integer(selected.get("wait_count"), 0)
     selected_danger = integer(selected.get("danger", selected.get("risk", 0)))
-    min_shanten = min(integer(item.get("shanten"), 8) for item in candidates)
-
     ready_alternatives = [
         item for item in candidates
         if integer(item.get("shanten"), 8) <= 0
         and integer(item.get("wait_count"), 0) > 0
+        and (
+            integer(item.get("danger", item.get("risk", 0))) < 86
+            or selected_danger >= 86
+        )
         and integer(item.get("danger", item.get("risk", 0))) <= selected_danger + 15
     ]
     if selected_shanten > 0 and ready_alternatives:
         categories.append("READY_HAND_BROKEN")
 
-    if selected_shanten > min_shanten:
-        faster = [item for item in candidates if integer(item.get("shanten"), 8) == min_shanten]
+    reference_shanten = integer(reference.get("shanten"), 8)
+    if selected_shanten > reference_shanten:
+        faster = [item for item in candidates if integer(item.get("shanten"), 8) == reference_shanten]
         best_faster_danger = min(integer(item.get("danger", item.get("risk", 0))) for item in faster)
         if mode not in {"defense", "fold"} or selected_danger + 25 >= best_faster_danger:
             categories.append("SHANTEN_REGRESSION")

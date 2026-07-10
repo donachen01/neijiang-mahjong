@@ -14,6 +14,7 @@ public sealed class NeijiangStateView
     public int VisibleVersion { get; set; }
     public int HandVersion { get; set; }
     public int StrategyContextVersion { get; set; }
+    public string PolicyProfile { get; set; } = "candidate";
     public int[] Scores { get; set; } = new int[4];
 
     public int[] Hand18 { get; init; } = new int[18];

@@ -1,7 +1,12 @@
+using System.Collections.Concurrent;
+
 namespace NeijiangMahjong.AI.Core.Engines;
 
 public sealed class NeijiangShantenEngine
 {
+    private const int MaxBestShantenCacheEntries = 65_536;
+    private static readonly ConcurrentDictionary<ulong, int> BestShantenCache = new();
+
     public int CalcStandardShanten(int[] hand18, int meldCount = 0)
     {
         var counts = (int[])hand18.Clone();
@@ -19,10 +24,18 @@ public sealed class NeijiangShantenEngine
 
     public int CalcBestShanten(int[] hand18, int meldCount = 0, bool allowQiDui = true)
     {
+        var cacheKey = BuildCacheKey(hand18, meldCount, allowQiDui);
+        if (BestShantenCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
         var standard = CalcStandardShanten(hand18, meldCount);
-        if (!allowQiDui || meldCount > 0)
-            return standard;
-        return Math.Min(standard, CalcSevenPairsShanten(hand18));
+        var result = !allowQiDui || meldCount > 0
+            ? standard
+            : Math.Min(standard, CalcSevenPairsShanten(hand18));
+        if (BestShantenCache.Count >= MaxBestShantenCacheEntries)
+            BestShantenCache.Clear();
+        BestShantenCache.TryAdd(cacheKey, result);
+        return result;
     }
 
     public int CalcShantenAfterDiscard(int[] hand18, int tileType, int meldCount = 0, bool allowQiDui = true)
@@ -98,5 +111,16 @@ public sealed class NeijiangShantenEngine
     {
         var rank = index % 9;
         return rank + gap <= 8 && counts[index] > 0 && counts[index + gap] > 0;
+    }
+
+    private static ulong BuildCacheKey(int[] hand18, int meldCount, bool allowQiDui)
+    {
+        ulong key = 0;
+        for (var index = 0; index < 18; index++)
+            key |= (ulong)Math.Clamp(hand18[index], 0, 7) << (index * 3);
+        key |= (ulong)Math.Clamp(meldCount, 0, 7) << 54;
+        if (allowQiDui)
+            key |= 1UL << 57;
+        return key;
     }
 }

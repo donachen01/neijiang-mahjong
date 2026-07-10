@@ -20,6 +20,7 @@ public static class NeijiangStateFingerprint
             .Append("|visibleVersion=").Append(state.VisibleVersion)
             .Append("|handVersion=").Append(state.HandVersion)
             .Append("|strategyContextVersion=").Append(state.StrategyContextVersion)
+            .Append("|policyProfile=").Append(state.PolicyProfile)
             .Append("|selfBaoJiao=").Append(state.IsBaoJiao ? 1 : 0)
             .Append("|lastDraw=").Append(state.LastDrawTileType)
             .Append("|baoGang=").Append(string.Join(',', state.BaoGangTileTypes.OrderBy(tile => tile)))

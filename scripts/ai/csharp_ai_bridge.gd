@@ -322,6 +322,7 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 		"visibleVersion": visible_version,
 		"handVersion": hand_version,
 		"strategyContextVersion": visible_version + hand_version,
+		"policyProfile": str(player_state.get("ai_policy_profile", "candidate")),
 		"scores": scores,
 		"mobileSpeedMode": OS.has_feature("android") or OS.has_feature("ios"),
 		"compactResult": OS.has_feature("android") or OS.has_feature("ios"),

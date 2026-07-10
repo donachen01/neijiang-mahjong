@@ -9,6 +9,7 @@ func build_player_state(player: Dictionary) -> Dictionary:
 		"nickname": str(player.get("nickname", "")),
 		"is_ai": bool(player.get("is_ai", false)),
 		"ai_level": int(player.get("ai_level", -1)),
+		"ai_policy_profile": str(player.get("ai_policy_profile", "candidate")),
 		"score": int(player.get("score", 0)),
 		"ding_que": str(player.get("ding_que", "")),
 		"bao_jiao": bool(player.get("bao_jiao", false)),

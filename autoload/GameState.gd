@@ -112,6 +112,7 @@ var pending_trainer_hint_request_id: int = 0
 var pending_trainer_hint_request_cache_key: String = ""
 var pending_trainer_hint_request_seat: int = -1
 var ai_decision_metrics: Dictionary = {}
+var ai_decision_performance_ms: Array[float] = []
 var ai_reaction_review_history: Array[Dictionary] = []
 var latest_ai_reaction_review: Dictionary = {}
 var reaction_pass_evidence: Array[Dictionary] = []
@@ -220,6 +221,7 @@ func start_new_round(preserve_dealer: bool = false) -> void:
 	trainer_history.clear()
 	latest_trainer_hint.clear()
 	ai_decision_metrics = _create_empty_ai_decision_metrics()
+	ai_decision_performance_ms.clear()
 	ai_reaction_review_history.clear()
 	latest_ai_reaction_review.clear()
 	reaction_pass_evidence.clear()
@@ -1555,6 +1557,7 @@ func _execute_ai_turn_decision(decision: Dictionary) -> bool:
 			var ok := _discard_tile_internal(seat, tile_id)
 			if ok:
 				_record_discard_strategy_metric(decision)
+				_record_discard_performance(decision)
 			_record_ai_chain_debug("turn_execute_discard seat=%d tile_id=%d ok=%s msg=%s" % [
 				seat,
 				tile_id,
@@ -3967,6 +3970,15 @@ func _record_discard_strategy_metric(decision: Dictionary) -> void:
 	if not strategy_mode in ["attack", "balanced", "defense", "fold", "chase"]:
 		strategy_mode = "balanced"
 	_record_ai_metric("discard_strategy_%s" % strategy_mode)
+
+
+func _record_discard_performance(decision: Dictionary) -> void:
+	var analysis: Dictionary = decision.get("analysis", {})
+	var csharp_result: Dictionary = analysis.get("csharp_result", {})
+	var performance: Dictionary = csharp_result.get("performance", {})
+	var elapsed_ms := float(performance.get("TotalMs", performance.get("totalMs", 0.0)))
+	if elapsed_ms > 0.0:
+		ai_decision_performance_ms.append(elapsed_ms)
 
 func _resolve_ai_reaction_action(seat: int, candidate: Dictionary, requested_action: String) -> String:
 	if requested_action == "hu" and bool(candidate.get("can_hu", false)):

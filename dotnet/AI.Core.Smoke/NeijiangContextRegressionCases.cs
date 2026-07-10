@@ -1,4 +1,5 @@
 using NeijiangMahjong.AI.Core.Codec;
+using NeijiangMahjong.AI.Core.Analysis;
 using NeijiangMahjong.AI.Core.Engines;
 using NeijiangMahjong.AI.Core.Entry;
 using NeijiangMahjong.AI.Core.Models;
@@ -14,6 +15,8 @@ internal static class NeijiangContextRegressionCases
         VerifyHandShapeCacheSurvivesWallChanges(failures);
         VerifyMeldGroupCountingHandlesMultipleGangs(failures);
         VerifyDangerLevelsMatchMaximumScore(failures);
+        VerifyModeDiscardScorers(failures);
+        VerifyFrozenPolicySelection(failures);
 
         if (failures.Count == 0)
         {
@@ -143,6 +146,135 @@ internal static class NeijiangContextRegressionCases
         }
         if (opponents.Values.Any(profile => profile.LowDemandSuitConfidence is < 0.0 or > 0.35))
             failures.Add("low_demand_suit_confidence_out_of_bounds");
+    }
+
+    private static void VerifyModeDiscardScorers(List<string> failures)
+    {
+        var context = new NeijiangAiContext
+        {
+            Stage = new NeijiangStageContext { Stage = "middle", StageIndex = 1, WallCount = 10 },
+            RoundGoal = new NeijiangRoundGoalContext { Goal = "balanced" },
+            StrategyMode = new NeijiangStrategyModeContext { Mode = "attack" }
+        };
+
+        var attack = NeijiangDiscardScorerFactory.Rank(
+            new[] { Candidate(1, 2, 40, 25, 9000), Candidate(2, 1, 8, 27, 100) },
+            context);
+        if (attack[0].TileType != 2)
+            failures.Add("attack_scorer_did_not_keep_lower_shanten");
+
+        var attackRisk = NeijiangDiscardScorerFactory.Rank(
+            new[] { Candidate(1, 1, 20, 73, 9000), Candidate(2, 1, 8, 25, 100) },
+            context);
+        if (attackRisk[0].TileType != 2)
+            failures.Add("attack_scorer_ignored_large_same_speed_danger_gap");
+
+        context.StrategyMode.Mode = "chase";
+        context.RoundGoal.Goal = "chase_score";
+        var chase = NeijiangDiscardScorerFactory.Rank(
+            new[]
+            {
+                Candidate(1, 1, 36, 33, 9000, "清一色"),
+                Candidate(2, 0, 8, 41, 100, waitCount: 2)
+            },
+            context);
+        if (chase[0].TileType != 2)
+            failures.Add("chase_scorer_big_route_overrode_ready_hand");
+
+        context.StrategyMode.Mode = "defense";
+        context.RoundGoal.Goal = "balanced";
+        var defense = NeijiangDiscardScorerFactory.Rank(
+            new[] { Candidate(1, 3, 38, 23, 1000), Candidate(2, 2, 33, 28, 100) },
+            context);
+        if (defense[0].TileType != 2)
+            failures.Add("defense_scorer_small_risk_gap_overrode_full_shanten");
+
+        context.StrategyMode.Mode = "fold";
+        var fold = NeijiangDiscardScorerFactory.Rank(
+            new[] { Candidate(1, 0, 4, 70, 9000, waitCount: 2), Candidate(2, 1, 20, 9, 100) },
+            context);
+        if (fold[0].TileType != 2)
+            failures.Add("fold_scorer_failed_to_abandon_extreme_ready_risk");
+
+        var foldReady = NeijiangDiscardScorerFactory.Rank(
+            new[] { Candidate(1, 1, 13, 51, 100), Candidate(2, 0, 6, 62, 9000, waitCount: 2) },
+            context);
+        if (foldReady[0].TileType != 2)
+            failures.Add("fold_scorer_failed_to_preserve_ready_at_acceptable_risk");
+
+        context.StrategyMode.Mode = "balanced";
+        var balanced = NeijiangDiscardScorerFactory.Rank(
+            new[] { Candidate(1, 1, 6, 85, 9000, "七对"), Candidate(2, 1, 9, 77, 100) },
+            context);
+        if (balanced[0].TileType != 2)
+            failures.Add("balanced_scorer_route_score_overrode_large_danger_gap");
+
+        var balancedWidth = NeijiangDiscardScorerFactory.Rank(
+            new[] { Candidate(1, 2, 12, 23, 9000), Candidate(2, 2, 45, 24, 100) },
+            context);
+        if (balancedWidth[0].TileType != 2)
+            failures.Add("balanced_scorer_ignored_large_live_ukeire_gap");
+
+        context.StrategyMode.Mode = "defense";
+        var extremeDefense = NeijiangDiscardScorerFactory.Rank(
+            new[] { Candidate(1, 2, 27, 81, 1000), Candidate(2, 3, 52, 67, 100) },
+            context);
+        if (extremeDefense[0].TileType != 2)
+            failures.Add("defense_scorer_underweighted_extreme_danger");
+
+        var defenseWidth = NeijiangDiscardScorerFactory.Rank(
+            new[] { Candidate(1, 1, 7, 46, 9000), Candidate(2, 1, 13, 48, 100) },
+            context);
+        if (defenseWidth[0].TileType != 2)
+            failures.Add("defense_scorer_ignored_material_ukeire_for_tiny_risk_gap");
+    }
+
+    private static NeijiangCandidateDetail Candidate(
+        int tileType,
+        int shanten,
+        int liveUkeire,
+        int danger,
+        int score,
+        string? route = null,
+        int waitCount = 0)
+        => new()
+        {
+            TileType = tileType,
+            Shanten = shanten,
+            LiveUkeire = liveUkeire,
+            Danger = danger,
+            Score = score,
+            ExpectedNetScore = score / 100.0,
+            WaitCount = waitCount,
+            RoutesAfter = route is null ? Array.Empty<string>() : new[] { route }
+        };
+
+    private static void VerifyFrozenPolicySelection(List<string> failures)
+    {
+        var context = new NeijiangAiContext
+        {
+            Stage = new NeijiangStageContext { Stage = "early", StageIndex = 0, WallCount = 16 },
+            RoundGoal = new NeijiangRoundGoalContext { Goal = "balanced" },
+            StrategyMode = new NeijiangStrategyModeContext { Mode = "attack" },
+            PolicyProfile = "candidate"
+        };
+        var candidates = new[]
+        {
+            Candidate(1, 2, 40, 24, 9000),
+            Candidate(2, 1, 8, 25, 100)
+        };
+        var candidateTop = NeijiangDiscardScorerFactory.Rank(candidates, context)[0].TileType;
+        context.PolicyProfile = "baseline_v1";
+        var baselineTop = NeijiangDiscardScorerFactory.Rank(candidates, context)[0].TileType;
+        if (candidateTop != 2 || baselineTop != 1)
+            failures.Add($"frozen_policy_selection_expected_candidate_2_baseline_1_actual_{candidateTop}_{baselineTop}");
+
+        var first = BuildState(1, new int[4], EmptyMatrix(), DefaultHand(), 8);
+        var second = BuildState(1, new int[4], EmptyMatrix(), DefaultHand(), 8);
+        first.PolicyProfile = "candidate";
+        second.PolicyProfile = "baseline_v1";
+        if (NeijiangStateFingerprint.BuildTurnKey(first, true, false) == NeijiangStateFingerprint.BuildTurnKey(second, true, false))
+            failures.Add("policy_profile_missing_from_decision_cache_key");
     }
 
     private static NeijiangStateView BuildState(

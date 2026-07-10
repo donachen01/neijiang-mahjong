@@ -67,6 +67,7 @@ func _run() -> void:
 	_run_test("ai_manager_sync_compat_reaction_does_not_create_pending_request", _test_ai_manager_sync_compat_reaction_does_not_create_pending_request, failures)
 	_run_test("ai_manager_sync_compat_turn_does_not_call_native_start", _test_ai_manager_sync_compat_turn_does_not_call_native_start, failures)
 	_run_test("transport_payload_preserves_exact_meld_group_counts", _test_transport_payload_preserves_exact_meld_group_counts, failures)
+	_run_test("transport_payload_preserves_policy_profile", _test_transport_payload_preserves_policy_profile, failures)
 	if failures.is_empty():
 		print("NEIJIANG CSHARP CONTRACT OK")
 		quit(0)
@@ -121,6 +122,22 @@ func _test_transport_payload_preserves_exact_meld_group_counts():
 	if melds.size() != 4 or Array(melds[1]).size() != 12:
 		return "expected three gang tile groups to preserve 12 tiles, got %s" % [melds]
 	return true
+
+
+func _test_transport_payload_preserves_policy_profile():
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	var player_state := {
+		"seat": 1,
+		"ai_policy_profile": "baseline_v1",
+		"hand_tiles": _tiles_from_types([1, 2, 3, 5, 6, 7, 10, 11, 12, 13, 14, 15, 16], 700),
+	}
+	var players: Array = []
+	for seat in range(4):
+		players.append({"seat": seat, "hand_tiles": [], "discards": [], "melds": [], "score": 0})
+	var table_state := {"players": players, "wall_count": 9, "current_turn_seat": 1}
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var payload: Dictionary = ai_manager.csharp_bridge.build_discard_transport_payload(player_state, table_state, rules)
+	return true if str(payload.get("policyProfile", "")) == "baseline_v1" else "policy profile missing from payload"
 
 
 func _test_csharp_action_tile_matches_godot_recommended_tile():

@@ -25,6 +25,11 @@ else
   exit 2
 fi
 
+EXTRA_ARGS=()
+if [[ "$MODE" == "long" ]]; then
+  EXTRA_ARGS+=("--paired-policy=true")
+fi
+
 "$GODOT_BIN" --headless --path "$PROJECT_ROOT" \
   --script res://tests/current/NeijiangAiBenchmarkSmokeRunner.gd -- \
   --rounds="$ROUNDS" \
@@ -33,6 +38,7 @@ fi
   --seed="$SEED" \
   --output="$REPORT_JSON" \
   --csv-output="$REPORT_CSV" \
+  "${EXTRA_ARGS[@]}" \
   | tee "$RUN_ROOT/benchmark.log"
 
 if [[ "$MODE" == "diagnostic" ]]; then
@@ -64,6 +70,8 @@ summary = {
     "short_rounds": data.get("short_rounds", 0),
     "ai_metrics_total": data.get("ai_metrics_total", {}),
     "long_term_score_metrics": data.get("long_term_score_metrics", {}),
+    "choose_action_performance": data.get("choose_action_performance", {}),
+    "paired_policy_metrics": data.get("paired_policy_metrics", {}),
     "trace_enabled": os.environ.get("NEIJIANG_TRACE_ENABLED", ""),
     "system_free_bytes": shutil.disk_usage("/").free,
     "ai_free_bytes": shutil.disk_usage("/Volumes/AI").free,

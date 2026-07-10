@@ -2,6 +2,7 @@ namespace NeijiangMahjong.AI.Core.Models;
 
 public sealed class NeijiangAiContext
 {
+    public string PolicyProfile { get; set; } = "candidate";
     public NeijiangStageContext Stage { get; set; } = new();
     public NeijiangRoundGoalContext RoundGoal { get; set; } = new();
     public NeijiangStrategyModeContext StrategyMode { get; set; } = new();
