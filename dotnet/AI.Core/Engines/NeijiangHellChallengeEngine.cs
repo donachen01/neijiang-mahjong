@@ -61,7 +61,7 @@ public sealed class NeijiangHellChallengeEngine
         }
 
         var hand = state.Hand18;
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         var teamPlan = NeijiangHellChallengeTeamPlanner.BuildPlan(state, allHands18, exactWall18, currentScores);
         var seatPlan = teamPlan.ForSeat(state.SeatIndex);
         var humanPressureLevel = teamPlan.HumanPressureLevel;
@@ -325,7 +325,7 @@ public sealed class NeijiangHellChallengeEngine
                 continue;
             var hand = allHands18[seat].Take(18).Concat(Enumerable.Repeat(0, 18)).Take(18).ToArray();
             hand[discardTileType]++;
-            var meldCount = state.Melds18[seat].Count / 3;
+            var meldCount = state.GetMeldCount(seat);
             if (CanHu(hand, meldCount))
                 targets.Add(seat);
         }
@@ -351,7 +351,7 @@ public sealed class NeijiangHellChallengeEngine
             return 0;
 
         humanHand[discardTileType] = Math.Max(0, humanHand[discardTileType] - 2);
-        var meldCountAfter = state.Melds18[0].Count / 3 + 1;
+        var meldCountAfter = state.GetMeldCount(0) + 1;
         var concealedCount = humanHand.Sum();
         if (concealedCount < 4)
             return 1;

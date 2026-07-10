@@ -86,7 +86,7 @@ public sealed class NeijiangMctsEngine
     {
         var hand = RemoveOne(state.Hand18, discardTileType);
         var remaining = (int[])state.Remaining18.Clone();
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         var totalScore = 0.0;
 
         for (var depth = 0; depth < rolloutDepth; depth++)

@@ -538,6 +538,7 @@ public partial class NeijiangCSharpRuntime : Node
         payload.Remaining18 = GetJsonIntArray(root, "remaining18");
         payload.Discards18 = GetJsonIntMatrix(root, "discards18");
         payload.Melds18 = GetJsonIntMatrix(root, "melds18");
+        payload.MeldGroupCounts = GetJsonIntList(root, "meldGroupCounts");
         payload.PassedHu18 = GetJsonIntMatrix(root, "passedHu18");
         payload.PassedPeng18 = GetJsonIntMatrix(root, "passedPeng18");
         payload.PassedGang18 = GetJsonIntMatrix(root, "passedGang18");
@@ -1509,7 +1510,8 @@ public partial class NeijiangCSharpRuntime : Node
             payload.RemainingRounds,
             payload.VisibleVersion,
             payload.HandVersion,
-            payload.StrategyContextVersion);
+            payload.StrategyContextVersion,
+            payload.MeldGroupCounts);
 
         if (payload.IsCalled is { Length: 4 }) Array.Copy(payload.IsCalled, state.IsCalled, 4);
         if (payload.IsReady is { Length: 4 }) Array.Copy(payload.IsReady, state.IsReady, 4);
@@ -1562,7 +1564,7 @@ public partial class NeijiangCSharpRuntime : Node
                 reasons = context.ReasonCodes
             };
         }
-        var roundStage = ResolveRoundStage(state);
+        var roundStage = NeijiangStageEvaluator.ResolvePhysicalStageIndex(state.WallCount);
         var handShape = AnalyzeTwoSuitShape(state);
         var threatSummaries = Enumerable.Range(0, 4)
             .Where(seat => seat != state.SeatIndex && !state.HasHu[seat])
@@ -1621,13 +1623,6 @@ public partial class NeijiangCSharpRuntime : Node
         };
     }
 
-    private static int ResolveRoundStage(NeijiangStateView state)
-    {
-        if (state.WallCount >= 14) return 0;
-        if (state.WallCount >= 8) return 1;
-        return 2;
-    }
-
     private static string RoundStageLabel(int roundStage) => roundStage switch
     {
         0 => "前段",
@@ -1673,7 +1668,7 @@ public partial class NeijiangCSharpRuntime : Node
     private static OpponentThreatSummary BuildOpponentThreat(NeijiangStateView state, int seat)
     {
         var discards = state.Discards18[seat].Count;
-        var meldCount = state.Melds18[seat].Count / 3;
+        var meldCount = state.GetMeldCount(seat);
         var tiaoVisible = state.Discards18[seat].Count(tile => tile is >= 0 and <= 8);
         var tongVisible = state.Discards18[seat].Count(tile => tile is >= 9 and <= 17);
         var dangerousSuit = tiaoVisible <= tongVisible ? "tiao" : "tong";
@@ -1734,6 +1729,7 @@ public partial class NeijiangCSharpRuntime : Node
         public int[] Remaining18 { get; set; } = Array.Empty<int>();
         public List<List<int>> Discards18 { get; set; } = new();
         public List<List<int>> Melds18 { get; set; } = new();
+        public List<int> MeldGroupCounts { get; set; } = new();
         public List<List<int>> PassedHu18 { get; set; } = new();
         public List<List<int>> PassedPeng18 { get; set; } = new();
         public List<List<int>> PassedGang18 { get; set; } = new();

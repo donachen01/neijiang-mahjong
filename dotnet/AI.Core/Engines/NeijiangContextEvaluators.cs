@@ -5,24 +5,34 @@ namespace NeijiangMahjong.AI.Core.Engines;
 
 public sealed class NeijiangStageEvaluator
 {
+    public static int ResolvePhysicalStageIndex(int wallCount)
+        => wallCount <= 6 ? 2 : wallCount <= 13 ? 1 : 0;
+
     public NeijiangStageContext Evaluate(NeijiangStateView state, NeijiangBeliefSnapshot belief)
     {
         var maxDiscards = state.Discards18.Max(list => list.Count);
-        var exposedMeldCount = state.Melds18.Sum(list => list.Count / 3);
+        var exposedMeldCount = Enumerable.Range(0, 4).Sum(state.GetMeldCount);
         var hasLikelyReady = Enumerable.Range(0, 4)
             .Where(seat => seat != state.SeatIndex && !state.HasHu[seat])
             .Any(seat => state.IsCalled[seat] || state.IsReady[seat] || belief.SeatReadyPosterior.GetValueOrDefault(seat, 0.0) >= 0.55);
-        var riskRaised = exposedMeldCount >= 3 || hasLikelyReady;
+        var maxReadyPosterior = Enumerable.Range(0, 4)
+            .Where(seat => seat != state.SeatIndex && !state.HasHu[seat])
+            .Select(seat => belief.SeatReadyPosterior.GetValueOrDefault(seat, 0.0))
+            .DefaultIfEmpty(0.0)
+            .Max();
+        var riskPressure = Math.Clamp(
+            (hasLikelyReady ? 45 : 0)
+            + (int)Math.Round(maxReadyPosterior * 35.0)
+            + Math.Min(20, exposedMeldCount * 4),
+            0,
+            100);
+        var riskRaised = riskPressure >= 45;
 
-        if (state.WallCount <= 6)
-            return Build("late", 2, "STAGE_LATE_BY_REMAINING_TILES", state, maxDiscards, exposedMeldCount, hasLikelyReady, riskRaised);
-        if (hasLikelyReady && state.WallCount <= 8)
-            return Build("late", 2, "STAGE_LATE_BY_READY_PRESSURE", state, maxDiscards, exposedMeldCount, hasLikelyReady, true);
-        if (maxDiscards >= 10 || state.WallCount <= 13 || exposedMeldCount >= 5)
-            return Build("middle", 1, "STAGE_MIDDLE_BY_PROGRESS", state, maxDiscards, exposedMeldCount, hasLikelyReady, riskRaised);
-        if (hasLikelyReady && state.WallCount <= 10)
-            return Build("middle", 1, "STAGE_MIDDLE_BY_READY_PRESSURE", state, maxDiscards, exposedMeldCount, hasLikelyReady, true);
-        return Build("early", 0, "STAGE_EARLY_BY_LOW_PROGRESS", state, maxDiscards, exposedMeldCount, hasLikelyReady, riskRaised);
+        if (ResolvePhysicalStageIndex(state.WallCount) == 2)
+            return Build("late", 2, "STAGE_LATE_BY_REMAINING_TILES", state, maxDiscards, exposedMeldCount, hasLikelyReady, riskRaised, riskPressure);
+        if (ResolvePhysicalStageIndex(state.WallCount) == 1)
+            return Build("middle", 1, "STAGE_MIDDLE_BY_REMAINING_TILES", state, maxDiscards, exposedMeldCount, hasLikelyReady, riskRaised, riskPressure);
+        return Build("early", 0, "STAGE_EARLY_BY_REMAINING_TILES", state, maxDiscards, exposedMeldCount, hasLikelyReady, riskRaised, riskPressure);
     }
 
     private static NeijiangStageContext Build(
@@ -33,7 +43,8 @@ public sealed class NeijiangStageEvaluator
         int maxDiscards,
         int exposedMeldCount,
         bool hasLikelyReady,
-        bool riskRaised) => new()
+        bool riskRaised,
+        int riskPressure) => new()
         {
             Stage = stage,
             StageIndex = stageIndex,
@@ -42,7 +53,8 @@ public sealed class NeijiangStageEvaluator
             MaxDiscardCount = maxDiscards,
             ExposedMeldCount = exposedMeldCount,
             HasLikelyReadyOpponent = hasLikelyReady,
-            RiskRaised = riskRaised
+            RiskRaised = riskRaised,
+            RiskPressure = riskPressure
         };
 }
 
@@ -50,17 +62,30 @@ public sealed class NeijiangHandEvaluator
 {
     private readonly NeijiangShantenEngine _shanten = new();
     private readonly NeijiangUkeireEngine _ukeire = new();
-    private readonly Dictionary<string, NeijiangHandAnalysis> _cache = new();
+    private readonly Dictionary<string, HandShapeSnapshot> _shapeCache = new();
+
+    public int ShapeCacheEntries => _shapeCache.Count;
 
     public NeijiangHandAnalysis Evaluate(NeijiangStateView state, NeijiangBeliefSnapshot belief)
     {
         var key = BuildHandKey(state);
-        if (_cache.TryGetValue(key, out var cached))
-            return cached;
-
         var stopwatch = Stopwatch.StartNew();
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
-        var shanten = _shanten.CalcBestShanten(state.Hand18, meldCount);
+        var meldCount = state.GetMeldCount(state.SeatIndex);
+        var shapeCacheHit = _shapeCache.TryGetValue(key, out var shape);
+        if (!shapeCacheHit)
+        {
+            var pairCount = state.Hand18.Count(count => count >= 2);
+            shape = new HandShapeSnapshot(
+                _shanten.CalcBestShanten(state.Hand18, meldCount),
+                CountTaatsu(state.Hand18),
+                pairCount,
+                CountIsolatedSingles(state.Hand18),
+                EstimateBigHandPotential(state, pairCount));
+            _shapeCache[key] = shape;
+            if (_shapeCache.Count > 256)
+                _shapeCache.Remove(_shapeCache.Keys.First());
+        }
+
         var bestUkeire = 0;
         var bestLiveUkeire = 0;
         foreach (var tileType in Enumerable.Range(0, 18).Where(tile => state.Hand18[tile] > 0))
@@ -70,13 +95,9 @@ public sealed class NeijiangHandEvaluator
             bestLiveUkeire = Math.Max(bestLiveUkeire, live);
         }
 
-        var pairCount = state.Hand18.Count(count => count >= 2);
-        var isolatedCount = CountIsolatedSingles(state.Hand18);
-        var taatsuCount = CountTaatsu(state.Hand18);
-        var bigHandPotential = EstimateBigHandPotential(state, pairCount);
         var highRiskWasteCount = CountHighRiskWasteTiles(state, belief);
         var quality = Math.Clamp(
-            100 - shanten * 22 + taatsuCount * 6 + pairCount * 5 + Math.Min(20, bestLiveUkeire * 2) + bigHandPotential / 3 - isolatedCount * 4,
+            100 - shape!.Shanten * 22 + shape.TaatsuCount * 6 + shape.PairCount * 5 + Math.Min(20, bestLiveUkeire * 2) + shape.BigHandPotential / 3 - shape.IsolatedCount * 4,
             0,
             100);
 
@@ -84,27 +105,25 @@ public sealed class NeijiangHandEvaluator
         var result = new NeijiangHandAnalysis
         {
             HandKey = key,
-            Shanten = shanten,
-            TaatsuCount = taatsuCount,
-            PairCount = pairCount,
-            IsolatedCount = isolatedCount,
+            Shanten = shape.Shanten,
+            TaatsuCount = shape.TaatsuCount,
+            PairCount = shape.PairCount,
+            IsolatedCount = shape.IsolatedCount,
             UkeireCount = bestUkeire,
             LiveUkeireCount = bestLiveUkeire,
             DingQueClear = true,
-            BigHandPotential = bigHandPotential,
+            BigHandPotential = shape.BigHandPotential,
             HighRiskWasteCount = highRiskWasteCount,
             HandQuality = quality,
-            ReasonCode = ResolveReasonCode(shanten, quality, bigHandPotential),
-            ElapsedMs = stopwatch.Elapsed.TotalMilliseconds
+            ReasonCode = ResolveReasonCode(shape.Shanten, quality, shape.BigHandPotential),
+            ElapsedMs = stopwatch.Elapsed.TotalMilliseconds,
+            ShapeCacheHit = shapeCacheHit
         };
-        _cache[key] = result;
-        if (_cache.Count > 256)
-            _cache.Remove(_cache.Keys.First());
         return result;
     }
 
     public static string BuildHandKey(NeijiangStateView state)
-        => string.Join(',', state.Hand18) + $"|m:{string.Join(',', state.Melds18[state.SeatIndex])}|w:{state.WallCount}";
+        => string.Join(',', state.Hand18) + $"|mc:{state.GetMeldCount(state.SeatIndex)}|m:{string.Join(',', state.Melds18[state.SeatIndex])}";
 
     private static int CountIsolatedSingles(int[] hand18)
     {
@@ -144,7 +163,7 @@ public sealed class NeijiangHandEvaluator
         foreach (var tile in state.Melds18[state.SeatIndex])
             suitCounts[tile / 9]++;
         var maxSuit = suitCounts.Max();
-        var tripletLike = state.Hand18.Count(count => count >= 3) + state.Melds18[state.SeatIndex].Count / 3;
+        var tripletLike = state.Hand18.Count(count => count >= 3) + state.GetMeldCount(state.SeatIndex);
         return Math.Clamp(maxSuit * 5 + pairCount * 6 + tripletLike * 10, 0, 100);
     }
 
@@ -183,6 +202,13 @@ public sealed class NeijiangHandEvaluator
         if (quality <= 35) return "HAND_WEAK_LOW_QUALITY";
         return "HAND_BALANCED";
     }
+
+    private sealed record HandShapeSnapshot(
+        int Shanten,
+        int TaatsuCount,
+        int PairCount,
+        int IsolatedCount,
+        int BigHandPotential);
 }
 
 public sealed class NeijiangLongTermEVPolicy
@@ -261,7 +287,7 @@ public sealed class NeijiangOpponentDangerEvaluator
         for (var seat = 0; seat < 4; seat++)
         {
             if (seat == state.SeatIndex || state.HasHu[seat]) continue;
-            var meldCount = state.Melds18[seat].Count / 3;
+            var meldCount = state.GetMeldCount(seat);
             var discardCount = state.Discards18[seat].Count;
             var readyPosterior = belief.SeatReadyPosterior.GetValueOrDefault(seat, 0.0);
             var bigHandRisk = EstimateBigHandRisk(state, seat);
@@ -272,19 +298,21 @@ public sealed class NeijiangOpponentDangerEvaluator
                 + (stage.StageIndex >= 2 ? 10 : stage.StageIndex * 4)
                 + bigHandRisk * 0.22
                 + Math.Min(12, discardCount));
-            var missingSuit = ResolveLikelyMissingSuit(state, seat);
+            var (lowDemandSuit, lowDemandConfidence) = ResolveLikelyLowDemandSuit(state, seat);
             var reasonCodes = new List<string>();
             if (state.IsCalled[seat] || state.IsReady[seat]) reasonCodes.Add("OPPONENT_READY_DECLARED");
             if (readyPosterior >= 0.55) reasonCodes.Add("OPPONENT_LIKELY_READY_POSTERIOR");
             if (meldCount >= 2) reasonCodes.Add("OPPONENT_MANY_EXPOSED_MELDS");
             if (bigHandRisk >= 65) reasonCodes.Add("OPPONENT_BIG_HAND_RISK");
             if (stage.StageIndex >= 2) reasonCodes.Add("OPPONENT_LATE_STAGE_PRESSURE");
+            if (lowDemandSuit >= 0) reasonCodes.Add("OPPONENT_LOW_DEMAND_SUIT_WEAK_SIGNAL");
             result[seat] = new NeijiangOpponentDangerProfile
             {
                 Seat = seat,
                 DangerLevel = Math.Clamp(danger, 0, 100),
                 LikelyReady = state.IsCalled[seat] || state.IsReady[seat] || readyPosterior >= 0.55,
-                LikelyMissingSuit = missingSuit,
+                LikelyLowDemandSuit = lowDemandSuit,
+                LowDemandSuitConfidence = lowDemandConfidence,
                 BigHandRisk = bigHandRisk,
                 ExposedMeldCount = meldCount,
                 DangerReasonCodes = reasonCodes.Count == 0 ? new[] { "OPPONENT_LOW_INFORMATION" } : reasonCodes
@@ -301,18 +329,21 @@ public sealed class NeijiangOpponentDangerEvaluator
         foreach (var tile in melds)
             suitCounts[tile / 9]++;
         var sameSuitRatio = melds.Count == 0 ? 0.0 : (double)suitCounts.Max() / melds.Count;
-        var pungLike = melds.Count / 3;
+        var pungLike = state.GetMeldCount(seat);
         return Math.Clamp((int)Math.Round(sameSuitRatio * 58 + pungLike * 12), 0, 100);
     }
 
-    private static int ResolveLikelyMissingSuit(NeijiangStateView state, int seat)
+    private static (int Suit, double Confidence) ResolveLikelyLowDemandSuit(NeijiangStateView state, int seat)
     {
         var discardSuitCounts = new[] { 0, 0 };
         foreach (var tile in state.Discards18[seat])
             discardSuitCounts[tile / 9]++;
-        if (discardSuitCounts[0] >= discardSuitCounts[1] + 3) return 0;
-        if (discardSuitCounts[1] >= discardSuitCounts[0] + 3) return 1;
-        return -1;
+        var difference = Math.Abs(discardSuitCounts[0] - discardSuitCounts[1]);
+        if (difference < 4)
+            return (-1, 0.0);
+        var suit = discardSuitCounts[0] > discardSuitCounts[1] ? 0 : 1;
+        var confidence = Math.Min(0.35, 0.08 + difference * 0.035);
+        return (suit, confidence);
     }
 }
 
@@ -342,14 +373,16 @@ public sealed class NeijiangTileDangerEvaluator
                     ReasonCodes = BuildTileReasonCodes(state, belief, seat, tile, score, stage)
                 };
             }
+            var topSeatDanger = byOpponent.Values.OrderByDescending(item => item.Score).FirstOrDefault();
+            var maxDanger = Math.Max(global.Risk, topSeatDanger?.Score ?? 0);
             result[tile] = new NeijiangTileDangerProfile
             {
                 TileType = tile,
-                MaxDangerScore = Math.Max(global.Risk, byOpponent.Values.Select(item => item.Score).DefaultIfEmpty(0).Max()),
-                TopThreatSeat = global.TopThreatSeat,
-                Level = ResolveLevel(global.Risk),
+                MaxDangerScore = maxDanger,
+                TopThreatSeat = topSeatDanger is not null && topSeatDanger.Score > global.Risk ? topSeatDanger.Seat : global.TopThreatSeat,
+                Level = ResolveLevel(maxDanger),
                 ByOpponent = byOpponent,
-                ReasonCodes = ConvertRiskReasons(global.Reasons, global.Risk, stage)
+                ReasonCodes = ConvertRiskReasons(global.Reasons, maxDanger, stage)
             };
         }
         return result;
@@ -372,8 +405,8 @@ public sealed class NeijiangTileDangerEvaluator
         if (state.Visible18[tile] <= 0 && stage.StageIndex >= 2)
             score += 10;
         var suit = tile / 9;
-        if (profile.LikelyMissingSuit == suit)
-            score *= 0.64;
+        if (profile.LikelyLowDemandSuit == suit && profile.LowDemandSuitConfidence > 0.0)
+            score *= 1.0 - Math.Min(0.07, profile.LowDemandSuitConfidence * 0.20);
         return Math.Clamp((int)Math.Round(score), 0, 100);
     }
 

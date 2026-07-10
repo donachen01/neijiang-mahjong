@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using NeijiangMahjong.AI.Core.Codec;
+using NeijiangMahjong.AI.Core.Engines;
 using NeijiangMahjong.AI.Core.Entry;
 using NeijiangMahjong.AI.Core.Learning;
 using NeijiangMahjong.AI.Core.Models;
@@ -791,7 +792,8 @@ static NeijiangStateView BuildState(DiscardPayload payload)
         payload.RemainingRounds,
         payload.VisibleVersion,
         payload.HandVersion,
-        payload.StrategyContextVersion);
+        payload.StrategyContextVersion,
+        payload.MeldGroupCounts);
 
     if (payload.IsCalled is { Length: 4 }) Array.Copy(payload.IsCalled, state.IsCalled, 4);
     if (payload.IsReady is { Length: 4 }) Array.Copy(payload.IsReady, state.IsReady, 4);
@@ -844,7 +846,7 @@ static object BuildStrategyProfile(NeijiangStateView state, NeijiangDecisionResu
             reasons = context.ReasonCodes
         };
     }
-    var roundStage = ResolveRoundStage(state);
+    var roundStage = NeijiangStageEvaluator.ResolvePhysicalStageIndex(state.WallCount);
     var handShape = AnalyzeTwoSuitShape(state);
     var threatSummaries = Enumerable.Range(0, 4)
         .Where(seat => seat != state.SeatIndex && !state.HasHu[seat])
@@ -903,14 +905,6 @@ static object BuildStrategyProfile(NeijiangStateView state, NeijiangDecisionResu
     };
 }
 
-static int ResolveRoundStage(NeijiangStateView state)
-{
-    var maxDiscards = state.Discards18.Max(list => list.Count);
-    if (state.WallCount >= 14 && maxDiscards <= 5) return 0;
-    if (state.WallCount >= 8 && maxDiscards <= 11) return 1;
-    return 2;
-}
-
 static string RoundStageLabel(int roundStage) => roundStage switch
 {
     0 => "前期",
@@ -953,7 +947,7 @@ static (string DominantSuit, int DominantCount, int SupportCount, int Spread, st
 
 static OpponentThreatSummary BuildOpponentThreat(NeijiangStateView state, int seat)
 {
-    var meldCount = state.Melds18[seat].Count / 3;
+    var meldCount = state.GetMeldCount(seat);
     var discardsCount = state.Discards18[seat].Count;
     var dangerousSuit = ResolveDangerousSuit(state, seat);
     var flushProbability = EstimateFlushProbability(state, seat, dangerousSuit);
@@ -1076,6 +1070,7 @@ internal class DiscardPayload
     public int[] Remaining18 { get; init; } = Array.Empty<int>();
     public List<int>[] Discards18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new List<int>()).ToArray();
     public List<int>[] Melds18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new List<int>()).ToArray();
+    public int[] MeldGroupCounts { get; init; } = Array.Empty<int>();
     public List<int>[] PassedHu18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new List<int>()).ToArray();
     public List<int>[] PassedPeng18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new List<int>()).ToArray();
     public List<int>[] PassedGang18 { get; init; } = Enumerable.Range(0, 4).Select(_ => new List<int>()).ToArray();

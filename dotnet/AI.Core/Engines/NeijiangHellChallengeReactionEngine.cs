@@ -41,7 +41,7 @@ public sealed class NeijiangHellChallengeReactionEngine
         var teamPlan = NeijiangHellChallengeTeamPlanner.BuildPlan(state, allHands18, exactWall18, currentScores);
         var seatPlan = teamPlan.ForSeat(state.SeatIndex);
         var humanPressure = teamPlan.HumanPressureLevel;
-        var currentMeldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var currentMeldCount = state.GetMeldCount(state.SeatIndex);
         var currentShanten = _shanten.CalcBestShanten(state.Hand18, currentMeldCount);
         var currentLive = EstimateBestLiveUkeire(state.Hand18, exactWall18, currentMeldCount);
 
@@ -196,7 +196,7 @@ public sealed class NeijiangHellChallengeReactionEngine
         Dictionary<string, int> inheritedScores)
     {
         var handAfter = RemoveCopies(state.Hand18, reactionTileType, removeCount);
-        var meldCountAfter = state.Melds18[state.SeatIndex].Count / 3 + 1;
+        var meldCountAfter = state.GetMeldCount(state.SeatIndex) + 1;
         var shantenAfter = _shanten.CalcBestShanten(handAfter, meldCountAfter);
         var liveAfter = EstimateBestLiveUkeire(handAfter, exactWall18, meldCountAfter);
         var blocksHuman = sourceSeat == 0 && reactionType == "discard";
@@ -322,6 +322,7 @@ public sealed class NeijiangHellChallengeReactionEngine
             PassedGang18 = CloneMatrix(state.PassedGang18)
         };
         postPengState.Melds18[state.SeatIndex].AddRange(new[] { reactionTileType, reactionTileType, reactionTileType });
+        postPengState.IncrementMeldCount(state.SeatIndex);
         var updatedHands = allHands18.Select((hand, seat) => (IReadOnlyList<int>)(seat == state.SeatIndex ? handAfterPeng : hand.Take(18).Concat(Enumerable.Repeat(0, 18)).Take(18).ToArray())).ToArray();
         return _followUpDiscard.DecideDiscard(postPengState, updatedHands, exactWall18, currentScores).Action.TileType;
     }

@@ -10,6 +10,7 @@ public sealed class NeijiangSelfActionDecisionEngine
     private readonly NeijiangDangerEngine _danger = new();
     private readonly NeijiangBaoJiaoActionEngine _baoJiaoAction = new();
     private readonly NeijiangRoutePlanEngine _routePlan = new();
+    private readonly NeijiangStageEvaluator _stage = new();
 
     public NeijiangSelfActionDecisionResult DecideSelfAction(
         NeijiangStateView state,
@@ -47,10 +48,10 @@ public sealed class NeijiangSelfActionDecisionEngine
             };
         }
 
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         var current = EvaluateBestFollowUp(state.Hand18, state.Remaining18, meldCount);
         var belief = _belief.Build(state);
-        var roundStage = ResolveRoundStage(state);
+        var roundStage = _stage.Evaluate(state, belief).StageIndex;
         var currentPlan = _routePlan.Evaluate(state);
         var maxReadyPosterior = belief.SeatReadyPosterior.Values.DefaultIfEmpty(0.0).Max();
         var threatLevel = ResolveThreatLevel(state, belief);
@@ -272,28 +273,16 @@ public sealed class NeijiangSelfActionDecisionEngine
             if (belief.SeatReadyPosterior.GetValueOrDefault(seat, 0.0) >= 0.56) total += 2;
             else if (belief.SeatReadyPosterior.GetValueOrDefault(seat, 0.0) >= 0.40) total += 1;
             if (state.IsCalled[seat] || state.IsReady[seat]) total += 1;
-            if (state.Melds18[seat].Count / 3 >= 2) total += 1;
+            if (state.GetMeldCount(seat) >= 2) total += 1;
         }
         return Math.Clamp(total, 0, 5);
-    }
-
-    private static int ResolveRoundStage(NeijiangStateView state)
-    {
-        var maxDiscards = state.Discards18.Max(list => list.Count);
-        var hasLikelyReady = state.IsCalled.Any(value => value) || state.IsReady.Any(value => value);
-        var exposedMeldCount = state.Melds18.Sum(list => list.Count / 3);
-        if (state.WallCount <= 6) return 2;
-        if (hasLikelyReady && state.WallCount <= 8) return 2;
-        if (maxDiscards >= 10 || state.WallCount <= 13 || exposedMeldCount >= 5) return 1;
-        if (hasLikelyReady && state.WallCount <= 10) return 1;
-        return 0;
     }
 
     private static IReadOnlyList<string> BuildRouteProtectionPassReasons(
         NeijiangStateView state,
         NeijiangRoutePlanResult currentPlan)
     {
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         if (currentPlan.ForbidsGangs || meldCount > 0 || CountPairs(state.Hand18) < 5)
             return Array.Empty<string>();
         return new[] { "七对路线：五对以上门清牌优先过牌，保留七对/龙七对" };

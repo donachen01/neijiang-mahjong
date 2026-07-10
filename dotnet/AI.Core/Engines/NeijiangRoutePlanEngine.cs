@@ -8,7 +8,7 @@ public sealed class NeijiangRoutePlanEngine
 
     public NeijiangRoutePlanResult Evaluate(NeijiangStateView state)
     {
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         return Evaluate(state, state.Hand18, meldCount);
     }
 

@@ -21,13 +21,13 @@
 |---|---|---|---|---|---|---|
 | BASE-001 | P0 | 原工作区包含未提交 iOS、同步 AI、字体和碰杠改动 | 备份 SHA256 与 `fc1e227` | Git/AI 盘备份 | 可从 bundle、patch 或提交恢复 | 已验证 |
 | SPACE-001 | P0 | 多局逐张 JSON 和构建产物消耗系统盘 | Godot 写入 `res://测试数据统计` 的实路径已验证位于 AI 盘；`build` 同步迁移 | `.gitignore`、AI 盘运行目录、评估脚本 | 30/200 局输出全部落 AI 盘，系统盘增长 `<300MiB` | 已验证 |
-| AI-001 | P0 | `AIContextCache` 在不同 AI 座位之间复用错误局势 | 单例引擎；低频键和可见键无 `SeatIndex` | `NeijiangAiContextCache.cs`、`NeijiangDecisionEngine.cs` | 跨座位专项测试通过 | 未处理 |
-| AI-002 | P0 | 出牌、碰杠、自摸阶段判断重复且边界不一致 | 多个 `ResolveRoundStage` | 三个 C# 决策引擎、ContextEvaluators | 统一 `19-14/13-7/6-0` 边界测试通过 | 未处理 |
-| AI-003 | P0 | 报叫和危险压力与物理阶段混在一起 | StageEvaluator 因 ready pressure 改阶段 | `NeijiangContextEvaluators.cs`、模型 | `riskPressure` 独立，阶段不漂移 | 未处理 |
-| AI-004 | P0 | 内江无定缺却使用 `LikelyMissingSuit` 降低危险度 | 弃牌花色差触发 `*0.64` | ContextEvaluators、ContextModels | 不再存在伪缺门事实；低需求推断有独立低置信度语义 | 未处理 |
-| AI-005 | P0 | 单牌危险数值取最大值，等级却只按 global risk | `MaxDangerScore` 与 `Level` 来源不同 | `NeijiangContextEvaluators.cs` | 等级与最大危险分一致 | 未处理 |
-| AI-006 | P0 | 手牌缓存键包含牌墙，手牌不变仍重算；场面风险又混在手形结果 | `BuildHandKey` 含 wall count | HandEvaluator、ContextModels | 纯手形缓存命中，动态风险单独更新 | 未处理 |
-| AI-007 | P0 | 扁平副露牌列表通过 `/3` 猜副露组数，多个杠时可能错误 | 多引擎使用 `Melds18[seat].Count / 3` | StateView、codec、runtime、引擎 | 三杠等边界返回准确组数 | 未处理 |
+| AI-001 | P0 | `AIContextCache` 在不同 AI 座位之间复用错误局势 | 单例引擎；低频键和可见键无 `SeatIndex` | `NeijiangAiContextCache.cs`、`NeijiangDecisionEngine.cs` | 跨座位专项测试通过 | 已验证 |
+| AI-002 | P0 | 出牌、碰杠、自摸阶段判断重复且边界不一致 | 统一 StageEvaluator，正式代码无重复 `ResolveRoundStage` | 三个 C# 决策引擎、ContextEvaluators | 统一 `19-14/13-7/6-0` 边界测试通过 | 已验证 |
+| AI-003 | P0 | 报叫和危险压力与物理阶段混在一起 | `RiskPressure` 独立输出；ready 边界专项通过 | `NeijiangContextEvaluators.cs`、模型 | `riskPressure` 独立，阶段不漂移 | 已验证 |
+| AI-004 | P0 | 内江无定缺却使用 `LikelyMissingSuit` 降低危险度 | 正式代码已无 `LikelyMissingSuit`；低需求置信度上限 0.35、风险折扣上限 7% | ContextEvaluators、ContextModels | 不再存在伪缺门事实；低需求推断有独立低置信度语义 | 已验证 |
+| AI-005 | P0 | 单牌危险数值取最大值，等级却只按 global risk | 专项遍历断言 `Level == ResolveLevel(MaxDangerScore)` | `NeijiangContextEvaluators.cs` | 等级与最大危险分一致 | 已验证 |
+| AI-006 | P0 | 手牌缓存键包含牌墙，手牌不变仍重算；场面风险又混在手形结果 | 纯手形快照缓存与动态进张/风险分离；专项命中测试通过 | HandEvaluator、ContextModels | 纯手形缓存命中，动态风险单独更新 | 已验证 |
+| AI-007 | P0 | 扁平副露牌列表通过 `/3` 猜副露组数，多个杠时可能错误 | C# 三杠推导测试与 Godot `meldGroupCounts` transport 合同通过 | StateView、codec、runtime、引擎 | 三杠等边界返回准确组数 | 已验证 |
 | AI-008 | P0 | 正式链路不能异步、fallback 或自动动作 | 项目 AGENTS 与现有同步回归 | GameState、AIManager、Runtime | current smoke 和合同证明全同步；正式路径无 fallback | 已验证 |
 | AI-009 | P1 | 所有模式运行同一套完整评分，再由后置覆盖推翻 | DecisionEngine 单一大循环和三组 override | DecisionEngine、DiscardScorers | 各模式只使用需要指标；非法外不靠冲突覆盖 | 未处理 |
 | AI-010 | P1 | 清一色、七对、平胡阈值阶跃大且路线重复加分 | RoutePlan 与候选路线调整叠加 | RoutePlanEngine、scorers | 路线有完成概率、转换成本和保持惯性 | 未处理 |
@@ -71,3 +71,5 @@
 - 基线 Godot：current smoke、C# contract、AI panel、报叫报杠 runner 全部通过。
 - 基线固定种子一局：29 steps、`draw_wall_empty`、`forced=false`，但旧工具错误标记 short round，策略统计全 0。
 - 存储烟测：`NEIJIANG HELL TRAINING OK`；最新训练 JSON 的 `realpath` 位于 `/Volumes/AI/NeijiangMahjongRuntime/内江麻将工程_20260502_103823_v2/test-data/hell_training`。
+- P0 事实层：`neijiang_context_regression=PASS`；Godot C# contract 新增 `transport_payload_preserves_exact_meld_group_counts` 并通过。
+- P0 构建：Godot 方案与 AI.Core.Cli 均 0 warning / 0 error；固定种子一局 29 steps、无 forced stop，报告写入 AI 盘。

@@ -66,6 +66,7 @@ func _run() -> void:
 	_run_test("ai_manager_uses_sync_compat_reaction_path", _test_ai_manager_uses_sync_compat_reaction_path, failures)
 	_run_test("ai_manager_sync_compat_reaction_does_not_create_pending_request", _test_ai_manager_sync_compat_reaction_does_not_create_pending_request, failures)
 	_run_test("ai_manager_sync_compat_turn_does_not_call_native_start", _test_ai_manager_sync_compat_turn_does_not_call_native_start, failures)
+	_run_test("transport_payload_preserves_exact_meld_group_counts", _test_transport_payload_preserves_exact_meld_group_counts, failures)
 	if failures.is_empty():
 		print("NEIJIANG CSHARP CONTRACT OK")
 		quit(0)
@@ -80,6 +81,46 @@ func _run_test(name: String, callable: Callable, failures: Array[String]) -> voi
 		print("PASS ", name)
 	else:
 		failures.append("%s -> %s" % [name, str(result)])
+
+
+func _test_transport_payload_preserves_exact_meld_group_counts():
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	var players: Array = []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"hand_tiles": [],
+			"discards": [],
+			"melds": [],
+			"score": 0,
+			"bao_jiao": false,
+			"has_won": false,
+		})
+	players[1]["melds"] = [
+		{"type": "an_gang", "tiles": _tiles_from_types([0, 0, 0, 0], 500)},
+		{"type": "an_gang", "tiles": _tiles_from_types([4, 4, 4, 4], 510)},
+		{"type": "ming_gang", "tiles": _tiles_from_types([9, 9, 9, 9], 520)},
+	]
+	var player_state := {
+		"seat": 1,
+		"hand_tiles": _tiles_from_types([1, 2, 3, 5, 6, 7, 10, 11, 12, 13, 14, 15, 16], 600),
+	}
+	var table_state := {
+		"players": players,
+		"wall_count": 7,
+		"current_turn_seat": 1,
+		"round_index": 1,
+		"reaction_pass_evidence": [],
+	}
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var payload: Dictionary = ai_manager.csharp_bridge.build_discard_transport_payload(player_state, table_state, rules)
+	var counts: Array = payload.get("meldGroupCounts", [])
+	var melds: Array = payload.get("melds18", [])
+	if counts.size() != 4 or int(counts[1]) != 3:
+		return "expected exact meldGroupCounts[1]=3, got %s" % [counts]
+	if melds.size() != 4 or Array(melds[1]).size() != 12:
+		return "expected three gang tile groups to preserve 12 tiles, got %s" % [melds]
+	return true
 
 
 func _test_csharp_action_tile_matches_godot_recommended_tile():

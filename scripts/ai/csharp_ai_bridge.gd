@@ -272,6 +272,7 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 	var remaining18: PackedInt32Array = tile_codec.build_remaining_count_array(hand_tiles, players, active_suits, self_seat)
 	var discards18: Array = []
 	var melds18: Array = []
+	var meld_group_counts: Array[int] = []
 	var passed_hu18: Array = _build_reaction_pass_count_matrix(table_state.get("reaction_pass_evidence", []), active_suits, "can_hu")
 	var passed_peng18: Array = _build_reaction_pass_count_matrix(table_state.get("reaction_pass_evidence", []), active_suits, "can_peng")
 	var passed_gang18: Array = _build_reaction_pass_count_matrix(table_state.get("reaction_pass_evidence", []), active_suits, "can_gang")
@@ -290,6 +291,7 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 		var encoded_melds := _encode_meld_tile_list(player.get("melds", []), active_suits)
 		discards18.append(encoded_discards)
 		melds18.append(encoded_melds)
+		meld_group_counts.append(Array(player.get("melds", [])).size())
 		discard_total += encoded_discards.size()
 		meld_total += encoded_melds.size()
 		scores.append(int(player.get("score", 0)))
@@ -300,6 +302,8 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 		discards18.append([])
 	while melds18.size() < 4:
 		melds18.append([])
+	while meld_group_counts.size() < 4:
+		meld_group_counts.append(0)
 	while scores.size() < 4:
 		scores.append(0)
 	var visible_version := int(table_state.get("wall_count", 0)) \
@@ -326,6 +330,7 @@ func _build_payload(player_state: Dictionary, table_state: Dictionary, rules_con
 		"remaining18": remaining18,
 		"discards18": discards18,
 		"melds18": melds18,
+		"meldGroupCounts": meld_group_counts,
 		"passedHu18": passed_hu18,
 		"passedPeng18": passed_peng18,
 		"passedGang18": passed_gang18,

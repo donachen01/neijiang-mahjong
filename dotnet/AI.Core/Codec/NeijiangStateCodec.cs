@@ -23,7 +23,8 @@ public static class NeijiangStateCodec
         int remainingRounds = 0,
         int visibleVersion = 0,
         int handVersion = 0,
-        int strategyContextVersion = 0)
+        int strategyContextVersion = 0,
+        IEnumerable<int>? meldGroupCounts = null)
     {
         var hand = hand18.Take(18).Concat(Enumerable.Repeat(0, 18)).Take(18).ToArray();
         var visible = visible18.Take(18).Concat(Enumerable.Repeat(0, 18)).Take(18).ToArray();
@@ -45,7 +46,9 @@ public static class NeijiangStateCodec
             RemainingRounds = remainingRounds,
             VisibleVersion = visibleVersion,
             HandVersion = handVersion,
-            StrategyContextVersion = strategyContextVersion
+            StrategyContextVersion = strategyContextVersion,
+            MeldGroupCounts = meldGroupCounts?.Take(4).Concat(Enumerable.Repeat(-1, 4)).Take(4).ToArray()
+                ?? Enumerable.Repeat(-1, 4).ToArray()
         };
 
         if (discards18 is not null)

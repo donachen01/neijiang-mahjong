@@ -10,6 +10,7 @@ public sealed class NeijiangReactionDecisionEngine
     private readonly NeijiangDangerEngine _danger = new();
     private readonly NeijiangBaoJiaoActionEngine _baoJiaoAction = new();
     private readonly NeijiangRoutePlanEngine _routePlan = new();
+    private readonly NeijiangStageEvaluator _stage = new();
     private const int ReactionSearchDepth = 2;
     private const int ReactionSearchRollouts = 24;
 
@@ -69,8 +70,8 @@ public sealed class NeijiangReactionDecisionEngine
         }
 
         var belief = _belief.Build(state);
-        var roundStage = ResolveRoundStage(state);
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var roundStage = _stage.Evaluate(state, belief).StageIndex;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         var currentFollowUp = EvaluateBestFollowUp(state.Hand18, state.Remaining18, meldCount);
         var currentPlan = _routePlan.Evaluate(state);
         var maxReadyPosterior = belief.SeatReadyPosterior.Values.DefaultIfEmpty(0.0).Max();
@@ -230,12 +231,12 @@ public sealed class NeijiangReactionDecisionEngine
         double maxReadyPosterior)
     {
         var handAfter = RemoveCopies(state.Hand18, reactionTileType, 2);
-        var meldCountAfter = state.Melds18[state.SeatIndex].Count / 3 + 1;
+        var meldCountAfter = state.GetMeldCount(state.SeatIndex) + 1;
         var followUp = EvaluateBestFollowUp(handAfter, state.Remaining18, meldCountAfter);
         var reDiscardsClaimedTile = followUp.BestDiscardTile == reactionTileType && followUp.BestDiscardTile >= 0;
         var currentPairCount = CountPairs(state.Hand18);
         var pairCountAfter = CountPairs(handAfter);
-        var currentMeldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var currentMeldCount = state.GetMeldCount(state.SeatIndex);
         var sevenPairsLikely = IsSevenPairsLikely(state.Hand18, currentMeldCount);
         var sevenPairsTenpai = IsSevenPairsTenpai(state.Hand18, currentMeldCount);
         var structureBoost = EstimatePengStructureBoost(
@@ -376,13 +377,13 @@ public sealed class NeijiangReactionDecisionEngine
         int sourceSeat)
     {
         var handAfter = RemoveCopies(state.Hand18, reactionTileType, 3);
-        var meldCountAfter = state.Melds18[state.SeatIndex].Count / 3 + 1;
+        var meldCountAfter = state.GetMeldCount(state.SeatIndex) + 1;
         var followUp = EvaluateBestFollowUp(handAfter, state.Remaining18, meldCountAfter);
         var discardRisk = followUp.BestDiscardTile >= 0 ? _danger.EvaluateDetail(followUp.BestDiscardTile, state, belief) : new NeijiangDangerEvaluation();
         var waitWallPosterior = EstimateWallPosterior(followUp.ImprovingTiles, belief);
         var waitBlockPosterior = EstimateBlockPosterior(followUp.ImprovingTiles, belief);
         var isMeldedGang = sourceSeat >= 0 && reactionType == "discard";
-        var currentMeldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var currentMeldCount = state.GetMeldCount(state.SeatIndex);
         var sevenPairsLikely = IsSevenPairsLikely(state.Hand18, currentMeldCount);
         var tripletRedundancy = state.Hand18[reactionTileType] >= 3;
         var gangTaxBonus = isMeldedGang ? 118 : 36;
@@ -510,18 +511,6 @@ public sealed class NeijiangReactionDecisionEngine
         return clone;
     }
 
-    private static int ResolveRoundStage(NeijiangStateView state)
-    {
-        var maxDiscards = state.Discards18.Max(list => list.Count);
-        var hasLikelyReady = state.IsCalled.Any(value => value) || state.IsReady.Any(value => value);
-        var exposedMeldCount = state.Melds18.Sum(list => list.Count / 3);
-        if (state.WallCount <= 6) return 2;
-        if (hasLikelyReady && state.WallCount <= 8) return 2;
-        if (maxDiscards >= 10 || state.WallCount <= 13 || exposedMeldCount >= 5) return 1;
-        if (hasLikelyReady && state.WallCount <= 10) return 1;
-        return 0;
-    }
-
     private int ResolveThreatLevel(NeijiangStateView state, NeijiangBeliefSnapshot belief)
     {
         var total = 0;
@@ -532,7 +521,7 @@ public sealed class NeijiangReactionDecisionEngine
             if (belief.SeatReadyPosterior.GetValueOrDefault(seat, 0.0) >= 0.56) seatDanger += 2;
             else if (belief.SeatReadyPosterior.GetValueOrDefault(seat, 0.0) >= 0.40) seatDanger += 1;
             if (state.IsCalled[seat] || state.IsReady[seat]) seatDanger += 1;
-            if (state.Melds18[seat].Count / 3 >= 2) seatDanger += 1;
+            if (state.GetMeldCount(seat) >= 2) seatDanger += 1;
             total += seatDanger;
         }
         return Math.Clamp(total, 0, 5);
@@ -570,7 +559,7 @@ public sealed class NeijiangReactionDecisionEngine
         NeijiangStateView state,
         NeijiangRoutePlanResult currentPlan)
     {
-        var currentMeldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var currentMeldCount = state.GetMeldCount(state.SeatIndex);
         var pairCount = CountPairs(state.Hand18);
         if (currentPlan.ForbidsMelds)
             return Array.Empty<string>();
@@ -772,7 +761,7 @@ public sealed class NeijiangReactionDecisionEngine
         {
             return false;
         }
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         if (IsSevenPairsTenpai(state.Hand18, meldCount))
             return false;
         var sevenPairsLikely = IsSevenPairsLikely(state.Hand18, meldCount);
@@ -828,7 +817,7 @@ public sealed class NeijiangReactionDecisionEngine
             return false;
         if (gangResult.ShantenAfter > currentFollowUp.Shanten)
             return false;
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         if (IsSevenPairsLikely(state.Hand18, meldCount))
             return false;
         if (threatLevel >= 4 && maxReadyPosterior >= 0.70 && gangResult.ShantenAfter > 0)
@@ -856,7 +845,7 @@ public sealed class NeijiangReactionDecisionEngine
             return false;
         if (reactionTileType < 0 || reactionTileType >= state.Hand18.Length || state.Hand18[reactionTileType] < 3)
             return false;
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         if (IsSevenPairsLikely(state.Hand18, meldCount))
             return false;
         return gangResult.ShantenAfter <= currentFollowUp.Shanten;

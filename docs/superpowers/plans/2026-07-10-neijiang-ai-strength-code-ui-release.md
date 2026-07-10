@@ -65,6 +65,8 @@
 
 ### Task 2: 修复 AI 事实层 P0 问题
 
+**状态：已完成并通过 C#、CLI、Godot 合同和固定种子烟测。**
+
 **Files:**
 - Modify: `dotnet/AI.Core/Cache/NeijiangAiContextCache.cs`
 - Modify: `dotnet/AI.Core/Engines/NeijiangContextEvaluators.cs`

@@ -19,7 +19,9 @@ public sealed class NeijiangDecisionEngine
     private readonly NeijiangLimitedLookaheadEngine _limitedLookahead = new();
     private readonly NeijiangBaoJiaoActionEngine _baoJiaoAction = new();
     private readonly NeijiangRoutePlanEngine _routePlan = new();
-    private readonly NeijiangAiContextCache _contextCache = new();
+    private readonly NeijiangAiContextCache[] _contextCaches = Enumerable.Range(0, 4)
+        .Select(_ => new NeijiangAiContextCache())
+        .ToArray();
     private readonly NeijiangDealInPolicyEvaluator _dealInPolicy = new();
 
     private sealed record NeijiangBigHandRouteAdjustment(double Score, IReadOnlyList<string> Reasons)
@@ -49,9 +51,10 @@ public sealed class NeijiangDecisionEngine
             return baoJiaoDecision;
 
         var belief = _belief.Build(state);
-        var aiContext = _contextCache.GetOrUpdate(state, belief);
+        var contextCache = _contextCaches[Math.Clamp(state.SeatIndex, 0, _contextCaches.Length - 1)];
+        var aiContext = contextCache.GetOrUpdate(state, belief);
         var roundStage = aiContext.Stage.StageIndex;
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         var maxReadyPosterior = belief.SeatReadyPosterior.Values.DefaultIfEmpty(0.0).Max();
         var currentShanten = _shanten.CalcBestShanten(state.Hand18, meldCount);
         var currentRoutes = EstimateRoutes(state.Hand18, state);
@@ -584,7 +587,7 @@ public sealed class NeijiangDecisionEngine
             if (count >= 2) pairCount++;
             if (count >= 3) tripleLike++;
         }
-        var meldGroupCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldGroupCount = state.GetMeldCount(state.SeatIndex);
         foreach (var meldTile in state.Melds18[state.SeatIndex])
         {
             var suitIndex = meldTile / 9;
@@ -1401,18 +1404,6 @@ public sealed class NeijiangDecisionEngine
             reasons.Add($"后验：{posteriorReasons[0]}");
         reasons.AddRange(expectedScore.Reasons.Take(2));
         return reasons;
-    }
-
-    private static int ResolveRoundStage(NeijiangStateView state)
-    {
-        var maxDiscards = state.Discards18.Max(list => list.Count);
-        var hasLikelyReady = state.IsCalled.Any(value => value) || state.IsReady.Any(value => value);
-        var exposedMeldCount = state.Melds18.Sum(list => list.Count / 3);
-        if (state.WallCount <= 6) return 2;
-        if (hasLikelyReady && state.WallCount <= 8) return 2;
-        if (maxDiscards >= 10 || state.WallCount <= 13 || exposedMeldCount >= 5) return 1;
-        if (hasLikelyReady && state.WallCount <= 10) return 1;
-        return 0;
     }
 
     private static string RoundStageLabel(int roundStage) => roundStage switch

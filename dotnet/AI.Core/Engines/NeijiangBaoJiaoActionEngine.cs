@@ -20,7 +20,7 @@ public sealed class NeijiangBaoJiaoActionEngine
         if (mandatoryGang is not null)
             return mandatoryGang;
 
-        var meldCount = state.Melds18[state.SeatIndex].Count / 3;
+        var meldCount = state.GetMeldCount(state.SeatIndex);
         var shanten = _shanten.CalcShantenAfterDiscard(state.Hand18, tileType, meldCount);
         var (ukeire, liveUkeire, improvingTiles) = _ukeire.CalcUkeire(state.Hand18, state.Remaining18, tileType, meldCount);
         var reasons = new[]

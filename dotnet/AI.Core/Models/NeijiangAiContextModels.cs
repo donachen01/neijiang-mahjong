@@ -29,6 +29,7 @@ public sealed class NeijiangStageContext
     public int ExposedMeldCount { get; set; }
     public bool HasLikelyReadyOpponent { get; set; }
     public bool RiskRaised { get; set; }
+    public int RiskPressure { get; set; }
 }
 
 public sealed class NeijiangRoundGoalContext
@@ -60,6 +61,7 @@ public sealed class NeijiangHandAnalysis
     public int HandQuality { get; set; }
     public string ReasonCode { get; set; } = "HAND_UNKNOWN";
     public double ElapsedMs { get; set; }
+    public bool ShapeCacheHit { get; set; }
 }
 
 public sealed class NeijiangAttackEligibility
@@ -74,7 +76,8 @@ public sealed class NeijiangOpponentDangerProfile
     public int Seat { get; set; }
     public int DangerLevel { get; set; }
     public bool LikelyReady { get; set; }
-    public int LikelyMissingSuit { get; set; } = -1;
+    public int LikelyLowDemandSuit { get; set; } = -1;
+    public double LowDemandSuitConfidence { get; set; }
     public int BigHandRisk { get; set; }
     public int ExposedMeldCount { get; set; }
     public IReadOnlyList<string> DangerReasonCodes { get; set; } = Array.Empty<string>();

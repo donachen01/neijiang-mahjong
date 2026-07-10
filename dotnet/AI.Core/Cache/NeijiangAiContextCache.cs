@@ -30,7 +30,7 @@ public sealed class NeijiangAiContextCache
             Stage = _lastContext is null || lowFrequencyKey != _lastLowFrequencyKey,
             RoundGoal = _lastContext is null || lowFrequencyKey != _lastLowFrequencyKey,
             StrategyMode = _lastContext is null || lowFrequencyKey != _lastLowFrequencyKey || handKey != _lastHandKey || visibleKey != _lastVisibleKey,
-            HandAnalysis = _lastContext is null || handKey != _lastHandKey,
+            HandAnalysis = _lastContext is null || handKey != _lastHandKey || visibleKey != _lastVisibleKey,
             OpponentDanger = _lastContext is null || visibleKey != _lastVisibleKey,
             TileDanger = _lastContext is null || visibleKey != _lastVisibleKey,
             ScoreSituation = _lastContext is null || lowFrequencyKey != _lastLowFrequencyKey
@@ -119,10 +119,10 @@ public sealed class NeijiangAiContextCache
     };
 
     private static string BuildLowFrequencyKey(NeijiangStateView state)
-        => $"{state.RoundIndex}|{state.TotalRounds}|{state.RemainingRounds}|{state.WallCount}|{string.Join(',', state.Scores)}|{state.Discards18.Sum(list => list.Count)}|{state.Melds18.Sum(list => list.Count)}|{string.Join(',', state.IsCalled.Select(item => item ? 1 : 0))}|{string.Join(',', state.IsReady.Select(item => item ? 1 : 0))}";
+        => $"seat:{state.SeatIndex}|{state.RoundIndex}|{state.TotalRounds}|{state.RemainingRounds}|{state.WallCount}|{string.Join(',', state.Scores)}|{state.Discards18.Sum(list => list.Count)}|{state.Melds18.Sum(list => list.Count)}|{string.Join(',', state.IsCalled.Select(item => item ? 1 : 0))}|{string.Join(',', state.IsReady.Select(item => item ? 1 : 0))}";
 
     private static string BuildVisibleKey(NeijiangStateView state)
-        => $"{state.VisibleVersion}|{state.WallCount}|{string.Join(',', state.Visible18)}|d:{string.Join('|', state.Discards18.Select(list => string.Join(',', list)))}|m:{string.Join('|', state.Melds18.Select(list => string.Join(',', list)))}";
+        => $"seat:{state.SeatIndex}|{state.VisibleVersion}|{state.WallCount}|{string.Join(',', state.Visible18)}|d:{string.Join('|', state.Discards18.Select(list => string.Join(',', list)))}|m:{string.Join('|', state.Melds18.Select(list => string.Join(',', list)))}";
 
     private static IReadOnlyList<string> BuildReasonCodes(NeijiangAiContext context)
         => new[]

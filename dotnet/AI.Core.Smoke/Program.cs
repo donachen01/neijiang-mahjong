@@ -23,6 +23,11 @@ var hand = new[]
 var state = NeijiangStateCodec.FromRaw(1, 0, 1, 38, NeijiangTileCodec.BuildCount18(hand), new int[18]);
 var facade = new NeijiangAiFacade();
 var result = facade.DecideDiscard(state);
+if (!NeijiangContextRegressionCases.Run())
+{
+    Console.Error.WriteLine("neijiang_context_regression_failed");
+    return 699;
+}
 var bestCandidate = result.Candidates.FirstOrDefault(item => item.TileType == result.Action.TileType);
 if (bestCandidate is null)
 {
@@ -560,7 +565,7 @@ static bool SmokeAiContextStageExplainAndPerf(NeijiangAiFacade facade)
     Console.WriteLine($"ai_context_stage={result.AiContext?.Stage.Stage} mode={result.AiContext?.StrategyMode.Mode} explain={string.Join('|', result.Explain.ReasonCodes)} perf={result.Performance.TotalMs:F2}");
     return result.AiContext is not null
         && result.AiContext.Stage.Stage == "late"
-        && result.AiContext.Stage.ReasonCode is "STAGE_LATE_BY_REMAINING_TILES" or "STAGE_LATE_BY_READY_PRESSURE"
+        && result.AiContext.Stage.ReasonCode == "STAGE_LATE_BY_REMAINING_TILES"
         && result.Explain.Mode == "normal"
         && result.Explain.ReasonCodes.Count <= 10
         && result.Performance.TotalMs > 0
