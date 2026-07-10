@@ -15,7 +15,12 @@ TRACE_ROOT="$RUN_ROOT/traces"
 
 mkdir -p "$RUN_ROOT" "$TRACE_ROOT"
 
-if [[ "$MODE" == "diagnostic" ]]; then
+dotnet build "$PROJECT_ROOT/NeijiangMahjong.Godot.sln" \
+  --configuration Debug \
+  --nologo \
+  --verbosity minimal
+
+if [[ "$MODE" == "diagnostic" || "$MODE" == "paired_diagnostic" ]]; then
   export NEIJIANG_TRACE_ENABLED=1
   export NEIJIANG_TRACE_DIR="$TRACE_ROOT"
 elif [[ "$MODE" == "long" ]]; then
@@ -25,9 +30,9 @@ else
   exit 2
 fi
 
-EXTRA_ARGS=()
-if [[ "$MODE" == "long" ]]; then
-  EXTRA_ARGS+=("--paired-policy=true")
+PAIRED_POLICY=false
+if [[ "$MODE" == "long" || "$MODE" == "paired_diagnostic" ]]; then
+  PAIRED_POLICY=true
 fi
 
 "$GODOT_BIN" --headless --path "$PROJECT_ROOT" \
@@ -38,10 +43,10 @@ fi
   --seed="$SEED" \
   --output="$REPORT_JSON" \
   --csv-output="$REPORT_CSV" \
-  "${EXTRA_ARGS[@]}" \
+  --paired-policy="$PAIRED_POLICY" \
   | tee "$RUN_ROOT/benchmark.log"
 
-if [[ "$MODE" == "diagnostic" ]]; then
+if [[ "$MODE" == "diagnostic" || "$MODE" == "paired_diagnostic" ]]; then
   TRACE_EVENTS="$(python3 - "$REPORT_JSON" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))

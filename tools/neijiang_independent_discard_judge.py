@@ -26,6 +26,7 @@ class Judgment:
     seat: int
     stage: str
     mode: str
+    policy_profile: str
     selected_tile: int
     recommended_tile: int
     selected_value: float
@@ -117,6 +118,12 @@ def independent_value(candidate: dict[str, Any], stage: str, mode: str) -> float
 
 
 def select_reference(candidates: list[dict[str, Any]], stage: str, mode: str) -> dict[str, Any]:
+    non_extreme = [
+        item for item in candidates
+        if integer(item.get("danger", item.get("risk", 0))) < 86
+    ]
+    if non_extreme:
+        candidates = non_extreme
     min_shanten = min(integer(item.get("shanten"), 8) for item in candidates)
     ready = [
         item for item in candidates
@@ -290,6 +297,7 @@ def judge_event(event: dict[str, Any], source: str = "") -> Judgment | None:
         seat=integer(payload.get("seat", event.get("current_turn_seat", -1)), -1),
         stage=stage,
         mode=mode,
+        policy_profile=str(diagnostic.get("policy_profile", "candidate")),
         selected_tile=selected_type,
         recommended_tile=tile_type(reference),
         selected_value=selected_value,
@@ -344,6 +352,7 @@ def build_report(judgments: list[Judgment], jsonl_path: Path) -> str:
     grades = Counter(item.grade for item in judgments)
     categories = Counter(category for item in judgments for category in item.categories)
     modes = Counter(item.mode for item in judgments)
+    policies = Counter(item.policy_profile for item in judgments)
     severe = sorted(
         (item for item in judgments if item.grade in {"D_MISTAKE", "E_BLUNDER"}),
         key=lambda item: (0 if item.grade == "E_BLUNDER" else 1, -item.regret),
@@ -369,6 +378,9 @@ def build_report(judgments: list[Judgment], jsonl_path: Path) -> str:
         "## 战略模式分布",
         *counter_lines(modes),
         "",
+        "## 策略版本分布",
+        *counter_lines(policies),
+        "",
         "## 严重错牌排行榜",
     ]
     if not severe:
@@ -377,7 +389,7 @@ def build_report(judgments: list[Judgment], jsonl_path: Path) -> str:
         lines.extend([
             f"### {index}. {item.grade} {item.event_id}",
             "",
-            f"- 座位/阶段/模式：{item.seat} / {item.stage} / {item.mode}",
+            f"- 座位/阶段/模式/版本：{item.seat} / {item.stage} / {item.mode} / {item.policy_profile}",
             f"- AI：{item.selected.get('tile_label')}({item.selected_tile})；独立推荐：{item.recommended.get('tile_label')}({item.recommended_tile})",
             f"- 后悔值：{item.regret:.3f}；分类：{', '.join(item.categories)}",
             f"- AI 事实：向听 {item.selected.get('shanten')}，活张 {item.selected.get('live_ukeire')}，听口 {item.selected.get('wait_count')}，危险 {item.selected.get('danger')}",

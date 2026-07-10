@@ -191,7 +191,7 @@ internal static class NeijiangContextRegressionCases
 
         context.StrategyMode.Mode = "fold";
         var fold = NeijiangDiscardScorerFactory.Rank(
-            new[] { Candidate(1, 0, 4, 70, 9000, waitCount: 2), Candidate(2, 1, 20, 9, 100) },
+            new[] { Candidate(1, 0, 4, 88, 9000, waitCount: 2), Candidate(2, 1, 20, 9, 100) },
             context);
         if (fold[0].TileType != 2)
             failures.Add("fold_scorer_failed_to_abandon_extreme_ready_risk");
@@ -210,7 +210,7 @@ internal static class NeijiangContextRegressionCases
             failures.Add("balanced_scorer_route_score_overrode_large_danger_gap");
 
         var balancedWidth = NeijiangDiscardScorerFactory.Rank(
-            new[] { Candidate(1, 2, 12, 23, 9000), Candidate(2, 2, 45, 24, 100) },
+            new[] { Candidate(1, 2, 12, 23, 100), Candidate(2, 2, 45, 24, 9000) },
             context);
         if (balancedWidth[0].TileType != 2)
             failures.Add("balanced_scorer_ignored_large_live_ukeire_gap");
@@ -227,6 +227,29 @@ internal static class NeijiangContextRegressionCases
             context);
         if (defenseWidth[0].TileType != 2)
             failures.Add("defense_scorer_ignored_material_ukeire_for_tiny_risk_gap");
+
+        context.StrategyMode.Mode = "attack";
+        var longTermValue = NeijiangDiscardScorerFactory.Rank(
+            new[]
+            {
+                Candidate(1, 1, 12, 30, 9000, "清一色", expectedNetScore: 4.0, expectedReadyValue: 4.0),
+                Candidate(2, 1, 13, 30, 100, expectedNetScore: 3.0, expectedReadyValue: 3.0)
+            },
+            context);
+        if (longTermValue[0].TileType != 1)
+            failures.Add("attack_scorer_ignored_long_term_route_value_within_same_speed_risk_tier");
+
+        context.Stage = new NeijiangStageContext { Stage = "late", StageIndex = 2, WallCount = 4 };
+        context.StrategyMode.Mode = "fold";
+        var tailSettlement = NeijiangDiscardScorerFactory.Rank(
+            new[]
+            {
+                Candidate(1, 0, 8, 31, 100, waitCount: 3, expectedNetScore: 1.0),
+                Candidate(2, 0, 3, 34, 9000, waitCount: 1, expectedNetScore: 4.0)
+            },
+            context);
+        if (tailSettlement[0].TileType != 2)
+            failures.Add("tail_settlement_scorer_failed_to_prefer_higher_cha_jiao_value");
     }
 
     private static NeijiangCandidateDetail Candidate(
@@ -236,7 +259,9 @@ internal static class NeijiangContextRegressionCases
         int danger,
         int score,
         string? route = null,
-        int waitCount = 0)
+        int waitCount = 0,
+        double expectedNetScore = 0.0,
+        double expectedReadyValue = 0.0)
         => new()
         {
             TileType = tileType,
@@ -244,7 +269,8 @@ internal static class NeijiangContextRegressionCases
             LiveUkeire = liveUkeire,
             Danger = danger,
             Score = score,
-            ExpectedNetScore = score / 100.0,
+            ExpectedNetScore = expectedNetScore,
+            ExpectedReadyValue = expectedReadyValue,
             WaitCount = waitCount,
             RoutesAfter = route is null ? Array.Empty<string>() : new[] { route }
         };

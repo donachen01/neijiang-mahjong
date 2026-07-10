@@ -3953,6 +3953,8 @@ func _create_empty_ai_decision_metrics() -> Dictionary:
 		"discard_strategy_defense": 0,
 		"discard_strategy_fold": 0,
 		"discard_strategy_chase": 0,
+		"discard_policy_candidate": 0,
+		"discard_policy_baseline_v1": 0,
 	}
 
 
@@ -3962,6 +3964,10 @@ func _record_ai_metric(key: String, amount: int = 1) -> void:
 
 func _record_discard_strategy_metric(decision: Dictionary) -> void:
 	var analysis: Dictionary = decision.get("analysis", {})
+	var csharp_result: Dictionary = analysis.get("csharp_result", {})
+	var ai_context: Dictionary = csharp_result.get("aiContext", {})
+	var policy_profile := str(ai_context.get("policyProfile", "candidate"))
+	_record_ai_metric("discard_policy_%s" % ("baseline_v1" if policy_profile == "baseline_v1" else "candidate"))
 	var strategy_profile: Dictionary = analysis.get("strategy_profile", {})
 	var strategy_mode := str(strategy_profile.get("mode_label", strategy_profile.get("strategy_mode", ""))).strip_edges().to_lower()
 	if strategy_mode == "":
@@ -4066,6 +4072,7 @@ func _build_turn_diagnostic_profile(seat: int, analysis: Dictionary, selected_ti
 		"selected_tile": selected_tile.duplicate(true),
 		"selected_rank_by_score": selected_rank,
 		"candidate_count": options.size(),
+		"policy_profile": str(analysis.get("csharp_result", {}).get("aiContext", {}).get("policyProfile", "candidate")),
 		"top_score_candidates": _compact_turn_candidates_for_training(score_sorted, 8),
 		"top_speed_candidates": _compact_turn_candidates_for_training(speed_sorted, 5),
 		"candidates": _compact_turn_candidates_for_training(options, options.size()),

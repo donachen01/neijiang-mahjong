@@ -16,6 +16,7 @@ public static class NeijiangDiscardScorerFactory
     private static readonly INeijiangDiscardScorer Defensive = new DefensiveDiscardScorer();
     private static readonly INeijiangDiscardScorer Fold = new FoldDiscardScorer();
     private static readonly INeijiangDiscardScorer Chase = new ChaseDiscardScorer();
+    private static readonly INeijiangDiscardScorer TailSettlement = new TailSettlementDiscardScorer();
     private static readonly INeijiangDiscardScorer FrozenBaseline = new LegacyBaselineDiscardScorer();
 
     public static IReadOnlyList<NeijiangCandidateDetail> Rank(
@@ -24,6 +25,9 @@ public static class NeijiangDiscardScorerFactory
     {
         if (string.Equals(context.PolicyProfile, "baseline_v1", StringComparison.Ordinal))
             return FrozenBaseline.Rank(candidates, context);
+        if (context.Stage.WallCount <= 4
+            && candidates.Any(item => item.Shanten <= 0 && item.WaitCount > 0 && item.Danger < 86))
+            return TailSettlement.Rank(candidates, context);
         if (context.RoundGoal.Goal == "protect_lead" && context.Stage.StageIndex >= 2)
             return Defensive.Rank(candidates, context);
 
@@ -46,7 +50,35 @@ public static class NeijiangDiscardScorerFactory
     }
 
     internal static int ExtremeRiskTier(NeijiangCandidateDetail candidate)
-        => candidate.Danger >= 86 ? 1 : 0;
+        => candidate.Danger >= 78 ? 1 : 0;
+
+    internal static int StrategicRiskTier(
+        NeijiangCandidateDetail candidate,
+        NeijiangAiContext context)
+    {
+        var threshold = context.Stage.StageIndex >= 1 || context.Stage.HasLikelyReadyOpponent
+            ? 58
+            : 78;
+        return candidate.Danger >= threshold ? 1 : 0;
+    }
+
+    internal static bool HasAcceptableReadyCandidate(
+        IReadOnlyList<NeijiangCandidateDetail> candidates)
+        => candidates.Any(item =>
+            item.Shanten <= 0
+            && item.WaitCount > 0
+            && item.Danger < 78);
+
+    internal static int ReadyOpportunityTier(
+        NeijiangCandidateDetail candidate,
+        bool hasAcceptableReadyCandidate)
+    {
+        if (!hasAcceptableReadyCandidate)
+            return 0;
+        return candidate.Shanten <= 0
+            && candidate.WaitCount > 0
+            && candidate.Danger < 78 ? 0 : 1;
+    }
 
     internal static int AttackRiskTier(NeijiangCandidateDetail candidate)
     {
@@ -55,18 +87,64 @@ public static class NeijiangDiscardScorerFactory
         return 0;
     }
 
+    internal static int UkeireTier(NeijiangCandidateDetail candidate)
+    {
+        if (candidate.Shanten <= 0 && candidate.WaitCount > 0)
+            return candidate.WaitCount >= 2 ? 0 : 1;
+        if (candidate.Shanten <= 1)
+        {
+            if (candidate.LiveUkeire >= 20) return 0;
+            if (candidate.LiveUkeire >= 12) return 1;
+            if (candidate.LiveUkeire >= 6) return 2;
+            return 3;
+        }
+        if (candidate.Shanten == 2)
+        {
+            if (candidate.LiveUkeire >= 30) return 0;
+            if (candidate.LiveUkeire >= 18) return 1;
+            if (candidate.LiveUkeire >= 10) return 2;
+            return 3;
+        }
+        return 0;
+    }
+
     internal static int BigRouteCount(NeijiangCandidateDetail candidate)
         => candidate.RoutesAfter.Count(route => route is "七对" or "对对胡" or "清一色");
+
+    internal static int ReadyPreservationTier(
+        NeijiangCandidateDetail candidate,
+        bool forceReadyPreservation)
+    {
+        if (!forceReadyPreservation)
+            return 0;
+        if (candidate.Shanten <= 0 && candidate.WaitCount > 0)
+            return 0;
+        return 1;
+    }
+
+    internal static bool ShouldForceReadyPreservation(
+        IReadOnlyList<NeijiangCandidateDetail> candidates,
+        NeijiangAiContext context)
+    {
+        if (context.Stage.StageIndex < 2 && context.Stage.WallCount > 6)
+            return false;
+        var minimumDanger = candidates.Min(item => item.Danger);
+        return candidates.Any(item =>
+            item.Shanten <= 0
+            && item.WaitCount > 0
+            && item.Danger < 86
+            && item.Danger <= minimumDanger + 35);
+    }
 
     internal static int DefenseCost(NeijiangCandidateDetail candidate)
     {
         var cost = candidate.Danger
-            + Math.Max(0, candidate.Shanten) * 18
+            + Math.Max(0, candidate.Shanten) * 30
             - Math.Min(24, Math.Max(0, candidate.LiveUkeire)) / 2;
         if (candidate.Shanten <= 0 && candidate.WaitCount > 0 && candidate.Danger < 78)
             cost -= 24;
         if (candidate.Danger >= 80)
-            cost += (candidate.Danger - 79) * 4;
+            cost += (candidate.Danger - 79) * 10;
         if (candidate.Danger >= 86)
             cost += 36;
         return cost;
@@ -80,6 +158,27 @@ public static class NeijiangDiscardScorerFactory
         if (candidate.Danger >= 86)
             cost += 50;
         return cost;
+    }
+}
+
+public sealed class TailSettlementDiscardScorer : INeijiangDiscardScorer
+{
+    public IReadOnlyList<NeijiangCandidateDetail> Rank(
+        IReadOnlyList<NeijiangCandidateDetail> candidates,
+        NeijiangAiContext context)
+    {
+        return candidates
+            .OrderBy(item => item.Shanten <= 0
+                && item.WaitCount > 0
+                && item.Danger < 86 ? 0 : 1)
+            .ThenBy(item => NeijiangDiscardScorerFactory.StrategicRiskTier(item, context))
+            .ThenBy(NeijiangDiscardScorerFactory.AttackRiskTier)
+            .ThenByDescending(item => item.ExpectedNetScore)
+            .ThenByDescending(item => item.Score)
+            .ThenBy(item => item.Danger)
+            .ThenByDescending(item => item.WaitCount)
+            .ThenBy(item => item.TileType)
+            .ToList();
     }
 }
 
@@ -258,15 +357,21 @@ public sealed class AggressiveDiscardScorer : INeijiangDiscardScorer
     public IReadOnlyList<NeijiangCandidateDetail> Rank(
         IReadOnlyList<NeijiangCandidateDetail> candidates,
         NeijiangAiContext context)
-        => candidates
-            .OrderBy(NeijiangDiscardScorerFactory.ExtremeRiskTier)
+    {
+        var hasReady = NeijiangDiscardScorerFactory.HasAcceptableReadyCandidate(candidates);
+        return candidates
+            .OrderBy(item => NeijiangDiscardScorerFactory.ReadyOpportunityTier(item, hasReady))
+            .ThenBy(item => NeijiangDiscardScorerFactory.StrategicRiskTier(item, context))
             .ThenBy(NeijiangDiscardScorerFactory.ProgressTier)
             .ThenBy(NeijiangDiscardScorerFactory.AttackRiskTier)
-            .ThenByDescending(item => item.LiveUkeire)
+            .ThenBy(NeijiangDiscardScorerFactory.UkeireTier)
             .ThenByDescending(item => item.Score)
+            .ThenByDescending(item => item.ExpectedReadyValue)
+            .ThenByDescending(item => item.LiveUkeire)
             .ThenBy(item => item.Danger)
             .ThenBy(item => item.TileType)
             .ToList();
+    }
 }
 
 public sealed class BalancedDiscardScorer : INeijiangDiscardScorer
@@ -274,15 +379,21 @@ public sealed class BalancedDiscardScorer : INeijiangDiscardScorer
     public IReadOnlyList<NeijiangCandidateDetail> Rank(
         IReadOnlyList<NeijiangCandidateDetail> candidates,
         NeijiangAiContext context)
-        => candidates
-            .OrderBy(NeijiangDiscardScorerFactory.ExtremeRiskTier)
+    {
+        var hasReady = NeijiangDiscardScorerFactory.HasAcceptableReadyCandidate(candidates);
+        return candidates
+            .OrderBy(item => NeijiangDiscardScorerFactory.ReadyOpportunityTier(item, hasReady))
+            .ThenBy(item => NeijiangDiscardScorerFactory.StrategicRiskTier(item, context))
             .ThenBy(NeijiangDiscardScorerFactory.ProgressTier)
             .ThenBy(NeijiangDiscardScorerFactory.AttackRiskTier)
+            .ThenBy(NeijiangDiscardScorerFactory.UkeireTier)
+            .ThenByDescending(item => item.Score)
+            .ThenByDescending(item => item.ExpectedReadyValue)
             .ThenByDescending(item => item.LiveUkeire / 4)
             .ThenBy(item => item.Danger)
-            .ThenByDescending(item => item.Score)
             .ThenBy(item => item.TileType)
             .ToList();
+    }
 }
 
 public sealed class DefensiveDiscardScorer : INeijiangDiscardScorer
@@ -290,13 +401,17 @@ public sealed class DefensiveDiscardScorer : INeijiangDiscardScorer
     public IReadOnlyList<NeijiangCandidateDetail> Rank(
         IReadOnlyList<NeijiangCandidateDetail> candidates,
         NeijiangAiContext context)
-        => candidates
-            .OrderBy(NeijiangDiscardScorerFactory.DefenseCost)
+    {
+        var preserveReady = NeijiangDiscardScorerFactory.ShouldForceReadyPreservation(candidates, context);
+        return candidates
+            .OrderBy(item => NeijiangDiscardScorerFactory.ReadyPreservationTier(item, preserveReady))
+            .ThenBy(NeijiangDiscardScorerFactory.DefenseCost)
             .ThenBy(NeijiangDiscardScorerFactory.ProgressTier)
             .ThenByDescending(item => item.Score)
             .ThenByDescending(item => item.LiveUkeire)
             .ThenBy(item => item.TileType)
             .ToList();
+    }
 }
 
 public sealed class FoldDiscardScorer : INeijiangDiscardScorer
@@ -304,13 +419,17 @@ public sealed class FoldDiscardScorer : INeijiangDiscardScorer
     public IReadOnlyList<NeijiangCandidateDetail> Rank(
         IReadOnlyList<NeijiangCandidateDetail> candidates,
         NeijiangAiContext context)
-        => candidates
-            .OrderBy(NeijiangDiscardScorerFactory.FoldCost)
+    {
+        var preserveReady = NeijiangDiscardScorerFactory.ShouldForceReadyPreservation(candidates, context);
+        return candidates
+            .OrderBy(item => NeijiangDiscardScorerFactory.ReadyPreservationTier(item, preserveReady))
+            .ThenBy(NeijiangDiscardScorerFactory.FoldCost)
             .ThenBy(item => item.Danger)
             .ThenBy(NeijiangDiscardScorerFactory.ProgressTier)
             .ThenByDescending(item => item.Score)
             .ThenBy(item => item.TileType)
             .ToList();
+    }
 }
 
 public sealed class ChaseDiscardScorer : INeijiangDiscardScorer
@@ -318,14 +437,20 @@ public sealed class ChaseDiscardScorer : INeijiangDiscardScorer
     public IReadOnlyList<NeijiangCandidateDetail> Rank(
         IReadOnlyList<NeijiangCandidateDetail> candidates,
         NeijiangAiContext context)
-        => candidates
-            .OrderBy(NeijiangDiscardScorerFactory.ExtremeRiskTier)
+    {
+        var hasReady = NeijiangDiscardScorerFactory.HasAcceptableReadyCandidate(candidates);
+        return candidates
+            .OrderBy(item => NeijiangDiscardScorerFactory.ReadyOpportunityTier(item, hasReady))
+            .ThenBy(item => NeijiangDiscardScorerFactory.StrategicRiskTier(item, context))
             .ThenBy(NeijiangDiscardScorerFactory.ProgressTier)
-            .ThenByDescending(NeijiangDiscardScorerFactory.BigRouteCount)
-            .ThenByDescending(item => item.ExpectedNetScore)
+            .ThenBy(NeijiangDiscardScorerFactory.AttackRiskTier)
+            .ThenBy(NeijiangDiscardScorerFactory.UkeireTier)
             .ThenByDescending(item => item.Score)
+            .ThenByDescending(item => item.ExpectedReadyValue)
+            .ThenByDescending(NeijiangDiscardScorerFactory.BigRouteCount)
             .ThenByDescending(item => item.LiveUkeire)
             .ThenBy(item => item.Danger)
             .ThenBy(item => item.TileType)
             .ToList();
+    }
 }

@@ -76,6 +76,13 @@ class IndependentDiscardJudgeTests(unittest.TestCase):
         self.assertEqual(1, result.recommended_tile)
         self.assertNotIn("READY_HAND_BROKEN", result.categories)
 
+    def test_extreme_one_away_is_not_forced_over_safe_two_away(self):
+        safe_two_away = candidate(1, 2, 44, 0, 25)
+        extreme_one_away = candidate(2, 1, 15, 0, 88)
+        result = judge_event(event(safe_two_away, [safe_two_away, extreme_one_away], wall=16, mode="attack"))
+        self.assertEqual(1, result.recommended_tile)
+        self.assertNotIn("SHANTEN_REGRESSION", result.categories)
+
     def test_same_speed_extreme_risk_is_rejected(self):
         chosen = candidate(1, 1, 12, 0, 84)
         safe = candidate(2, 1, 11, 0, 30)
