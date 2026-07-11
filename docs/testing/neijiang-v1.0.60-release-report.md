@@ -3,6 +3,7 @@
 ## 版本与产物
 
 - 源码版本：`1.0.60`
+- 发布提交：`2a48d4e`，分支 `codex/matte-2p5d-tile-redesign` 已推送 GitHub
 - Android：`build/android/NeijiangMahjong-1.0.60-release.apk`
 - iOS Xcode 工程：`build/ios/NeijiangMahjong-1.0.60-ios-xcode/NeijiangMahjongIOS.xcodeproj`
 - iPhone APP：`/Volumes/AI/NeijiangMahjongRuntime/DerivedData-1.0.60/Build/Products/Release-iphoneos/NeijiangMahjongIOS.app`

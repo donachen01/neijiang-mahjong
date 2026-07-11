@@ -53,7 +53,7 @@
 | UI-006 | P3 | 产品名仍为 `neijiangMahjong Prototype` | `project.godot`、Android badging 和 iOS Info.plist 均为“内江麻将”/`1.0.60` | project.godot、版本文件 | 桌面和移动端显示正式中文产品名 | 已验证 |
 | REL-001 | P0 | Android/iOS 产物必须包含同一版同步 C# 和字体 | 最终 Android APK 与 iOS AOT/Xcode 构建均为 1.0.60；哈希、签名、字体、关键符号和导出内容检查通过 | export scripts、version files | 两端构建产物符号/版本/字体一致 | 已验证 |
 | REL-002 | P0 | 真机必须覆盖碰杠、报叫报杠后继续出牌 | iPhone 已安装/启动且进程存活；桌面真实 C# 合同与双方碰杠/报叫报杠 runner 通过 | 真机矩阵 | Android/iPhone 全关键流程 L5 通过 | 暂缓并说明原因：当前无 Android 设备；命令行不能代替 iPhone 上逐项触控关键流程 |
-| REL-003 | P1 | 最终提交、版本、GitHub 和产物证据必须一致 | 版本文件已统一 1.0.60，发布报告记录产物路径 | Git、CHANGELOG、VERSION | 推送成功；版本和哈希可复核 | 已修未验：等待最终提交和 push |
+| REL-003 | P1 | 最终提交、版本、GitHub 和产物证据必须一致 | 版本文件统一 1.0.60；发布提交 `2a48d4e` 已推送远端分支；发布报告记录产物哈希 | Git、CHANGELOG、VERSION | 推送成功；版本和哈希可复核 | 已验证 |
 
 ## 阶段关闭规则
 
