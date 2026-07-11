@@ -143,7 +143,6 @@ func _apply_orientation() -> void:
 	match seat_dock:
 		SeatDock.SELF:
 			custom_minimum_size = Vector2(0, SELF_ROW_TILE_VISUAL_HEIGHT)
-			size = custom_minimum_size
 			root_panel.custom_minimum_size = Vector2(0, SELF_ROW_TILE_VISUAL_HEIGHT)
 			opponent_band.visible = false
 			header.visible = false
@@ -171,7 +170,6 @@ func _apply_orientation() -> void:
 		SeatDock.TOP:
 			root_panel.custom_minimum_size = Vector2(0, 204)
 			custom_minimum_size = Vector2(1482, 210)
-			size = custom_minimum_size
 			opponent_band.visible = true
 			opponent_band.clip_contents = true
 			header.visible = false
@@ -198,7 +196,6 @@ func _apply_orientation() -> void:
 		SeatDock.LEFT, SeatDock.RIGHT:
 			root_panel.custom_minimum_size = Vector2(248, 0)
 			custom_minimum_size = Vector2(340, 660)
-			size = custom_minimum_size
 			opponent_band.visible = true
 			opponent_band.clip_contents = true
 			header.visible = false
@@ -244,35 +241,27 @@ func _apply_orientation() -> void:
 
 
 func _restore_default_lane_layout() -> void:
-	if top_lane_center != null and is_instance_valid(top_lane_center):
-		if top_lane_center.get_parent() != null:
-			top_lane_center.get_parent().remove_child(top_lane_center)
-		top_lane_center.queue_free()
-	top_lane_center = null
 	if top_lane_row != null and is_instance_valid(top_lane_row):
 		if hand_lane.get_parent() == top_lane_row:
 			top_lane_row.remove_child(hand_lane)
 		if meld_lane.get_parent() == top_lane_row:
 			top_lane_row.remove_child(meld_lane)
-		if top_lane_row.get_parent() != null:
-			top_lane_row.get_parent().remove_child(top_lane_row)
-		top_lane_row.queue_free()
+	if top_lane_center != null and is_instance_valid(top_lane_center):
+		top_lane_center.free()
+	elif top_lane_row != null and is_instance_valid(top_lane_row):
+		top_lane_row.free()
+	top_lane_center = null
 	top_lane_row = null
-	if side_lane_center != null and is_instance_valid(side_lane_center):
-		if side_lane_center.get_parent() != null:
-			side_lane_center.get_parent().remove_child(side_lane_center)
-		side_lane_center.queue_free()
-	side_lane_center = null
-	if side_lane_row == null:
-		return
-	if is_instance_valid(side_lane_row):
+	if side_lane_row != null and is_instance_valid(side_lane_row):
 		if hand_lane.get_parent() == side_lane_row:
 			side_lane_row.remove_child(hand_lane)
 		if meld_lane.get_parent() == side_lane_row:
 			side_lane_row.remove_child(meld_lane)
-		if side_lane_row.get_parent() != null:
-			side_lane_row.get_parent().remove_child(side_lane_row)
-		side_lane_row.queue_free()
+	if side_lane_center != null and is_instance_valid(side_lane_center):
+		side_lane_center.free()
+	elif side_lane_row != null and is_instance_valid(side_lane_row):
+		side_lane_row.free()
+	side_lane_center = null
 	side_lane_row = null
 	if hand_lane.get_parent() != root_vbox:
 		if hand_lane.get_parent() != null:
@@ -408,23 +397,25 @@ func _render_opponent_band(player: Dictionary, show_back: bool) -> void:
 
 		var top_slot_height := 166.0
 		var top_slot_y := 9.0
-		var meld_slot := _create_fixed_slot(meld_width, top_slot_height)
 		var hand_slot := _create_fixed_slot(hand_width, top_slot_height)
 		hand_slot.name = "TopHandSlot"
-		var hu_slot := _create_fixed_slot(hu_width, top_slot_height)
-		hu_slot.name = "TopHuSlot"
+		var meld_slot: Control = null
 		if has_melds:
+			meld_slot = _create_fixed_slot(meld_width, top_slot_height)
 			meld_slot.name = "TopMeldSlot"
 			_place_rect_in_parent(row_root, meld_slot, Rect2(Vector2(content_x, top_slot_y), Vector2(meld_width, top_slot_height)))
 			content_x += meld_width + content_gap
 		_place_rect_in_parent(row_root, hand_slot, Rect2(Vector2(content_x, top_slot_y), Vector2(hand_width, top_slot_height)))
 		content_x += hand_width + (content_gap if has_hu else 0.0)
+		var hu_slot: Control = null
 		if has_hu:
+			hu_slot = _create_fixed_slot(hu_width, top_slot_height)
+			hu_slot.name = "TopHuSlot"
 			_place_rect_in_parent(row_root, hu_slot, Rect2(Vector2(content_x, top_slot_y), Vector2(hu_width, top_slot_height)))
 
-		var meld_center := CenterContainer.new()
-		meld_center.set_anchors_preset(Control.PRESET_FULL_RECT)
 		if has_melds:
+			var meld_center := CenterContainer.new()
+			meld_center.set_anchors_preset(Control.PRESET_FULL_RECT)
 			meld_slot.add_child(meld_center)
 			var meld_row := HBoxContainer.new()
 			meld_row.add_theme_constant_override("separation", 6)

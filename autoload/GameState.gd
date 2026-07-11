@@ -66,6 +66,7 @@ const DIAGNOSTIC_MAX_ARRAY_ITEMS := 80
 const DIAGNOSTIC_MAX_DICT_KEYS := 120
 const DIAGNOSTIC_MAX_STRING_LENGTH := 4000
 const DIAGNOSTIC_MAX_TEXT_FILE_CHARS := 120000
+const DIAGNOSTIC_MAX_TEXT_FILE_BYTES := 512000
 const DIAGNOSTIC_MAX_DIR_TEXT_FILES := 160
 const IOS_STATE_PROBE_LOG_PATH := "user://ios_state_probe.log"
 
@@ -3272,14 +3273,34 @@ func _read_diagnostic_text_file(path: String) -> Dictionary:
 			"path": path,
 			"path_absolute": ProjectSettings.globalize_path(path),
 		}
-	var text := FileAccess.get_file_as_string(path)
-	var truncated := text.length() > DIAGNOSTIC_MAX_TEXT_FILE_CHARS
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {
+			"exists": true,
+			"read_error": FileAccess.get_open_error(),
+			"path": path,
+			"path_absolute": ProjectSettings.globalize_path(path),
+		}
+	var byte_count := file.get_length()
+	var truncated := byte_count > DIAGNOSTIC_MAX_TEXT_FILE_BYTES
 	if truncated:
+		file.seek(byte_count - DIAGNOSTIC_MAX_TEXT_FILE_BYTES)
+	var bytes := file.get_buffer(mini(DIAGNOSTIC_MAX_TEXT_FILE_BYTES, byte_count))
+	file.close()
+	var utf8_start := 0
+	while utf8_start < bytes.size() and bytes[utf8_start] >= 0x80 and bytes[utf8_start] <= 0xBF:
+		utf8_start += 1
+	if utf8_start > 0:
+		bytes = bytes.slice(utf8_start)
+	var text := bytes.get_string_from_utf8()
+	if text.length() > DIAGNOSTIC_MAX_TEXT_FILE_CHARS:
 		text = text.right(DIAGNOSTIC_MAX_TEXT_FILE_CHARS)
+		truncated = true
 	return {
 		"exists": true,
 		"path": path,
 		"path_absolute": ProjectSettings.globalize_path(path),
+		"byte_count": byte_count,
 		"char_count": text.length(),
 		"truncated_from_start": truncated,
 		"content": text,

@@ -61,7 +61,10 @@ func _export_ios_xcode_project() -> void:
 	preset.set("custom_features", "")
 	preset.set("export_filter", "all_resources")
 	preset.set("include_filter", "")
-	preset.set("exclude_filter", "docs/**,tests/**,tools/**,build/**,evidence/**,backups/**,测试数据统计/**,.tmp_tts/**,.venv_tts/**,.git/**")
+	# Godot's export glob treats `dir/*` as the recursive resource exclusion used
+	# by editor presets. `dir/**` was ineffective here and allowed old builds,
+	# documentation captures and .NET intermediates into the release PCK.
+	preset.set("exclude_filter", "docs/*,tests/*,tools/*,build/*,evidence/*,dotnet/*,backups/*,测试数据统计/*,.tmp_tts/*,.venv_tts/*,.git/*")
 	preset.set("script_export_mode", 2)
 	preset.set("custom_template/debug", template_path)
 	preset.set("custom_template/release", template_path)

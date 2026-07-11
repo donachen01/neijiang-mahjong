@@ -3,6 +3,8 @@ extends SceneTree
 const GAME_STATE_SCRIPT := preload("res://autoload/GameState.gd")
 const AI_MANAGER_SCRIPT := preload("res://scripts/ai/AIManager.gd")
 
+var tracked_game_states: Array[Node] = []
+
 class FakeSelfActionAIManager:
 	extends RefCounted
 
@@ -123,6 +125,10 @@ func _run() -> void:
 	_run_test("ai_peng_enters_ai_discard_without_stall", _test_ai_peng_enters_ai_discard_without_stall, failures)
 	_run_test("ai_melded_gang_draws_and_enters_ai_discard", _test_ai_melded_gang_draws_and_enters_ai_discard, failures)
 	_run_test("reaction_context_defers_native_ai_until_timer", _test_reaction_context_defers_native_ai_until_timer, failures)
+	for game_state in tracked_game_states:
+		if is_instance_valid(game_state):
+			game_state.free()
+	tracked_game_states.clear()
 	if failures.is_empty():
 		print("NEIJIANG BAO GANG REGRESSION OK")
 		quit(0)
@@ -740,6 +746,7 @@ func _set_discard_reaction(game_state, source_seat: int, tile: Dictionary) -> vo
 
 func _build_neijiang_test_game_state():
 	var game_state = GAME_STATE_SCRIPT.new()
+	tracked_game_states.append(game_state)
 	game_state.rules = load("res://scripts/core/rule_config.gd").new(load("res://scripts/core/rule_config.gd").MODE_NEIJIANG_CLASSIC)
 	game_state.mahjong_state = load("res://scripts/core/mahjong_state.gd").new()
 	game_state.mahjong_judge = load("res://scripts/core/mahjong_judge.gd").new()

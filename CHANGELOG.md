@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.60 - 2026-07-11
+
+- Isolated strategic AI context by seat and unified early/middle/late stage facts, hand caching, opponent danger, tile danger and exact meld-group transport.
+- Replaced post-hoc discard overrides with deterministic attack, balanced, defense, fold and chase ranking; preserved ready hands, rejected near-speed extreme danger and bounded chase route sacrifices.
+- Added an independent per-discard judge that ignores the AI's final score fields. The final 30-round diagnostic produced 648 judged discards, 0.93% D/E choices and no E-level blunder.
+- Made search rollouts deterministic for identical state and candidate inputs. Two repeated fixed-seed five-round runs produced identical actions, outcomes and score paths.
+- Improved the in-game hierarchy for player identity, score, dealer and settlement flow; shortened the default AI helper explanation and eliminated headless UI audio-resource leaks.
+- Removed unreachable legacy `MainTable`/`AIAssistant` files and unrelated root OMX artifacts after reachability checks and regression coverage.
+- Hardened Android/iOS packaging so development source, tests, reports and previous build products are not bundled; iOS uses the current NativeAOT framework and personal Apple Development signing.
+- The 200-round paired candidate result improved from `-0.115` to `+0.305` points per round, but its 95% confidence interval still crosses zero, so statistical long-term superiority remains an open release risk.
+
 ## 1.0.59 - 2026-07-01
 
 - Backed up the current working tree and prior Android artifacts to the AI volume before cleanup.

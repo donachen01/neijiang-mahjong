@@ -61,6 +61,28 @@ rm -rf "$EXPORT_DIR"
 mkdir -p "$EXPORT_DIR"
 export GODOT_IOS_OUTPUT="$EXPORT_DIR/NeijiangMahjongIOS"
 
+# EditorExportPreset's programmatic resource filters are not applied reliably
+# by Godot 4.6 when the preset is created at runtime. Hide development-only
+# trees from the resource scanner for the duration of the export. The entry
+# script is copied to the project root so `tools` can be hidden as well.
+TEMP_EXPORT_SCRIPT="$PROJECT_DIR/.codex_ios_export.gd"
+CREATED_GDIGNORE=()
+cleanup_export_guards() {
+  rm -f "$TEMP_EXPORT_SCRIPT"
+  for marker in "${CREATED_GDIGNORE[@]}"; do
+    rm -f "$marker"
+  done
+}
+trap cleanup_export_guards EXIT
+cp "$PROJECT_DIR/tools/export_ios_xcode_direct.gd" "$TEMP_EXPORT_SCRIPT"
+for directory in docs evidence build dotnet tests tools backups 测试数据统计; do
+  marker="$PROJECT_DIR/$directory/.gdignore"
+  if [[ -d "$PROJECT_DIR/$directory" && ! -e "$marker" ]]; then
+    : > "$marker"
+    CREATED_GDIGNORE+=("$marker")
+  fi
+done
+
 EXPORT_CONFIG="ExportRelease"
 if [[ "${GODOT_IOS_DEBUG_EXPORT:-false}" == "1" || "${GODOT_IOS_DEBUG_EXPORT:-false}" == "true" || "${GODOT_IOS_DEBUG_EXPORT:-false}" == "yes" ]]; then
   EXPORT_CONFIG="ExportDebug"
@@ -87,7 +109,7 @@ echo "Bundle ID: ${GODOT_IOS_BUNDLE_ID:-com.chendong.neijiangmahjong.iosdev}"
   --headless \
   --editor \
   --path "$PROJECT_DIR" \
-  --script "res://tools/export_ios_xcode_direct.gd"
+  --script "res://.codex_ios_export.gd"
 
 if [[ ! -f "$EXPORT_DIR/NeijiangMahjongIOS.xcodeproj/project.pbxproj" ]]; then
   echo "iOS export did not produce an Xcode project at $EXPORT_DIR"
@@ -123,6 +145,19 @@ if [[ ! -d "$AOT_XCFRAMEWORK_SRC" ]]; then
 fi
 
 PBXPROJ="$EXPORT_DIR/NeijiangMahjongIOS.xcodeproj/project.pbxproj"
+INFO_PLIST="$EXPORT_DIR/NeijiangMahjongIOS/NeijiangMahjongIOS-Info.plist"
+# The game does not request camera, microphone or photo-library access. Godot's
+# template emits empty usage-description keys, which creates Xcode warnings and
+# would be invalid if those permissions were ever requested.
+if [[ -f "$INFO_PLIST" ]]; then
+  for privacy_key in NSCameraUsageDescription NSMicrophoneUsageDescription NSPhotoLibraryUsageDescription; do
+    /usr/libexec/PlistBuddy -c "Delete :$privacy_key" "$INFO_PLIST" >/dev/null 2>&1 || true
+  done
+fi
+# Personal Apple ID device installs use automatic development signing even for
+# the optimized Release configuration. Godot's distribution identity conflicts
+# with automatic provisioning and cannot be installed with a free account.
+perl -pi -e 's/Apple Distribution/Apple Development/g' "$PBXPROJ"
 if grep -q "NeijiangMahjong.Godot_aot.xcframework" "$PBXPROJ"; then
   echo "Godot export already embedded .NET iOS AOT framework in Xcode project."
   echo "iOS Xcode project: $EXPORT_DIR/NeijiangMahjongIOS.xcodeproj"

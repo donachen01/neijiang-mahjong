@@ -542,13 +542,21 @@ func _build_performance_summary(samples_value) -> Dictionary:
 	var total := 0.0
 	for value in samples:
 		total += float(value)
+	var p95_ms := float(samples[int(floor(float(samples.size() - 1) * 0.95))])
+	var max_ms := float(samples[-1])
+	var warning_codes: Array[String] = []
+	if p95_ms >= 100.0:
+		warning_codes.append("PERF_CHOOSE_ACTION_P95_BUDGET_WARNING")
+	if max_ms >= 500.0:
+		warning_codes.append("PERF_CHOOSE_ACTION_MAX_SPIKE_WARNING")
 	return {
 		"samples": samples.size(),
 		"p50_ms": float(samples[int(floor(float(samples.size() - 1) * 0.50))]),
-		"p95_ms": float(samples[int(floor(float(samples.size() - 1) * 0.95))]),
-		"max_ms": float(samples[-1]),
+		"p95_ms": p95_ms,
+		"max_ms": max_ms,
 		"avg_ms": total / float(samples.size()),
-		"warning": float(samples[int(floor(float(samples.size() - 1) * 0.95))]) >= 100.0,
+		"warning": not warning_codes.is_empty(),
+		"warning_codes": warning_codes,
 	}
 
 

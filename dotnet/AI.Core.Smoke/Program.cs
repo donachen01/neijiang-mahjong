@@ -28,6 +28,11 @@ if (!NeijiangContextRegressionCases.Run())
     Console.Error.WriteLine("neijiang_context_regression_failed");
     return 699;
 }
+if (!SmokeDeterministicDiscardSearch())
+{
+    Console.Error.WriteLine("deterministic_discard_search_smoke_failed");
+    return 698;
+}
 var bestCandidate = result.Candidates.FirstOrDefault(item => item.TileType == result.Action.TileType);
 if (bestCandidate is null)
 {
@@ -60,6 +65,46 @@ if (!SmokeAggressivePeng(facade))
 {
     Console.Error.WriteLine("aggressive_peng_smoke_failed");
     return 4;
+}
+
+static bool SmokeDeterministicDiscardSearch()
+{
+    var hand18 = NeijiangTileCodec.BuildCount18(new[] { 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15 });
+    var searchState = NeijiangStateCodec.FromRaw(0, 0, 0, 16, hand18, new int[18]);
+    var candidates = new[]
+    {
+        new NeijiangCandidateDetail
+        {
+            TileType = 0,
+            Shanten = 1,
+            LiveUkeire = 18,
+            Ukeire = 6,
+            ExpectedValue = 2.1,
+            DealInProbability = 0.08
+        },
+        new NeijiangCandidateDetail
+        {
+            TileType = 15,
+            Shanten = 1,
+            LiveUkeire = 17,
+            Ukeire = 6,
+            ExpectedValue = 2.0,
+            DealInProbability = 0.09
+        }
+    };
+    var engine = new NeijiangMctsEngine();
+    var first = engine.EvaluateTopCandidates(searchState, candidates, timeoutMs: 45, topK: 2, rolloutDepth: 1);
+    var second = engine.EvaluateTopCandidates(searchState, candidates, timeoutMs: 45, topK: 2, rolloutDepth: 1);
+    var sameBonuses = first.CandidateBonuses.Count == second.CandidateBonuses.Count
+        && first.CandidateBonuses.All(item =>
+            second.CandidateBonuses.TryGetValue(item.Key, out var value)
+            && Math.Abs(item.Value - value) < 0.0000001);
+    Console.WriteLine($"deterministic_search first={first.BestTileType}/{first.Simulations} second={second.BestTileType}/{second.Simulations} bonuses_equal={sameBonuses}");
+    return first.Used
+        && second.Used
+        && first.BestTileType == second.BestTileType
+        && first.Simulations == second.Simulations
+        && sameBonuses;
 }
 
 if (!SmokeReasonableAnGang(facade))
@@ -422,9 +467,9 @@ if (!SmokeFoldSortUsesSafetyBandsWithoutTinyDangerOverpay())
     return 2865;
 }
 
-if (!SmokeWideTwoAwayHighEvCanBeatNarrowOneAway())
+if (!SmokeOneAwaySpeedBeatsWideTwoAwayWithoutRoute())
 {
-    Console.Error.WriteLine("wide_two_away_high_ev_sort_smoke_failed");
+    Console.Error.WriteLine("one_away_speed_without_route_smoke_failed");
     return 2866;
 }
 
@@ -1080,7 +1125,7 @@ static bool SmokeEarlyBigPairRouteKeepsPair(NeijiangAiFacade facade)
     var fiveTong = result.Candidates.First(candidate => candidate.TileType == 13);
     var eightTong = result.Candidates.First(candidate => candidate.TileType == 16);
     var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
-    Console.WriteLine($"early_big_pair_tile={result.Action.TileType} selected_routes={string.Join('/', selected.RoutesAfter)} nine_score={nineTiao.Score} eight_tong={eightTong.Score} three_tong={threeTong.Score} five_tong={fiveTong.Score} nine_routes={string.Join('/', nineTiao.RoutesAfter)}");
+    Console.WriteLine($"early_big_pair_tile={result.Action.TileType} mode={result.AiContext?.StrategyMode.Mode ?? "unknown"} selected_score={selected.Score} selected_routes={string.Join('/', selected.RoutesAfter)} nine_score={nineTiao.Score} eight_tong={eightTong.Score} three_tong={threeTong.Score} five_tong={fiveTong.Score} nine_routes={string.Join('/', nineTiao.RoutesAfter)} top={string.Join(',', result.Candidates.Take(7).Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.Danger}/{string.Join('+', candidate.RoutesAfter)}"))}");
     return result.Action.TileType != 8
         && result.Action.TileType != 15
         && result.Action.TileType != 16
@@ -1145,12 +1190,6 @@ static bool SmokeBigPairRouteDoesNotOverrideLargeScoreGap()
 
 static bool SmokeChaseSortPrefersHigherScoreRoute()
 {
-    var method = typeof(NeijiangDecisionEngine).GetMethod(
-        "SortDiscardCandidates",
-        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-    if (method is null)
-        return false;
-
     var fasterLowValue = new NeijiangCandidateDetail
     {
         TileType = 3,
@@ -1175,11 +1214,12 @@ static bool SmokeChaseSortPrefersHigherScoreRoute()
     };
     var context = new NeijiangAiContext
     {
+        Stage = new NeijiangStageContext { Stage = "middle", StageIndex = 1, WallCount = 10 },
         StrategyMode = new NeijiangStrategyModeContext { Mode = "chase" },
         RoundGoal = new NeijiangRoundGoalContext { Goal = "chase_score" }
     };
 
-    var sorted = method.Invoke(null, new object[] { new[] { fasterLowValue, slowerHighValue }, 1, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var sorted = NeijiangDiscardScorerFactory.Rank(new[] { fasterLowValue, slowerHighValue }, context);
     var top = sorted?.FirstOrDefault();
     Console.WriteLine($"chase_sort_top={top?.TileType} faster={fasterLowValue.Score}/{fasterLowValue.Shanten} slower={slowerHighValue.Score}/{slowerHighValue.Shanten}/{string.Join('/', slowerHighValue.RoutesAfter)}");
     return top?.TileType == slowerHighValue.TileType;
@@ -1187,12 +1227,6 @@ static bool SmokeChaseSortPrefersHigherScoreRoute()
 
 static bool SmokeDefenseSortPrefersSafeCandidate()
 {
-    var method = typeof(NeijiangDecisionEngine).GetMethod(
-        "SortDiscardCandidates",
-        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-    if (method is null)
-        return false;
-
     var riskyHighValue = new NeijiangCandidateDetail
     {
         TileType = 7,
@@ -1215,11 +1249,12 @@ static bool SmokeDefenseSortPrefersSafeCandidate()
     };
     var context = new NeijiangAiContext
     {
+        Stage = new NeijiangStageContext { Stage = "late", StageIndex = 2, WallCount = 6 },
         StrategyMode = new NeijiangStrategyModeContext { Mode = "defense" },
         RoundGoal = new NeijiangRoundGoalContext { Goal = "protect_lead" }
     };
 
-    var sorted = method.Invoke(null, new object[] { new[] { riskyHighValue, safeLowerValue }, 2, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var sorted = NeijiangDiscardScorerFactory.Rank(new[] { riskyHighValue, safeLowerValue }, context);
     var top = sorted?.FirstOrDefault();
     Console.WriteLine($"defense_sort_top={top?.TileType} risky={riskyHighValue.Score}/{riskyHighValue.Danger} safe={safeLowerValue.Score}/{safeLowerValue.Danger}");
     return top?.TileType == riskyHighValue.TileType
@@ -1230,12 +1265,6 @@ static bool SmokeDefenseSortPrefersSafeCandidate()
 
 static bool SmokeProtectLeadSortDoesNotOverpayForTinyDangerDifference()
 {
-    var method = typeof(NeijiangDecisionEngine).GetMethod(
-        "SortDiscardCandidates",
-        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-    if (method is null)
-        return false;
-
     var tinySaferLowValue = new NeijiangCandidateDetail
     {
         TileType = 17,
@@ -1258,11 +1287,12 @@ static bool SmokeProtectLeadSortDoesNotOverpayForTinyDangerDifference()
     };
     var context = new NeijiangAiContext
     {
+        Stage = new NeijiangStageContext { Stage = "early", StageIndex = 0, WallCount = 19 },
         StrategyMode = new NeijiangStrategyModeContext { Mode = "balanced" },
         RoundGoal = new NeijiangRoundGoalContext { Goal = "protect_lead" }
     };
 
-    var sorted = method.Invoke(null, new object[] { new[] { tinySaferLowValue, sameSafetyMuchHigherValue }, 0, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var sorted = NeijiangDiscardScorerFactory.Rank(new[] { tinySaferLowValue, sameSafetyMuchHigherValue }, context);
     var top = sorted?.FirstOrDefault();
     Console.WriteLine($"protect_lead_tiny_danger_top={top?.TileType} low={tinySaferLowValue.Score}/{tinySaferLowValue.Danger} high={sameSafetyMuchHigherValue.Score}/{sameSafetyMuchHigherValue.Danger}");
     return top?.TileType == sameSafetyMuchHigherValue.TileType;
@@ -1270,12 +1300,6 @@ static bool SmokeProtectLeadSortDoesNotOverpayForTinyDangerDifference()
 
 static bool SmokeProtectLeadEarlyKeepsBalancedProgress()
 {
-    var method = typeof(NeijiangDecisionEngine).GetMethod(
-        "SortDiscardCandidates",
-        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-    if (method is null)
-        return false;
-
     var overSafeLowValue = new NeijiangCandidateDetail
     {
         TileType = 9,
@@ -1298,11 +1322,12 @@ static bool SmokeProtectLeadEarlyKeepsBalancedProgress()
     };
     var context = new NeijiangAiContext
     {
+        Stage = new NeijiangStageContext { Stage = "middle", StageIndex = 1, WallCount = 10 },
         StrategyMode = new NeijiangStrategyModeContext { Mode = "balanced" },
         RoundGoal = new NeijiangRoundGoalContext { Goal = "protect_lead" }
     };
 
-    var sorted = method.Invoke(null, new object[] { new[] { overSafeLowValue, balancedProgress }, 1, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var sorted = NeijiangDiscardScorerFactory.Rank(new[] { overSafeLowValue, balancedProgress }, context);
     var top = sorted?.FirstOrDefault();
     Console.WriteLine($"protect_lead_early_top={top?.TileType} safe={overSafeLowValue.Score}/{overSafeLowValue.Danger} progress={balancedProgress.Score}/{balancedProgress.Danger}");
     return top?.TileType == balancedProgress.TileType;
@@ -1310,12 +1335,6 @@ static bool SmokeProtectLeadEarlyKeepsBalancedProgress()
 
 static bool SmokeFoldSortUsesSafetyBandsWithoutTinyDangerOverpay()
 {
-    var method = typeof(NeijiangDecisionEngine).GetMethod(
-        "SortDiscardCandidates",
-        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-    if (method is null)
-        return false;
-
     var tinySaferReady = new NeijiangCandidateDetail
     {
         TileType = 10,
@@ -1353,8 +1372,8 @@ static bool SmokeFoldSortUsesSafetyBandsWithoutTinyDangerOverpay()
         Stage = new NeijiangStageContext { StageIndex = 2, WallCount = 6 }
     };
 
-    var withSafe = method.Invoke(null, new object[] { new[] { tinySaferReady, sameBandBetterReady, trueSafeFold }, 2, context }) as IReadOnlyList<NeijiangCandidateDetail>;
-    var sameBandOnly = method.Invoke(null, new object[] { new[] { tinySaferReady, sameBandBetterReady }, 2, context }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var withSafe = NeijiangDiscardScorerFactory.Rank(new[] { tinySaferReady, sameBandBetterReady, trueSafeFold }, context);
+    var sameBandOnly = NeijiangDiscardScorerFactory.Rank(new[] { tinySaferReady, sameBandBetterReady }, context);
     var safeTop = withSafe?.FirstOrDefault();
     var sameBandTop = sameBandOnly?.FirstOrDefault();
     Console.WriteLine($"fold_sort_safe_top={safeTop?.TileType} same_band_top={sameBandTop?.TileType} safe={trueSafeFold.Score}/{trueSafeFold.Danger} tiny={tinySaferReady.Score}/{tinySaferReady.Danger} better={sameBandBetterReady.Score}/{sameBandBetterReady.Danger}");
@@ -1362,14 +1381,8 @@ static bool SmokeFoldSortUsesSafetyBandsWithoutTinyDangerOverpay()
         && sameBandTop?.TileType == sameBandBetterReady.TileType;
 }
 
-static bool SmokeWideTwoAwayHighEvCanBeatNarrowOneAway()
+static bool SmokeOneAwaySpeedBeatsWideTwoAwayWithoutRoute()
 {
-    var method = typeof(NeijiangDecisionEngine).GetMethod(
-        "SortDiscardCandidates",
-        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-    if (method is null)
-        return false;
-
     var narrowOneAway = new NeijiangCandidateDetail
     {
         TileType = 14,
@@ -1392,22 +1405,24 @@ static bool SmokeWideTwoAwayHighEvCanBeatNarrowOneAway()
     };
     var attackContext = new NeijiangAiContext
     {
+        Stage = new NeijiangStageContext { Stage = "early", StageIndex = 0, WallCount = 19 },
         StrategyMode = new NeijiangStrategyModeContext { Mode = "attack" },
         RoundGoal = new NeijiangRoundGoalContext { Goal = "balanced_ev" }
     };
     var chaseContext = new NeijiangAiContext
     {
+        Stage = new NeijiangStageContext { Stage = "middle", StageIndex = 1, WallCount = 10 },
         StrategyMode = new NeijiangStrategyModeContext { Mode = "chase" },
         RoundGoal = new NeijiangRoundGoalContext { Goal = "chase_score" }
     };
 
-    var attackSorted = method.Invoke(null, new object[] { new[] { narrowOneAway, wideTwoAwayHighEv }, 0, attackContext }) as IReadOnlyList<NeijiangCandidateDetail>;
-    var chaseSorted = method.Invoke(null, new object[] { new[] { narrowOneAway, wideTwoAwayHighEv }, 1, chaseContext }) as IReadOnlyList<NeijiangCandidateDetail>;
+    var attackSorted = NeijiangDiscardScorerFactory.Rank(new[] { narrowOneAway, wideTwoAwayHighEv }, attackContext);
+    var chaseSorted = NeijiangDiscardScorerFactory.Rank(new[] { narrowOneAway, wideTwoAwayHighEv }, chaseContext);
     var attackTop = attackSorted?.FirstOrDefault();
     var chaseTop = chaseSorted?.FirstOrDefault();
     Console.WriteLine($"wide_two_away_attack_top={attackTop?.TileType} chase_top={chaseTop?.TileType} narrow={narrowOneAway.Score}/{narrowOneAway.Shanten}/{narrowOneAway.LiveUkeire} wide={wideTwoAwayHighEv.Score}/{wideTwoAwayHighEv.Shanten}/{wideTwoAwayHighEv.LiveUkeire}");
-    return attackTop?.TileType == wideTwoAwayHighEv.TileType
-        && chaseTop?.TileType == wideTwoAwayHighEv.TileType;
+    return attackTop?.TileType == narrowOneAway.TileType
+        && chaseTop?.TileType == narrowOneAway.TileType;
 }
 
 static bool SmokePotentialFlushPrefersOffSuitDiscard(NeijiangAiFacade facade)
@@ -1852,7 +1867,8 @@ static bool SmokePrefersOrphanTerminalFromMarkedCases(NeijiangAiFacade facade)
     var result210 = facade.DecideDiscard(case210);
     var case304 = BuildMarkedCase304();
     var result304 = facade.DecideDiscard(case304);
-    Console.WriteLine($"orphan_terminal_case210_tile={result210.Action.TileType} case304_tile={result304.Action.TileType}");
+    var terminal210 = result210.Candidates.First(candidate => candidate.TileType == 17);
+    Console.WriteLine($"orphan_terminal_case210_tile={result210.Action.TileType} mode={result210.AiContext?.StrategyMode.Mode ?? "unknown"} top210={string.Join(',', result210.Candidates.Take(6).Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.LiveUkeire}/{candidate.Danger}"))} terminal210=17:{terminal210.Score}/{terminal210.Shanten}/{terminal210.LiveUkeire}/{terminal210.Danger} case304_tile={result304.Action.TileType}");
     return result210.Action.TileType == 17
         && result304.Action.TileType == 17;
 }
@@ -2073,7 +2089,7 @@ static bool SmokeExtremeDangerSameSpeedOverrideFromSeedLive(NeijiangAiFacade fac
     var result = facade.DecideDiscard(state);
     var sixTiao = result.Candidates.First(candidate => candidate.TileType == 5);
     var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
-    Console.WriteLine($"extreme_danger_same_speed_tile={result.Action.TileType} selected={selected.Score}/{selected.Shanten}/{selected.LiveUkeire}/{selected.Danger} six_tiao={sixTiao.Score}/{sixTiao.Shanten}/{sixTiao.LiveUkeire}/{sixTiao.Danger}");
+    Console.WriteLine($"extreme_danger_same_speed_tile={result.Action.TileType} mode={result.AiContext?.StrategyMode.Mode ?? "unknown"} selected={selected.Score}/{selected.Shanten}/{selected.LiveUkeire}/{selected.Danger} six_tiao={sixTiao.Score}/{sixTiao.Shanten}/{sixTiao.LiveUkeire}/{sixTiao.Danger} top={string.Join(',', result.Candidates.Take(8).Select(candidate => $"{candidate.TileType}:{candidate.Score}/{candidate.Shanten}/{candidate.LiveUkeire}/{candidate.Danger}"))}");
     return result.Action.TileType != 5
         && selected.Shanten <= sixTiao.Shanten
         && selected.LiveUkeire + 1 >= sixTiao.LiveUkeire

@@ -2,7 +2,6 @@ extends SceneTree
 
 const DEFAULT_OUTPUT_PATH := "user://capture_main_scene.png"
 const SCENE_PATH := "res://scenes/table/MainSceneV2.tscn"
-const AUTO_DING_QUE_SUIT := "tong"
 const MAX_AI_STEPS := 24
 const DEMO_DISCARDS := {
 	0: [["tiao", 1], ["tiao", 3], ["tiao", 5], ["tong", 2], ["tong", 4], ["tong", 6], ["wan", 2], ["wan", 4], ["wan", 6], ["wan", 8]],
@@ -70,23 +69,10 @@ func _force_playable_snapshot() -> void:
 	if game_state == null:
 		return
 
-	var players: Array = game_state.get("players")
-	if players.is_empty():
+	if Array(game_state.get("players")).is_empty():
 		return
-
-	for index in range(players.size()):
-		var player: Dictionary = players[index]
-		if str(player.get("ding_que", "")) == "":
-			if index == 0:
-				player["ding_que"] = AUTO_DING_QUE_SUIT
-			else:
-				player["ding_que"] = str(game_state.call("_choose_ai_ding_que", player.get("hand_tiles", [])))
-			players[index] = player
-	game_state.set("players", players)
 	if bool(game_state.get("opening_roll_pending_completion")):
 		game_state.call("complete_opening_roll")
-	else:
-		game_state.call("_complete_ding_que_if_ready")
 
 	var step_count := 0
 	while step_count < MAX_AI_STEPS and not bool(game_state.call("can_human_discard", 0)):

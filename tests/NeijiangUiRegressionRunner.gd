@@ -38,7 +38,8 @@ func _run() -> void:
 	_run_test("bao_gang_tiles_are_framed_in_self_hand", _test_bao_gang_tiles_are_framed_in_self_hand.bind(root_node), failures)
 	_run_test("ai_bao_gang_tiles_are_framed_in_opponent_hand", _test_ai_bao_gang_tiles_are_framed_in_opponent_hand.bind(root_node), failures)
 
-	root_node.queue_free()
+	root_node.free()
+	await process_frame
 	if failures.is_empty():
 		print("NEIJIANG UI REGRESSION OK")
 		quit(0)
@@ -282,9 +283,14 @@ func _test_recommended_tile_helper_prioritizes_csharp_probability_details(root_n
 	if not compare.visible:
 		return "expected recommended C# probability details to be visible"
 	var text := str(compare.text)
-	for expected in ["大概能赚1.25", "自摸机会31%", "放炮机会8%", "收益会少0.42", "牌会更顺+16", "中盘压力上升", "座位2近期不要这张", "手形好搭 5"]:
+	for expected in ["大概能赚1.25", "自摸机会31%", "放炮风险8%"]:
 		if not text.contains(expected):
 			return "expected C# probability detail '%s' in helper text, got %s" % [expected, text]
+	if text.split("｜").size() > 3:
+		return "expected normal helper detail to stay within three concise segments, got %s" % text
+	for hidden_detail in ["收益会少", "牌会更顺", "中盘压力上升", "手形好搭"]:
+		if text.contains(hidden_detail):
+			return "expected default helper to hide expanded detail '%s', got %s" % [hidden_detail, text]
 	if text == "这手先抢速度":
 		return "expected C# probability details to override short explanation_hint"
 	return true
@@ -325,6 +331,14 @@ func _test_neijiang_settlement_hides_stale_ding_que_tags(root_node: Node):
 		},
 	}
 	root_node.call("_render_settlement", snapshot)
+	var settlement_title: Label = root_node.get("settlement_player_list_title") as Label
+	if settlement_title == null or settlement_title.text != "流局查叫":
+		return "expected draw settlement title 流局查叫, got %s" % (settlement_title.text if settlement_title != null else "<missing>")
+	var win_snapshot := snapshot.duplicate(true)
+	win_snapshot["settlement_data"]["end_reason"] = "battle_end"
+	root_node.call("_render_settlement", win_snapshot)
+	if settlement_title.text != "胡牌结算":
+		return "expected battle settlement title 胡牌结算, got %s" % settlement_title.text
 	var hand_row: Control = root_node.get("settlement_hand_row") as Control
 	if hand_row == null:
 		return "missing settlement hand row"
@@ -380,6 +394,16 @@ func _test_main_controls_are_layered_by_purpose(root_node: Node):
 			return "expected right-side stack to contain only settlement/next flow controls"
 		if child is Button and child != settlement_button and child != next_button:
 			return "unexpected button in right-side flow stack: %s" % child.name
+	root_node.call("_layout_v17_top_button_stack")
+	var root_ui: Control = root_node.get_node_or_null("UILayer/RootUI") as Control
+	if root_ui == null:
+		return "missing RootUI"
+	for flow_button: Button in [settlement_button, next_button]:
+		if not flow_button.visible:
+			continue
+		var flow_rect: Rect2 = flow_button.get_global_rect()
+		if flow_rect.end.x > root_ui.get_global_rect().end.x + 0.1:
+			return "expected %s to stay inside the right viewport edge, got %s" % [flow_button.name, flow_rect]
 
 	var drawer: VBoxContainer = root_node.get("floating_left_button_bar") as VBoxContainer
 	var toggle: Button = root_node.get("floating_left_toggle_button") as Button

@@ -111,6 +111,21 @@ class IndependentDiscardJudgeTests(unittest.TestCase):
         self.assertEqual(1, result.recommended_tile)
         self.assertNotIn("SHANTEN_REGRESSION", result.categories)
 
+    def test_chase_route_tradeoff_is_not_auto_regression_when_independent_value_improves(self):
+        route = candidate(1, 2, 36, 0, 6, routes_after=["清一色"])
+        faster = candidate(2, 1, 11, 0, 35)
+        result = judge_event(event(route, [route, faster], wall=8, mode="chase"))
+        self.assertEqual(2, result.recommended_tile)
+        self.assertNotIn("SHANTEN_REGRESSION", result.categories)
+        self.assertGreaterEqual(result.selected_value, result.recommended_value)
+
+    def test_chase_route_tradeoff_remains_regression_late(self):
+        route = candidate(1, 2, 36, 0, 6, routes_after=["清一色"])
+        faster = candidate(2, 1, 11, 0, 35)
+        result = judge_event(event(route, [route, faster], wall=6, mode="chase"))
+        self.assertIn("SHANTEN_REGRESSION", result.categories)
+        self.assertEqual("E_BLUNDER", result.grade)
+
     def test_fold_prefers_safe_candidate(self):
         risky = candidate(1, 1, 13, 0, 78)
         safe = candidate(2, 1, 10, 0, 15)

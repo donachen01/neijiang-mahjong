@@ -198,7 +198,17 @@ def classify(
     if selected_shanten > reference_shanten:
         faster = [item for item in candidates if integer(item.get("shanten"), 8) == reference_shanten]
         best_faster_danger = min(integer(item.get("danger", item.get("risk", 0))) for item in faster)
-        if mode not in {"defense", "fold"} or selected_danger + 25 >= best_faster_danger:
+        selected_routes = set(selected.get("routes_after", []))
+        justified_chase_route = (
+            mode == "chase"
+            and stage != "late"
+            and selected_shanten == reference_shanten + 1
+            and bool(selected_routes.intersection({"七对", "对对胡", "清一色"}))
+            and independent_value(selected, stage, mode) >= independent_value(reference, stage, mode)
+        )
+        if not justified_chase_route and (
+            mode not in {"defense", "fold"} or selected_danger + 25 >= best_faster_danger
+        ):
             categories.append("SHANTEN_REGRESSION")
 
     same_speed_safer = [

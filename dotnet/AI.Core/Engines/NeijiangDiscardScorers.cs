@@ -25,11 +25,14 @@ public static class NeijiangDiscardScorerFactory
     {
         if (string.Equals(context.PolicyProfile, "baseline_v1", StringComparison.Ordinal))
             return FrozenBaseline.Rank(candidates, context);
-        if (context.Stage.WallCount <= 4
-            && candidates.Any(item => item.Shanten <= 0 && item.WaitCount > 0 && item.Danger < 86))
-            return TailSettlement.Rank(candidates, context);
-        if (context.RoundGoal.Goal == "protect_lead" && context.Stage.StageIndex >= 2)
+        if (context.StrategyMode.Mode == "fold")
+            return Fold.Rank(candidates, context);
+        if (context.StrategyMode.Mode == "defense"
+            || context.RoundGoal.Goal == "protect_lead" && context.Stage.StageIndex >= 2)
             return Defensive.Rank(candidates, context);
+        if (context.Stage.WallCount <= 4
+            && candidates.Any(item => item.Shanten <= 0 && item.WaitCount > 0 && item.Danger < 78))
+            return TailSettlement.Rank(candidates, context);
 
         return context.StrategyMode.Mode switch
         {
@@ -50,7 +53,16 @@ public static class NeijiangDiscardScorerFactory
     }
 
     internal static int ExtremeRiskTier(NeijiangCandidateDetail candidate)
-        => candidate.Danger >= 78 ? 1 : 0;
+    {
+        if (candidate.Danger >= 86) return 2;
+        if (candidate.Danger >= 78) return 1;
+        return 0;
+    }
+
+    internal static int CatastrophicRiskTier(
+        NeijiangCandidateDetail candidate,
+        bool hasNearSpeedNonCatastrophicCandidate)
+        => hasNearSpeedNonCatastrophicCandidate && candidate.Danger >= 86 ? 1 : 0;
 
     internal static int StrategicRiskTier(
         NeijiangCandidateDetail candidate,
@@ -62,49 +74,27 @@ public static class NeijiangDiscardScorerFactory
         return candidate.Danger >= threshold ? 1 : 0;
     }
 
-    internal static bool HasAcceptableReadyCandidate(
-        IReadOnlyList<NeijiangCandidateDetail> candidates)
-        => candidates.Any(item =>
-            item.Shanten <= 0
-            && item.WaitCount > 0
-            && item.Danger < 78);
-
-    internal static int ReadyOpportunityTier(
+    internal static int ChaseOpportunityTier(
         NeijiangCandidateDetail candidate,
-        bool hasAcceptableReadyCandidate)
+        int bestProgressTier,
+        double bestProgressExpectedNet,
+        bool allowRouteSacrifice)
     {
-        if (!hasAcceptableReadyCandidate)
+        var progressTier = ProgressTier(candidate);
+        if (progressTier == bestProgressTier)
             return 0;
-        return candidate.Shanten <= 0
-            && candidate.WaitCount > 0
-            && candidate.Danger < 78 ? 0 : 1;
+        return allowRouteSacrifice
+            && progressTier <= bestProgressTier + 10
+            && BigRouteCount(candidate) > 0
+            && candidate.ExpectedNetScore >= bestProgressExpectedNet + 1.5
+            ? 0
+            : 1;
     }
 
     internal static int AttackRiskTier(NeijiangCandidateDetail candidate)
     {
         if (candidate.Danger >= 78) return 2;
-        if (candidate.Danger >= 58) return 1;
-        return 0;
-    }
-
-    internal static int UkeireTier(NeijiangCandidateDetail candidate)
-    {
-        if (candidate.Shanten <= 0 && candidate.WaitCount > 0)
-            return candidate.WaitCount >= 2 ? 0 : 1;
-        if (candidate.Shanten <= 1)
-        {
-            if (candidate.LiveUkeire >= 20) return 0;
-            if (candidate.LiveUkeire >= 12) return 1;
-            if (candidate.LiveUkeire >= 6) return 2;
-            return 3;
-        }
-        if (candidate.Shanten == 2)
-        {
-            if (candidate.LiveUkeire >= 30) return 0;
-            if (candidate.LiveUkeire >= 18) return 1;
-            if (candidate.LiveUkeire >= 10) return 2;
-            return 3;
-        }
+        if (candidate.Danger >= 70) return 1;
         return 0;
     }
 
@@ -132,8 +122,8 @@ public static class NeijiangDiscardScorerFactory
         return candidates.Any(item =>
             item.Shanten <= 0
             && item.WaitCount > 0
-            && item.Danger < 86
-            && item.Danger <= minimumDanger + 35);
+            && item.Danger < 78
+            && item.Danger <= minimumDanger + 60);
     }
 
     internal static int DefenseCost(NeijiangCandidateDetail candidate)
@@ -150,14 +140,14 @@ public static class NeijiangDiscardScorerFactory
         return cost;
     }
 
-    internal static int FoldCost(NeijiangCandidateDetail candidate)
+    internal static int FoldCostTier(NeijiangCandidateDetail candidate)
     {
         var cost = candidate.Danger + Math.Max(0, candidate.Shanten) * 12;
         if (candidate.Shanten <= 0 && candidate.WaitCount > 0 && candidate.Danger <= 70)
             cost -= 30;
         if (candidate.Danger >= 86)
             cost += 50;
-        return cost;
+        return Math.Max(0, cost) / 5;
     }
 }
 
@@ -170,11 +160,11 @@ public sealed class TailSettlementDiscardScorer : INeijiangDiscardScorer
         return candidates
             .OrderBy(item => item.Shanten <= 0
                 && item.WaitCount > 0
-                && item.Danger < 86 ? 0 : 1)
+                && item.Danger < 78 ? 0 : 1)
             .ThenBy(item => NeijiangDiscardScorerFactory.StrategicRiskTier(item, context))
             .ThenBy(NeijiangDiscardScorerFactory.AttackRiskTier)
-            .ThenByDescending(item => item.ExpectedNetScore)
             .ThenByDescending(item => item.Score)
+            .ThenByDescending(item => item.ExpectedNetScore)
             .ThenBy(item => item.Danger)
             .ThenByDescending(item => item.WaitCount)
             .ThenBy(item => item.TileType)
@@ -358,13 +348,15 @@ public sealed class AggressiveDiscardScorer : INeijiangDiscardScorer
         IReadOnlyList<NeijiangCandidateDetail> candidates,
         NeijiangAiContext context)
     {
-        var hasReady = NeijiangDiscardScorerFactory.HasAcceptableReadyCandidate(candidates);
+        var bestProgressTier = candidates.Min(NeijiangDiscardScorerFactory.ProgressTier);
+        var hasNearSpeedSafe = candidates.Any(item =>
+            item.Danger < 86
+            && NeijiangDiscardScorerFactory.ProgressTier(item) <= bestProgressTier + 10);
         return candidates
-            .OrderBy(item => NeijiangDiscardScorerFactory.ReadyOpportunityTier(item, hasReady))
-            .ThenBy(item => NeijiangDiscardScorerFactory.StrategicRiskTier(item, context))
+            .OrderBy(item => NeijiangDiscardScorerFactory.CatastrophicRiskTier(item, hasNearSpeedSafe))
             .ThenBy(NeijiangDiscardScorerFactory.ProgressTier)
+            .ThenBy(NeijiangDiscardScorerFactory.ExtremeRiskTier)
             .ThenBy(NeijiangDiscardScorerFactory.AttackRiskTier)
-            .ThenBy(NeijiangDiscardScorerFactory.UkeireTier)
             .ThenByDescending(item => item.Score)
             .ThenByDescending(item => item.ExpectedReadyValue)
             .ThenByDescending(item => item.LiveUkeire)
@@ -380,13 +372,15 @@ public sealed class BalancedDiscardScorer : INeijiangDiscardScorer
         IReadOnlyList<NeijiangCandidateDetail> candidates,
         NeijiangAiContext context)
     {
-        var hasReady = NeijiangDiscardScorerFactory.HasAcceptableReadyCandidate(candidates);
+        var bestProgressTier = candidates.Min(NeijiangDiscardScorerFactory.ProgressTier);
+        var hasNearSpeedSafe = candidates.Any(item =>
+            item.Danger < 86
+            && NeijiangDiscardScorerFactory.ProgressTier(item) <= bestProgressTier + 10);
         return candidates
-            .OrderBy(item => NeijiangDiscardScorerFactory.ReadyOpportunityTier(item, hasReady))
-            .ThenBy(item => NeijiangDiscardScorerFactory.StrategicRiskTier(item, context))
+            .OrderBy(item => NeijiangDiscardScorerFactory.CatastrophicRiskTier(item, hasNearSpeedSafe))
             .ThenBy(NeijiangDiscardScorerFactory.ProgressTier)
+            .ThenBy(NeijiangDiscardScorerFactory.ExtremeRiskTier)
             .ThenBy(NeijiangDiscardScorerFactory.AttackRiskTier)
-            .ThenBy(NeijiangDiscardScorerFactory.UkeireTier)
             .ThenByDescending(item => item.Score)
             .ThenByDescending(item => item.ExpectedReadyValue)
             .ThenByDescending(item => item.LiveUkeire / 4)
@@ -423,10 +417,10 @@ public sealed class FoldDiscardScorer : INeijiangDiscardScorer
         var preserveReady = NeijiangDiscardScorerFactory.ShouldForceReadyPreservation(candidates, context);
         return candidates
             .OrderBy(item => NeijiangDiscardScorerFactory.ReadyPreservationTier(item, preserveReady))
-            .ThenBy(NeijiangDiscardScorerFactory.FoldCost)
-            .ThenBy(item => item.Danger)
+            .ThenBy(NeijiangDiscardScorerFactory.FoldCostTier)
             .ThenBy(NeijiangDiscardScorerFactory.ProgressTier)
             .ThenByDescending(item => item.Score)
+            .ThenBy(item => item.Danger)
             .ThenBy(item => item.TileType)
             .ToList();
     }
@@ -438,13 +432,24 @@ public sealed class ChaseDiscardScorer : INeijiangDiscardScorer
         IReadOnlyList<NeijiangCandidateDetail> candidates,
         NeijiangAiContext context)
     {
-        var hasReady = NeijiangDiscardScorerFactory.HasAcceptableReadyCandidate(candidates);
+        var bestProgressTier = candidates.Min(NeijiangDiscardScorerFactory.ProgressTier);
+        var fastestCandidates = candidates
+            .Where(item => NeijiangDiscardScorerFactory.ProgressTier(item) == bestProgressTier)
+            .ToArray();
+        var bestProgressExpectedNet = fastestCandidates.Max(item => item.ExpectedNetScore);
+        var allowRouteSacrifice = context.Stage.StageIndex <= 1;
+        var hasNearSpeedSafe = candidates.Any(item =>
+            item.Danger < 86
+            && NeijiangDiscardScorerFactory.ProgressTier(item) <= bestProgressTier + 10);
         return candidates
-            .OrderBy(item => NeijiangDiscardScorerFactory.ReadyOpportunityTier(item, hasReady))
-            .ThenBy(item => NeijiangDiscardScorerFactory.StrategicRiskTier(item, context))
-            .ThenBy(NeijiangDiscardScorerFactory.ProgressTier)
+            .OrderBy(item => NeijiangDiscardScorerFactory.CatastrophicRiskTier(item, hasNearSpeedSafe))
+            .ThenBy(item => NeijiangDiscardScorerFactory.ChaseOpportunityTier(
+                item,
+                bestProgressTier,
+                bestProgressExpectedNet,
+                allowRouteSacrifice))
+            .ThenBy(NeijiangDiscardScorerFactory.ExtremeRiskTier)
             .ThenBy(NeijiangDiscardScorerFactory.AttackRiskTier)
-            .ThenBy(NeijiangDiscardScorerFactory.UkeireTier)
             .ThenByDescending(item => item.Score)
             .ThenByDescending(item => item.ExpectedReadyValue)
             .ThenByDescending(NeijiangDiscardScorerFactory.BigRouteCount)

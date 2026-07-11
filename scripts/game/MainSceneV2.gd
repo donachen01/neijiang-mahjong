@@ -521,6 +521,15 @@ func _setup_audio_players() -> void:
 	add_child(system_sfx_player)
 
 
+func _exit_tree() -> void:
+	system_sfx_play_token += 1
+	for player in [tile_voice_player, action_voice_player, system_sfx_player]:
+		if player == null:
+			continue
+		player.stop()
+		player.stream = null
+
+
 func _setup_ai_timers() -> void:
 	ai_turn_timer = Timer.new()
 	ai_turn_timer.one_shot = false
@@ -811,7 +820,7 @@ func _layout_v17_top_button_stack() -> void:
 		if child is Control and (child as Control).visible:
 			visible_count += 1
 	v17_top_button_stack.visible = visible_count > 0
-	v17_top_button_stack.custom_minimum_size = Vector2(132.0, 164.0)
+	v17_top_button_stack.custom_minimum_size = Vector2(214.0, 164.0)
 	v17_top_button_stack.size = v17_top_button_stack.custom_minimum_size
 	v17_top_button_stack.position = Vector2(
 		root_ui.size.x - v17_top_button_stack.custom_minimum_size.x - 18.0,
@@ -826,7 +835,7 @@ func _layout_v17_top_button_stack() -> void:
 			continue
 		button.custom_minimum_size = Vector2(214.0, 82.0 if button != top_next_round_button else 88.0)
 		button.size = button.custom_minimum_size
-		button.position = Vector2((v17_top_button_stack.custom_minimum_size.x - button.size.x) * 0.5, next_y)
+		button.position = Vector2(0.0, next_y)
 		next_y += button.size.y + 8.0
 
 
@@ -2579,6 +2588,8 @@ func _play_new_win_voice(previous_snapshot: Dictionary, snapshot: Dictionary) ->
 
 
 func _play_tile_voice(tile: Dictionary, seat: int) -> void:
+	if not _audio_playback_enabled():
+		return
 	var suit := str(tile.get("suit", ""))
 	var rank := int(tile.get("rank", 0))
 	if suit.is_empty() or rank <= 0:
@@ -2613,6 +2624,8 @@ func _play_result(name: String) -> void:
 
 
 func _speak_action(text: String, seat: int = 0) -> void:
+	if not _audio_playback_enabled():
+		return
 	if text.is_empty():
 		return
 	var profile := _voice_profile_for_seat(seat)
@@ -2627,6 +2640,8 @@ func _speak_action(text: String, seat: int = 0) -> void:
 
 
 func _speak_ding_que(suit: String, seat: int = 0) -> void:
+	if not _audio_playback_enabled():
+		return
 	var action_key := ""
 	match suit:
 		"wan":
@@ -2646,6 +2661,8 @@ func _speak_ding_que(suit: String, seat: int = 0) -> void:
 
 
 func _play_system_audio(resource_path: String, volume: String = "1.0", max_seconds: float = 0.0) -> void:
+	if not _audio_playback_enabled():
+		return
 	if not ResourceLoader.exists(resource_path):
 		return
 	var stream := load(resource_path) as AudioStream
@@ -2660,16 +2677,34 @@ func _play_system_audio(resource_path: String, volume: String = "1.0", max_secon
 		_stop_system_sfx_after(token, max_seconds)
 
 
+func _audio_playback_enabled() -> bool:
+	return DisplayServer.get_name() != "headless"
+
+
 func _play_system_audio_delayed(resource_path: String, volume: String = "1.0", max_seconds: float = 0.0, delay_seconds: float = 0.0) -> void:
-	if delay_seconds > 0.0:
-		await get_tree().create_timer(delay_seconds).timeout
-	_play_system_audio(resource_path, volume, max_seconds)
+	if delay_seconds <= 0.0:
+		_play_system_audio(resource_path, volume, max_seconds)
+		return
+	var delay_timer := Timer.new()
+	delay_timer.one_shot = true
+	delay_timer.timeout.connect(func() -> void:
+		_play_system_audio(resource_path, volume, max_seconds)
+		delay_timer.queue_free()
+	)
+	add_child(delay_timer)
+	delay_timer.start(delay_seconds)
 
 
 func _stop_system_sfx_after(token: int, seconds: float) -> void:
-	await get_tree().create_timer(seconds).timeout
-	if token == system_sfx_play_token and system_sfx_player != null and system_sfx_player.playing:
-		system_sfx_player.stop()
+	var stop_timer := Timer.new()
+	stop_timer.one_shot = true
+	stop_timer.timeout.connect(func() -> void:
+		if token == system_sfx_play_token and system_sfx_player != null and system_sfx_player.playing:
+			system_sfx_player.stop()
+		stop_timer.queue_free()
+	)
+	add_child(stop_timer)
+	stop_timer.start(seconds)
 
 
 func _shell_quote(text: String) -> String:
@@ -3020,7 +3055,7 @@ func _update_self_hu_tile_display(winning_tile: Dictionary, winning_source_seat:
 		return
 	for child in self_hu_tile_host.get_children():
 		self_hu_tile_host.remove_child(child)
-		child.queue_free()
+		child.free()
 	var hu_rect := _v17_self_hu_rect()
 	self_hu_tile_host.custom_minimum_size = Vector2(hu_rect.size.x, hu_rect.size.y)
 	self_hu_tile_host.size = self_hu_tile_host.custom_minimum_size
@@ -3384,45 +3419,21 @@ func _build_helper_csharp_probability_text(option: Dictionary) -> String:
 	var expected_net := float(option.get("expected_net_score", option.get("csharp_expected_net_score", 0.0)))
 	var self_draw := float(option.get("self_draw_probability", option.get("csharp_self_draw_probability", 0.0)))
 	var deal_in := float(option.get("deal_in_probability", option.get("csharp_deal_in_probability", 0.0)))
-	var defense_adjustment := float(option.get("defense_adjustment", option.get("csharp_defense_adjustment", 0.0)))
 	var shape_score := float(option.get("shape_score", option.get("csharp_shape_score", 0.0)))
 	parts.append("综合看大概能赚%.2f" % expected_net)
 	if self_draw > 0.0:
 		parts.append("自摸机会%.0f%%" % (self_draw * 100.0))
-	if deal_in > 0.0:
-		parts.append("放炮机会%.0f%%" % (deal_in * 100.0))
-	if defense_adjustment > 0.01:
-		parts.append("因为要防守，收益会少%.2f" % defense_adjustment)
-	if absf(shape_score) >= 0.5:
-		parts.append("牌会更顺%+.0f" % shape_score)
 	var wait_shape_label := str(option.get("wait_shape_label", option.get("csharp_wait_shape_label", "")))
-	if not wait_shape_label.is_empty() and wait_shape_label != "未成听":
+	if parts.size() < 2 and not wait_shape_label.is_empty() and wait_shape_label != "未成听":
 		parts.append("听牌后牌路%s" % wait_shape_label)
-	var limited_lookahead := float(option.get("limited_lookahead_score", option.get("csharp_limited_lookahead_score", 0.0)))
-	if absf(limited_lookahead) >= 3.0:
-		parts.append("往后多看几步会%+.1f" % limited_lookahead)
-	var posterior_reasons: Array = option.get("posterior_reasons", option.get("csharp_posterior_reasons", []))
-	if not posterior_reasons.is_empty() and str(posterior_reasons[0]) != "后验未明显压分":
-		parts.append(_humanize_helper_text(str(posterior_reasons[0])))
+	if parts.size() < 2 and absf(shape_score) >= 0.5:
+		parts.append("牌会更顺%+.0f" % shape_score)
 	var risk_reasons: Array = option.get("risk_reasons", option.get("csharp_risk_reasons", []))
-	if not risk_reasons.is_empty():
+	if deal_in > 0.0:
+		parts.append("放炮风险%.0f%%" % (deal_in * 100.0))
+	elif not risk_reasons.is_empty():
 		parts.append(_humanize_helper_text(str(risk_reasons[0])))
-	var csharp_reasons: Array = option.get("reasons", option.get("csharp_reasons", []))
-	for reason in csharp_reasons:
-		var reason_text := str(reason)
-		if reason_text.is_empty():
-			continue
-		if reason_text.begins_with("最小向听") \
-			or reason_text.begins_with("活进张") \
-			or reason_text.begins_with("净分期望") \
-			or reason_text.begins_with("危险度") \
-			or reason_text.begins_with("阶段") \
-			or reason_text.begins_with("策略"):
-			continue
-		parts.append(_humanize_helper_text(reason_text))
-		if parts.size() >= 8:
-			break
-	return "｜".join(parts.slice(0, 8))
+	return "｜".join(parts.slice(0, 3))
 
 
 func _build_helper_selected_option_reason(selected_option: Dictionary, recommended: Dictionary) -> String:
@@ -4616,7 +4627,7 @@ func _render_settlement(snapshot: Dictionary) -> void:
 		_seat_name(dealer_seat),
 		_settlement_end_reason_text(str(settlement_view_data.get("end_reason", ""))),
 	]
-	settlement_player_list_title.text = "本局结算"
+	settlement_player_list_title.text = "流局查叫" if str(settlement_view_data.get("end_reason", "")) == "draw_wall_empty" else "胡牌结算"
 	settlement_breakdown_title.text = "分数明细"
 	settlement_hero_badge.text = "本局最佳"
 	settlement_hero_badge.visible = best_seats.has(focus_seat)
@@ -5976,7 +5987,7 @@ func _settlement_end_reason_text(end_reason: String) -> String:
 func _clear_children(node: Node) -> void:
 	for child in node.get_children():
 		node.remove_child(child)
-		child.queue_free()
+		child.free()
 
 
 func _win_type_display_name(win_type: String) -> String:

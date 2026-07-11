@@ -5,6 +5,7 @@ namespace NeijiangMahjong.AI.Core.Engines;
 
 public sealed class NeijiangMctsEngine
 {
+    private const int RolloutsPerCandidate = 16;
     private readonly NeijiangShantenEngine _shanten = new();
     private readonly NeijiangUkeireEngine _ukeire = new();
 
@@ -32,15 +33,13 @@ public sealed class NeijiangMctsEngine
         var counts = narrowed.ToDictionary(item => item.TileType, _ => 0);
         var bestTile = narrowed[0].TileType;
         var bestAvg = double.NegativeInfinity;
+        var random = new Random(BuildDeterministicSeed(state, narrowed));
 
-        while (sw.ElapsedMilliseconds < timeoutMs)
+        for (var rollout = 0; rollout < RolloutsPerCandidate; rollout++)
         {
             foreach (var candidate in narrowed)
             {
-                if (sw.ElapsedMilliseconds >= timeoutMs)
-                    break;
-
-                var score = SimulateCandidate(state, candidate.TileType, rolloutDepth);
+                var score = SimulateCandidate(state, candidate.TileType, rolloutDepth, random);
                 bonuses[candidate.TileType] += score;
                 counts[candidate.TileType]++;
             }
@@ -82,7 +81,11 @@ public sealed class NeijiangMctsEngine
         return false;
     }
 
-    private double SimulateCandidate(NeijiangStateView state, int discardTileType, int rolloutDepth)
+    private double SimulateCandidate(
+        NeijiangStateView state,
+        int discardTileType,
+        int rolloutDepth,
+        Random random)
     {
         var hand = RemoveOne(state.Hand18, discardTileType);
         var remaining = (int[])state.Remaining18.Clone();
@@ -91,7 +94,7 @@ public sealed class NeijiangMctsEngine
 
         for (var depth = 0; depth < rolloutDepth; depth++)
         {
-            var draw = SampleRemainingTile(remaining);
+            var draw = SampleRemainingTile(remaining, random);
             if (draw < 0)
                 break;
 
@@ -237,14 +240,14 @@ public sealed class NeijiangMctsEngine
         return false;
     }
 
-    private static int SampleRemainingTile(int[] remaining)
+    private static int SampleRemainingTile(int[] remaining, Random random)
     {
         var total = 0;
         for (var index = 0; index < remaining.Length; index++)
             total += Math.Max(0, remaining[index]);
         if (total <= 0) return -1;
 
-        var roll = Random.Shared.Next(total);
+        var roll = random.Next(total);
         for (var index = 0; index < remaining.Length; index++)
         {
             var count = Math.Max(0, remaining[index]);
@@ -252,6 +255,37 @@ public sealed class NeijiangMctsEngine
             roll -= count;
         }
         return -1;
+    }
+
+    private static int BuildDeterministicSeed(
+        NeijiangStateView state,
+        IReadOnlyList<NeijiangCandidateDetail> candidates)
+    {
+        var hash = 2166136261u;
+        Add(ref hash, state.SeatIndex);
+        Add(ref hash, state.DealerSeat);
+        Add(ref hash, state.CurrentSeat);
+        Add(ref hash, state.WallCount);
+        Add(ref hash, state.TurnIndex);
+        Add(ref hash, state.Phase);
+        AddRange(ref hash, state.Hand18);
+        AddRange(ref hash, state.Visible18);
+        AddRange(ref hash, state.Remaining18);
+        foreach (var candidate in candidates)
+            Add(ref hash, candidate.TileType);
+        return unchecked((int)hash);
+    }
+
+    private static void AddRange(ref uint hash, IEnumerable<int> values)
+    {
+        foreach (var value in values)
+            Add(ref hash, value);
+    }
+
+    private static void Add(ref uint hash, int value)
+    {
+        hash ^= unchecked((uint)value);
+        hash *= 16777619u;
     }
 
     private static int[] RemoveOne(int[] hand18, int tileType)

@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.59`
+Current app version: `1.0.60`
 
-`1.0.59` keeps the 1.0.58 realtime AI behavior, cleans old generated evidence and retired regression runners out of the source tree, and refreshes the release/test structure after system-disk cleanup.
+`1.0.60` upgrades the realtime veteran AI with seat-isolated context, deterministic strategy scoring and an independent per-discard judge; it also tightens the mobile UI, removes proven-dead legacy assets, and ships clean Android and iOS release projects.
 
 ## Versioning Workflow
 

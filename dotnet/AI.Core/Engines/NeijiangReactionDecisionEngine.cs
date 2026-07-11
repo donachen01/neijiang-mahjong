@@ -625,12 +625,18 @@ public sealed class NeijiangReactionDecisionEngine
         ref int simulations)
     {
         var bonuses = candidates.ToDictionary(item => item.action, _ => 0.0);
+        var random = new Random(BuildReactionSearchSeed(state, candidates));
         foreach (var candidate in candidates)
         {
             var total = 0.0;
             for (var rollout = 0; rollout < ReactionSearchRollouts; rollout++)
             {
-                total += SimulateReactionFuture(state, candidate.handAfter, candidate.meldCountAfter, ReactionSearchDepth);
+                total += SimulateReactionFuture(
+                    state,
+                    candidate.handAfter,
+                    candidate.meldCountAfter,
+                    ReactionSearchDepth,
+                    random);
             }
             bonuses[candidate.action] = total / Math.Max(1, ReactionSearchRollouts);
             simulations += ReactionSearchRollouts;
@@ -639,14 +645,19 @@ public sealed class NeijiangReactionDecisionEngine
         return bonuses.ToDictionary(item => item.Key, item => (item.Value - min) * 0.18);
     }
 
-    private double SimulateReactionFuture(NeijiangStateView state, int[] initialHand, int meldCount, int depth)
+    private double SimulateReactionFuture(
+        NeijiangStateView state,
+        int[] initialHand,
+        int meldCount,
+        int depth,
+        Random random)
     {
         var hand = (int[])initialHand.Clone();
         var remaining = (int[])state.Remaining18.Clone();
         var total = 0.0;
         for (var step = 0; step < depth; step++)
         {
-            var draw = SampleRemainingTile(remaining);
+            var draw = SampleRemainingTile(remaining, random);
             if (draw < 0) break;
             hand[draw]++;
             remaining[draw] = Math.Max(0, remaining[draw] - 1);
@@ -659,13 +670,13 @@ public sealed class NeijiangReactionDecisionEngine
         return total / Math.Max(1, depth);
     }
 
-    private static int SampleRemainingTile(int[] remaining)
+    private static int SampleRemainingTile(int[] remaining, Random random)
     {
         var total = 0;
         for (var index = 0; index < remaining.Length; index++)
             total += Math.Max(0, remaining[index]);
         if (total <= 0) return -1;
-        var roll = Random.Shared.Next(total);
+        var roll = random.Next(total);
         for (var index = 0; index < remaining.Length; index++)
         {
             var count = Math.Max(0, remaining[index]);
@@ -673,6 +684,37 @@ public sealed class NeijiangReactionDecisionEngine
             roll -= count;
         }
         return -1;
+    }
+
+    private static int BuildReactionSearchSeed(
+        NeijiangStateView state,
+        IReadOnlyList<(string action, NeijiangReactionDecisionResult result, int[] handAfter, int meldCountAfter)> candidates)
+    {
+        var hash = 2166136261u;
+        AddSeedValue(ref hash, state.SeatIndex);
+        AddSeedValue(ref hash, state.DealerSeat);
+        AddSeedValue(ref hash, state.CurrentSeat);
+        AddSeedValue(ref hash, state.WallCount);
+        AddSeedValue(ref hash, state.TurnIndex);
+        foreach (var value in state.Hand18)
+            AddSeedValue(ref hash, value);
+        foreach (var value in state.Visible18)
+            AddSeedValue(ref hash, value);
+        foreach (var candidate in candidates)
+        {
+            foreach (var character in candidate.action)
+                AddSeedValue(ref hash, character);
+            AddSeedValue(ref hash, candidate.meldCountAfter);
+            foreach (var value in candidate.handAfter)
+                AddSeedValue(ref hash, value);
+        }
+        return unchecked((int)hash);
+    }
+
+    private static void AddSeedValue(ref uint hash, int value)
+    {
+        hash ^= unchecked((uint)value);
+        hash *= 16777619u;
     }
 
     private static int EstimatePengStructureBoost(
