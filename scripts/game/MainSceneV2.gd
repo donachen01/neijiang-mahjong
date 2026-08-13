@@ -255,6 +255,7 @@ var table_3d_seat_huds: Dictionary = {}
 var table_3d_action_bar: NeijiangActionBar
 var table_3d_utility_bar: NeijiangUtilityBar
 var table_3d_restore_button: Button
+var table_3d_runtime_probe_signature := ""
 var pending_emulated_mouse_press := false
 var pending_emulated_mouse_position := Vector2.ZERO
 var pending_emulated_mouse_msec := -1
@@ -2843,11 +2844,64 @@ func _on_snapshot_changed(snapshot: Dictionary) -> void:
 	_refresh_opening_roll_ui(snapshot)
 	_handle_audio_transitions(previous_snapshot, snapshot)
 	_update_neijiang_3d_ui(snapshot)
+	_write_neijiang_3d_runtime_probe()
 
 	if bool(snapshot.get("opening_roll_pending", false)):
 		var opening_roll: Dictionary = snapshot.get("opening_roll", {})
 		if not opening_roll.is_empty():
 			_start_opening_roll_animation_if_needed(opening_roll)
+
+
+func _write_neijiang_3d_runtime_probe() -> void:
+	if not (OS.has_feature("ios") or OS.has_feature("android")):
+		return
+	var legacy_visible: Array[String] = []
+	for legacy_control in [
+		player_top_host,
+		player_left_host,
+		player_right_host,
+		self_hand_host,
+		board_area,
+		self_info_bar,
+		top_exit_button,
+		top_next_round_button,
+		v17_top_button_stack,
+		floating_right_button_bar,
+		floating_left_button_bar,
+		self_hu_tile_host,
+		discard_helper_panel,
+	]:
+		var control := legacy_control as Control
+		if control != null and control.visible:
+			legacy_visible.append(control.name)
+	for panel_value in v17_player_info_panels.values():
+		var panel := panel_value as Control
+		if panel != null and panel.visible:
+			legacy_visible.append(panel.name)
+	var stage_camera := table_stage_3d.get_camera() if table_stage_3d != null else null
+	var probe := {
+		"app_version": str(ProjectSettings.get_setting("application/config/version", "")),
+		"platform": OS.get_name(),
+		"configured_mobile_renderer": str(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile", "")),
+		"active_rendering_method": RenderingServer.get_current_rendering_method(),
+		"video_adapter": RenderingServer.get_video_adapter_name(),
+		"table_3d_enabled": table_3d_enabled,
+		"stage_in_tree": table_stage_3d != null and table_stage_3d.is_inside_tree(),
+		"stage_visible": table_stage_3d != null and table_stage_3d.visible,
+		"camera_current": stage_camera != null and stage_camera.current,
+		"table_model_present": table_stage_3d != null and table_stage_3d.get_node_or_null("ManufacturedClubTable") != null,
+		"gameplay_tile_count": table_stage_3d.tile_nodes.size() if table_stage_3d != null else 0,
+		"new_seat_hud_count": table_3d_seat_huds.size(),
+		"legacy_visible_controls": legacy_visible,
+		"viewport_size": [get_viewport_rect().size.x, get_viewport_rect().size.y],
+	}
+	var signature := JSON.stringify(probe)
+	if signature == table_3d_runtime_probe_signature:
+		return
+	table_3d_runtime_probe_signature = signature
+	var file := FileAccess.open("user://neijiang_3d_runtime_probe.json", FileAccess.WRITE)
+	if file != null:
+		file.store_string(JSON.stringify(probe, "\t"))
 
 
 func _handle_audio_transitions(previous_snapshot: Dictionary, snapshot: Dictionary) -> void:
@@ -3227,6 +3281,11 @@ func _load_voice_stream(pack: String, key: String) -> AudioStream:
 
 
 func _update_top_bar(snapshot: Dictionary) -> void:
+	# The 3D utility drawer owns difficulty, tuning, next-round, and exit actions.
+	# Do not let the legacy top bar resurface during a mobile snapshot refresh.
+	if table_3d_enabled:
+		_enforce_neijiang_3d_legacy_visibility()
+		return
 	_configure_v17_top_bar()
 	room_card.visible = false
 	room_label.text = ""
@@ -3466,6 +3525,15 @@ func _update_self_area(snapshot: Dictionary, self_hand_tiles: Array) -> void:
 
 func _update_v17_player_info_panels(snapshot: Dictionary) -> void:
 	if v17_player_info_panels.is_empty():
+		return
+	# These panels belong exclusively to the legacy 2D kit. Snapshot refreshes
+	# used to set them visible unconditionally, which caused a second set of seat
+	# cards to reappear over the 3D HUD on iOS after the first state update.
+	if table_3d_enabled:
+		for panel_value in v17_player_info_panels.values():
+			var legacy_panel := panel_value as Control
+			if legacy_panel != null:
+				legacy_panel.visible = false
 		return
 	var players: Array = snapshot.get("players", [])
 	var current_dealer_seat := int(snapshot.get("current_dealer_seat", -1))
@@ -6589,6 +6657,9 @@ func _apply_top_bar_button_group_styles() -> void:
 
 func _configure_top_right_exit_button() -> void:
 	if top_exit_button == null or root_ui == null:
+		return
+	if table_3d_enabled:
+		top_exit_button.visible = false
 		return
 	top_exit_button.text = "X"
 	top_exit_button.visible = true

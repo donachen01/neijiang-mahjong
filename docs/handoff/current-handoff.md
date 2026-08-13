@@ -1,15 +1,17 @@
 # 当前 Handoff - 内江麻将工程
 
-## 2026-08-13 / 1.0.62 最新状态
+## 2026-08-13 / 1.0.63 最新状态
 
 - 当前分支：`codex/neijiang-sichuan-3d-ui-port`。
-- 当前源码版本：`1.0.62`。
+- 当前源码版本：`1.0.63`。
+- 1.0.62 iPhone 实机暴露出灰屏：状态机和 2D HUD 正常，但新 3D 舞台未进入最终画面，旧座位面板又在快照刷新中重新显示。
+- 根因为内江工程仍使用老 `gl_compatibility` 移动渲染器，而移植来的四川 3D 桌面以 `forward_plus` 为正式移动端合同。现已对齐 Forward+，并将旧座位/顶栏隐藏改为快照刷新中的硬性状态约束。
+- 新增 `user://neijiang_3d_runtime_probe.json`，真机启动后可核验实际渲染器、摄像机、桌体、牌节点和旧 UI 可见数。
 - 四川风格 3D UI 已移植到内江牌局表现层，原内江规则、同步 C# AI、动作合法性、计分和回合推进仍由原链路负责。
 - 左上工具抽屉已完成真实鼠标/触摸展开与收起修复，并覆盖缩放视口重复原生按下去重。
 - 本家名牌已固定到左下安全区，不再遮挡左家竖向牌列。
 - 麻将牌恢复 Blender 双实体“翡翠背层 + 暖象牙牌身”结构和受光 PBR 质感；本家字图使用稳定实色印刷层，不再呈现灰白雾感。
-- Android 1.0.62 APK 已完成导出、v2/v3 签名、版本、包名、zipalign 与发布内容检查。
-- iOS 1.0.62 Xcode 工程与最新 NativeAOT 已生成；最终个人开发签名依赖 Xcode Apple Account 登录，因为上一份 1.0.60 免费描述文件已于 2026-07-18 到期。
+- 1.0.63 桌面 Metal Forward+ 与 Forward Mobile 横屏抓图已恢复完整 3D 桌面；Android/iOS 重新打包、真机安装与 GitHub 更新正在执行。
 - 实现与逻辑边界：`docs/ui_rework/内江麻将3DUI移植实现记录_20260813.md`。
 - 牌体层数、厚度和颜色审计：`docs/ui_rework/四川麻将牌体结构与内江迁移审计_20260813.md`。
 - 最终视觉/真实点击证据：`evidence/neijiang_3d_ui_port_20260813/final_click_open_and_hud_2048x1152.png` 与 `final_click_close_and_hud_1365x768.png`。

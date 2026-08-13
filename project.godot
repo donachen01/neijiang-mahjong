@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="内江麻将"
-config/version="1.0.62"
+config/version="1.0.63"
 run/main_scene="res://scenes/boot/SplashScreen.tscn"
 config/features=PackedStringArray("4.6", "C#")
 config/icon="res://res/art/app_icon/app_icon_1024.png"
@@ -38,4 +38,8 @@ project/assembly_name="NeijiangMahjong.Godot"
 
 [rendering]
 
-renderer/rendering_method.mobile="gl_compatibility"
+; The Sichuan-derived 3D table uses Filmic tonemapping, SSAO, layered lighting,
+; and imported PBR materials. Keep mobile on the same Forward+ contract as the
+; source project; Compatibility can leave the iOS 3D pass blank while the HUD
+; CanvasLayer continues to render.
+renderer/rendering_method.mobile="forward_plus"

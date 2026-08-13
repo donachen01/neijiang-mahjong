@@ -14,6 +14,7 @@ func _init() -> void:
 
 func _run() -> void:
 	var failures: Array[String] = []
+	_verify_mobile_renderer_contract(failures)
 	await _verify_table_stage_contract(failures)
 	await _verify_action_bar_contract(failures)
 	await _verify_seat_hud_contract(failures)
@@ -26,6 +27,14 @@ func _run() -> void:
 		return
 	push_error("NEIJIANG 3D UI REGRESSION FAILED:\n- %s" % "\n- ".join(failures))
 	quit(1)
+
+
+func _verify_mobile_renderer_contract(failures: Array[String]) -> void:
+	var mobile_renderer := str(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile", ""))
+	if mobile_renderer != "forward_plus":
+		failures.append(
+			"Sichuan-derived PBR table requires forward_plus on mobile, got %s" % mobile_renderer
+		)
 
 
 func _verify_table_stage_contract(failures: Array[String]) -> void:
@@ -197,6 +206,18 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 		failures.append("MainScene did not install the snapshot-driven 3D stage")
 	if main_scene.get("table_3d_action_bar") == null or main_scene.get("table_3d_utility_bar") == null:
 		failures.append("MainScene did not install the Neijiang action/utility adapters")
+	main_scene.call("_on_snapshot_changed", main_scene.get("last_snapshot"))
+	var top_next_round := main_scene.get_node_or_null(
+		"UILayer/RootUI/SafeArea/MainVBox/TopBar/TopBarMargin/TopBarRow/TopNextRoundButton"
+	) as Control
+	if top_next_round != null and top_next_round.visible:
+		failures.append("legacy next-round button resurfaced during a 3D snapshot refresh")
+	var legacy_panels: Dictionary = main_scene.get("v17_player_info_panels")
+	for panel_value in legacy_panels.values():
+		var legacy_panel := panel_value as Control
+		if legacy_panel != null and legacy_panel.visible:
+			failures.append("legacy seat panel resurfaced during a 3D snapshot refresh")
+			break
 	main_scene.call("_set_neijiang_3d_ui_enabled", false)
 	var restore_button := main_scene.get("table_3d_restore_button") as Button
 	if restore_button == null or not restore_button.visible:

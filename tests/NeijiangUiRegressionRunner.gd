@@ -20,8 +20,13 @@ func _run() -> void:
 	_run_test("selected_tile_helper_uses_csharp_candidate_details", _test_selected_tile_helper_uses_csharp_candidate_details.bind(root_node), failures)
 	_run_test("recommended_tile_helper_prioritizes_csharp_probability_details", _test_recommended_tile_helper_prioritizes_csharp_probability_details.bind(root_node), failures)
 	_run_test("neijiang_settlement_hides_stale_ding_que_tags", _test_neijiang_settlement_hides_stale_ding_que_tags.bind(root_node), failures)
+	# These two contracts intentionally describe the retained legacy 2D fallback.
+	# The production default is now the 3D kit, where the old X/top stack must be
+	# hidden; switch modes explicitly so this runner validates the right surface.
+	root_node.call("_set_neijiang_3d_ui_enabled", false)
 	_run_test("top_right_x_exit_button_is_visible", _test_top_right_x_exit_button_is_visible.bind(root_node), failures)
 	_run_test("main_controls_are_layered_by_purpose", _test_main_controls_are_layered_by_purpose.bind(root_node), failures)
+	root_node.call("_set_neijiang_3d_ui_enabled", true)
 	_run_test("action_buttons_use_circular_mahjong_style", _test_action_buttons_use_circular_mahjong_style.bind(root_node), failures)
 	_run_test("bao_gang_dialog_stays_phone_readable", _test_bao_gang_dialog_stays_phone_readable.bind(root_node), failures)
 	_run_test("opening_roll_ui_timer_commits_before_bao_jiao", _test_opening_roll_ui_timer_commits_before_bao_jiao.bind(root_node), failures)

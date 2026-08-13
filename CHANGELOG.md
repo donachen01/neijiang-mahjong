@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.63 - 2026-08-13
+
+- Fixed the iPhone gray-screen regression by switching the mobile renderer from the legacy Compatibility path to the same Forward+ contract used by the source Sichuan 3D project, restoring the camera, PBR table, tile meshes, environment, lights and center compass on Metal.
+- Prevented the legacy 2D seat panels, next-round button and exit/top-bar controls from resurfacing during snapshot, settlement or responsive-layout refreshes while the 3D presentation is active.
+- Added a mobile runtime probe that records the packaged app version, configured and active rendering methods, video adapter, camera/table/tile readiness, new HUD count and any incorrectly visible legacy controls for post-install verification.
+- Added regression coverage for the mobile renderer contract and repeated snapshot visibility invariant while preserving the original Neijiang game-state, scoring, realtime C# AI and input/event routes.
+
 ## 1.0.62 - 2026-08-13
 
 - Fixed the top-left 3D utility drawer so real mouse and touch presses open and close it reliably at scaled desktop and mobile viewports, including duplicate native-press suppression and executable coordinate-click regression checks.
