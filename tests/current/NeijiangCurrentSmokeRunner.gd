@@ -9,13 +9,13 @@ func _init() -> void:
 
 func _run() -> void:
 	var failures: Array[String] = []
-	_run_test("startup_defaults_to_desktop_debug_hell_training_on", _test_startup_defaults_to_desktop_debug_hell_training_on, failures)
+	_run_test("startup_keeps_raw_ai_analysis_opt_in", _test_startup_keeps_raw_ai_analysis_opt_in, failures)
 	_run_test("legacy_ai_level_cheating_maps_to_hell_preset", _test_legacy_ai_level_cheating_maps_to_hell_preset, failures)
 	_run_test("hell_challenge_mode_executes_oracle_without_recording", _test_hell_challenge_mode_executes_oracle_without_recording, failures)
 	_run_test("hell_challenge_sync_delivery_counts_as_direct_analysis", _test_hell_challenge_sync_delivery_counts_as_direct_analysis, failures)
 	_run_test("hell_challenge_oracle_replaces_deal_in_discard", _test_hell_challenge_oracle_replaces_deal_in_discard, failures)
 	_run_test("hell_challenge_async_decision_applies_oracle", _test_hell_challenge_async_decision_applies_oracle, failures)
-	_run_test("desktop_debug_records_training_event", _test_desktop_debug_records_training_event, failures)
+	_run_test("desktop_debug_does_not_write_raw_ai_analysis_by_default", _test_desktop_debug_does_not_write_raw_ai_analysis_by_default, failures)
 	_run_test("debug_decision_trace_appends_complete_events", _test_debug_decision_trace_appends_complete_events, failures)
 	_run_test("neijiang_uses_two_suits_without_ding_que", _test_neijiang_uses_two_suits_without_ding_que, failures)
 	_run_test("neijiang_initial_deal_uses_72_tiles", _test_neijiang_initial_deal_uses_72_tiles, failures)
@@ -67,7 +67,7 @@ func _test_neijiang_uses_two_suits_without_ding_que():
 	return true
 
 
-func _test_startup_defaults_to_desktop_debug_hell_training_on():
+func _test_startup_keeps_raw_ai_analysis_opt_in():
 	var game_state = _build_game_state()
 	var snapshot: Dictionary = game_state.get_debug_snapshot()
 	var config: Dictionary = snapshot.get("ai_tuning_config", {})
@@ -75,8 +75,8 @@ func _test_startup_defaults_to_desktop_debug_hell_training_on():
 		return "expected startup preset hell, got %s" % [config]
 	if int(snapshot.get("ai_level_index", -1)) != int(GAME_STATE_SCRIPT.AILevel.CHEATING):
 		return "expected startup ai level cheating in hell mode, got %s" % [snapshot.get("ai_level_index", -1)]
-	if not bool(config.get("diagnostics_recording_enabled", false)):
-		return "expected desktop debug diagnostics recording enabled for hell training, got %s" % [config]
+	if bool(config.get("diagnostics_recording_enabled", true)):
+		return "expected full raw ai-analysis recording to require explicit opt-in, got %s" % [config]
 	if bool(config.get("auto_learning_enabled", true)):
 		return "expected auto learning recording disabled for user release, got %s" % [config]
 	if not bool(config.get("hell_ai_can_see_wall", false)):
@@ -86,19 +86,19 @@ func _test_startup_defaults_to_desktop_debug_hell_training_on():
 	if not bool(config.get("hell_execute_oracle_action", false)):
 		return "expected hell challenge to execute oracle action, got %s" % [config]
 	var hell: Dictionary = snapshot.get("hell_training", {})
-	if not bool(hell.get("enabled", false)):
-		return "expected hell diagnostics enabled for desktop debug training, got %s" % [hell]
+	if bool(hell.get("enabled", true)):
+		return "expected full hell diagnostics session disabled until explicitly enabled, got %s" % [hell]
 	if not bool(hell.get("challenge_enabled", false)):
 		return "expected hell challenge to be enabled independent of diagnostics, got %s" % [hell]
 	var output_dirs: Dictionary = hell.get("output_dirs", {})
 	if not str(output_dirs.get("training", "")).begins_with("res://测试数据统计/hell_training"):
 		return "expected project hell_training output dir, got %s" % [output_dirs]
 	var recording: Dictionary = snapshot.get("ai_analysis_recording", {})
-	if not bool(recording.get("enabled", false)):
-		return "expected ai analysis recording enabled for desktop debug, got %s" % [recording]
+	if bool(recording.get("enabled", true)):
+		return "expected raw ai analysis recording disabled by default, got %s" % [recording]
 	var export_result: Dictionary = game_state.export_diagnostic_package(false)
-	if not bool(export_result.get("ok", false)):
-		return "expected diagnostic export available in desktop debug training, got %s" % [export_result]
+	if bool(export_result.get("ok", false)):
+		return "expected raw diagnostic export disabled without explicit opt-in, got %s" % [export_result]
 	return true
 
 
@@ -238,7 +238,7 @@ func _test_hell_challenge_async_decision_applies_oracle():
 	return true
 
 
-func _test_desktop_debug_records_training_event():
+func _test_desktop_debug_does_not_write_raw_ai_analysis_by_default():
 	var game_state = _build_game_state()
 	game_state._record_ai_analysis_event("training_probe", {
 		"turn_diagnostic": {
@@ -247,16 +247,13 @@ func _test_desktop_debug_records_training_event():
 		},
 	})
 	var recording: Dictionary = game_state.get_debug_snapshot().get("ai_analysis_recording", {})
-	if int(recording.get("event_count", 0)) <= 0:
-		return "expected desktop debug to record training events, got %s" % [recording]
-	if str(recording.get("session_id", "")).is_empty():
-		return "expected training session id in desktop debug, got %s" % [recording]
-	var events_path := str(recording.get("events_path", ""))
-	if events_path.is_empty() or not FileAccess.file_exists(events_path):
-		return "expected ai analysis events file, got %s" % [recording]
+	if bool(recording.get("enabled", true)) or int(recording.get("event_count", -1)) != 0:
+		return "expected raw desktop ai-analysis event stream to stay disabled, got %s" % [recording]
+	if not str(recording.get("session_id", "")).is_empty():
+		return "expected no raw ai-analysis session id without opt-in, got %s" % [recording]
 	var export_result: Dictionary = game_state.export_diagnostic_package(false)
-	if not bool(export_result.get("ok", false)):
-		return "expected desktop debug diagnostic export enabled, got %s" % [export_result]
+	if bool(export_result.get("ok", false)):
+		return "expected raw diagnostic export disabled without opt-in, got %s" % [export_result]
 	return true
 
 

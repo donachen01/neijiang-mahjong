@@ -5873,9 +5873,9 @@ func _is_hell_challenge_mode() -> bool:
 
 
 func _is_ai_analysis_recording_enabled() -> bool:
-	if not _is_runtime_recording_enabled():
-		return false
-	return AI_ANALYSIS_RECORDING_ENABLED or _is_debug_training_recording_enabled()
+	# Full per-event snapshots can grow to multiple GB during long desktop debug runs.
+	# Keep the normal training records, but require an explicit opt-in for this raw stream.
+	return AI_ANALYSIS_RECORDING_ENABLED
 
 
 func _is_ai_chain_debug_enabled() -> bool:
