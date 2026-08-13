@@ -7,6 +7,11 @@ const DICE_FACE_SCRIPT := preload("res://scripts/ui/DiceFace.gd")
 const WALL_COUNT_DISC_SCRIPT := preload("res://scripts/ui/WallCountDisc.gd")
 const TABLE_MATERIAL_OVERLAY_SCRIPT := preload("res://scripts/ui/TableMaterialOverlay.gd")
 const CIRCULAR_ACTION_BUTTON_OVERLAY_SCRIPT := preload("res://scripts/ui/CircularActionButtonOverlay.gd")
+const TABLE_STAGE_3D_SCRIPT := preload("res://scripts/ui/3d/NeijiangTableStage3D.gd")
+const SEAT_HUD_3D_SCRIPT := preload("res://scripts/ui/table/NeijiangSeatHUD.gd")
+const ACTION_BAR_3D_SCRIPT := preload("res://scripts/ui/table/NeijiangActionBar.gd")
+const UTILITY_BAR_3D_SCRIPT := preload("res://scripts/ui/table/NeijiangUtilityBar.gd")
+const SETTLEMENT_SHELL_3D_TEXTURE := preload("res://res/art/ui/table_v2/settlement_panel_9slice.png")
 const AUDIO_SFX_DIR := "res://res/audio/sfx"
 const AUDIO_TTS_DIR := "res://res/audio/tts"
 const DICE_ROLL_AUDIO_PATH := "res://res/audio/sfx/mahjong_dice_roll.wav"
@@ -65,6 +70,9 @@ const UI_PREFS_PATH := "user://ui_prefs.cfg"
 const UI_PREFS_SECTION := "main_scene_v2"
 const UI_PREFS_KEY_AI_HELPER := "ai_helper_enabled"
 const UI_PREFS_KEY_OPPONENT_HANDS := "opponent_hands_enabled"
+const UI_PREFS_KEY_3D_TABLE := "neijiang_3d_table_enabled"
+const EMULATED_MOUSE_SUPPRESSION_MSEC := 480
+const EMULATED_MOUSE_POSITION_TOLERANCE := 34.0
 const TILE_VISUAL_BASE_SIZE := Vector2(92.0, 140.0)
 const SETTLEMENT_PANEL_SCREEN_RATIO := Vector2(0.985, 0.965)
 const SETTLEMENT_PANEL_MAX_SIZE := Vector2(4096.0, 4096.0)
@@ -240,6 +248,16 @@ var bao_gang_dialog_committed := false
 var selected_tile_id: int = -1
 var settlement_selected_seat: int = -1
 var last_snapshot: Dictionary = {}
+var table_3d_enabled := true
+var table_stage_3d: NeijiangTableStage3D
+var table_3d_ui_root: Control
+var table_3d_seat_huds: Dictionary = {}
+var table_3d_action_bar: NeijiangActionBar
+var table_3d_utility_bar: NeijiangUtilityBar
+var table_3d_restore_button: Button
+var pending_emulated_mouse_press := false
+var pending_emulated_mouse_position := Vector2.ZERO
+var pending_emulated_mouse_msec := -1
 var ai_turn_timer: Timer
 var ai_reaction_timer: Timer
 var ai_watchdog_timer: Timer
@@ -376,7 +394,9 @@ func _ready() -> void:
 	_ensure_an_gang_button()
 	_ensure_bao_jiao_button()
 	_ensure_bao_gang_dialog()
+	_setup_neijiang_3d_ui()
 	_apply_style()
+	_apply_neijiang_settlement_shell()
 	_mount_self_won_stamp_overlay()
 	_configure_board_lanes()
 	_bind_board_square_layout()
@@ -420,7 +440,436 @@ func _ready() -> void:
 	call_deferred("_center_ai_tuning_panel")
 
 
+func _setup_neijiang_3d_ui() -> void:
+	if table_stage_3d != null or root_ui == null:
+		return
+	table_stage_3d = TABLE_STAGE_3D_SCRIPT.new() as NeijiangTableStage3D
+	table_stage_3d.name = "NeijiangTableStage3D"
+	table_stage_3d.set_reduced_motion(bool(ProjectSettings.get_setting("accessibility/reduced_motion", false)))
+	table_stage_3d.tile_pressed.connect(_on_hand_tile_pressed)
+	$GameScene.add_child(table_stage_3d)
+
+	table_3d_ui_root = Control.new()
+	table_3d_ui_root.name = "NeijiangTableUI"
+	table_3d_ui_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	table_3d_ui_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	table_3d_ui_root.z_index = 180
+	root_ui.add_child(table_3d_ui_root)
+
+	for seat in range(4):
+		var seat_hud := SEAT_HUD_3D_SCRIPT.new() as NeijiangSeatHUD
+		seat_hud.name = "NeijiangSeatHUD%d" % seat
+		seat_hud.configure(seat)
+		table_3d_ui_root.add_child(seat_hud)
+		table_3d_seat_huds[seat] = seat_hud
+
+	table_3d_action_bar = ACTION_BAR_3D_SCRIPT.new() as NeijiangActionBar
+	table_3d_action_bar.name = "NeijiangActionBar"
+	table_3d_action_bar.z_index = 30
+	table_3d_action_bar.set_reduced_motion(bool(ProjectSettings.get_setting("accessibility/reduced_motion", false)))
+	table_3d_action_bar.action_selected.connect(_on_neijiang_3d_action_selected)
+	table_3d_ui_root.add_child(table_3d_action_bar)
+
+	table_3d_utility_bar = UTILITY_BAR_3D_SCRIPT.new() as NeijiangUtilityBar
+	table_3d_utility_bar.name = "NeijiangUtilityBar"
+	table_3d_utility_bar.z_index = 40
+	table_3d_utility_bar.utility_selected.connect(_on_neijiang_3d_utility_selected)
+	table_3d_ui_root.add_child(table_3d_utility_bar)
+	table_3d_restore_button = Button.new()
+	table_3d_restore_button.name = "RestoreNeijiang3DButton"
+	table_3d_restore_button.text = "切换 3D 牌桌"
+	table_3d_restore_button.custom_minimum_size = Vector2(164.0, 58.0)
+	table_3d_restore_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	table_3d_restore_button.offset_left = -188.0
+	table_3d_restore_button.offset_top = 18.0
+	table_3d_restore_button.offset_right = -18.0
+	table_3d_restore_button.offset_bottom = 76.0
+	table_3d_restore_button.z_index = 310
+	table_3d_restore_button.focus_mode = Control.FOCUS_ALL
+	table_3d_restore_button.pressed.connect(func() -> void: _set_neijiang_3d_ui_enabled(true))
+	root_ui.add_child(table_3d_restore_button)
+
+	if not root_ui.resized.is_connected(_queue_neijiang_3d_layout):
+		root_ui.resized.connect(_queue_neijiang_3d_layout)
+	_set_neijiang_3d_ui_enabled(table_3d_enabled)
+	_queue_neijiang_3d_layout()
+
+
+func _apply_neijiang_settlement_shell() -> void:
+	if settlement_panel == null:
+		return
+	var shell := StyleBoxTexture.new()
+	shell.texture = SETTLEMENT_SHELL_3D_TEXTURE
+	shell.draw_center = true
+	shell.texture_margin_left = 104.0
+	shell.texture_margin_top = 90.0
+	shell.texture_margin_right = 104.0
+	shell.texture_margin_bottom = 90.0
+	shell.content_margin_left = 30.0
+	shell.content_margin_top = 26.0
+	shell.content_margin_right = 30.0
+	shell.content_margin_bottom = 26.0
+	settlement_panel.add_theme_stylebox_override("panel", shell)
+	settlement_shade.color = Color(0.015, 0.030, 0.025, 0.76)
+
+
+func _set_neijiang_3d_ui_enabled(enabled: bool) -> void:
+	table_3d_enabled = enabled
+	if table_stage_3d != null:
+		table_stage_3d.visible = enabled
+	if table_3d_ui_root != null:
+		table_3d_ui_root.visible = enabled
+	if table_3d_restore_button != null:
+		table_3d_restore_button.visible = not enabled
+	if background_rect != null:
+		background_rect.visible = not enabled
+	if safe_area != null:
+		safe_area.visible = not enabled
+	if action_panel != null and enabled:
+		action_panel.visible = false
+	for legacy_control in [
+		player_top_host,
+		player_left_host,
+		player_right_host,
+		self_hand_host,
+		board_area,
+		self_info_bar,
+		top_exit_button,
+		top_next_round_button,
+		v17_top_button_stack,
+		floating_right_button_bar,
+		floating_left_button_bar,
+		self_hu_tile_host,
+		discard_helper_panel,
+	]:
+		if legacy_control != null:
+			legacy_control.visible = not enabled
+	for panel_value in v17_player_info_panels.values():
+		var panel := panel_value as Control
+		if panel != null:
+			panel.visible = not enabled
+	if not last_snapshot.is_empty():
+		if enabled:
+			_update_neijiang_3d_ui(last_snapshot)
+			_refresh_neijiang_3d_action_bar(last_snapshot)
+		else:
+			_on_snapshot_changed(last_snapshot)
+	_save_ui_preferences()
+
+
+func _update_neijiang_3d_ui(snapshot: Dictionary) -> void:
+	if not table_3d_enabled or table_stage_3d == null or game_manager == null or game_manager.game_state == null:
+		return
+	_enforce_neijiang_3d_legacy_visibility()
+	var all_hands: Array = []
+	for seat in range(4):
+		all_hands.append(game_manager.game_state.call("get_player_hand_tiles", seat))
+	var trainer_hint: Dictionary = snapshot.get("trainer_hint", {}) if ai_helper_enabled else {}
+	var markers := {
+		"recommended_tile_id": int(trainer_hint.get("recommended_tile_id", -1)),
+		"danger_tile_ids": Array(trainer_hint.get("danger_tile_ids", [])).duplicate(),
+	}
+	table_stage_3d.render_snapshot(snapshot, all_hands, opponent_hands_enabled, selected_tile_id, markers)
+	var players: Array = snapshot.get("players", [])
+	var active_seat := int(snapshot.get("current_turn_seat", -1))
+	var dealer_seat := int(snapshot.get("current_dealer_seat", -1))
+	for seat in range(4):
+		var seat_hud := table_3d_seat_huds.get(seat) as NeijiangSeatHUD
+		if seat_hud != null:
+			seat_hud.render(_player_by_seat(players, seat), active_seat, dealer_seat)
+	if table_3d_utility_bar != null:
+		table_3d_utility_bar.render(snapshot, ai_helper_enabled, opponent_hands_enabled)
+	_queue_neijiang_3d_layout()
+
+
+func _enforce_neijiang_3d_legacy_visibility() -> void:
+	if not table_3d_enabled:
+		return
+	if safe_area != null:
+		safe_area.visible = false
+	if background_rect != null:
+		background_rect.visible = false
+	if action_panel != null:
+		action_panel.visible = false
+	for legacy_control in [
+		player_top_host,
+		player_left_host,
+		player_right_host,
+		self_hand_host,
+		board_area,
+		self_info_bar,
+		top_exit_button,
+		top_next_round_button,
+		v17_top_button_stack,
+		floating_right_button_bar,
+		floating_left_button_bar,
+		self_hu_tile_host,
+		discard_helper_panel,
+	]:
+		if legacy_control != null:
+			legacy_control.visible = false
+	for panel_value in v17_player_info_panels.values():
+		var panel := panel_value as Control
+		if panel != null:
+			panel.visible = false
+
+
+func _refresh_neijiang_3d_action_bar(snapshot: Dictionary) -> void:
+	if table_3d_action_bar == null:
+		return
+	if not table_3d_enabled:
+		table_3d_action_bar.hide_actions()
+		return
+	var reaction_options: Dictionary = snapshot.get("human_reaction_options", {})
+	var can_self_hu := bool(snapshot.get("human_can_self_hu", false))
+	var can_add_gang := bool(snapshot.get("human_can_add_gang", false))
+	var can_an_gang := bool(snapshot.get("human_can_an_gang", false))
+	var can_bao_jiao := bool(snapshot.get("human_can_bao_jiao", false))
+	var can_pass_opening := bool(snapshot.get("human_can_pass_opening_bao_jiao", false))
+	var self_player := _player_by_seat(snapshot.get("players", []), 0)
+	var show_cancel_self_hu := can_self_hu and not bool(reaction_options.get("can_pass", false))
+	var actions: Array[Dictionary] = []
+	if can_self_hu or bool(reaction_options.get("can_hu", false)):
+		actions.append({"id": "hu", "label": "自摸" if can_self_hu and not bool(reaction_options.get("can_hu", false)) else "胡"})
+	if can_add_gang or bool(reaction_options.get("can_gang", false)):
+		actions.append({"id": "gang", "label": "补杠" if can_add_gang else "杠"})
+	if can_an_gang:
+		actions.append({"id": "an_gang", "label": "报杠" if bool(self_player.get("bao_jiao", false)) else "暗杠"})
+	if bool(reaction_options.get("can_peng", false)):
+		actions.append({"id": "peng", "label": "碰"})
+	if can_bao_jiao:
+		var plan: Dictionary = snapshot.get("human_bao_jiao_plan", {})
+		var options: Array = plan.get("bao_gang_options", [])
+		actions.append({"id": "bao_jiao", "label": "报叫/报杠" if not options.is_empty() else "报叫"})
+	if can_pass_opening or bool(reaction_options.get("can_pass", false)) or show_cancel_self_hu:
+		actions.append({"id": "pass", "label": "过"})
+	if bool(self_player.get("has_won", false)) or int(snapshot.get("current_phase", 0)) == 7:
+		actions.clear()
+	var status_text := _build_action_panel_status_text(
+		reaction_options,
+		can_self_hu,
+		can_add_gang,
+		can_an_gang,
+		can_bao_jiao,
+		can_pass_opening,
+		show_cancel_self_hu
+	)
+	table_3d_action_bar.render(actions, status_text)
+	if action_panel != null:
+		action_panel.visible = false
+	_queue_neijiang_3d_layout()
+
+
+func _on_neijiang_3d_action_selected(action: String) -> void:
+	match action:
+		"hu":
+			_on_hu_pressed()
+		"gang":
+			_on_gang_pressed()
+		"an_gang":
+			_on_an_gang_pressed()
+		"peng":
+			_on_peng_pressed()
+		"bao_jiao":
+			_on_bao_jiao_pressed()
+		"pass":
+			_on_pass_pressed()
+
+
+func _on_neijiang_3d_utility_selected(action: String) -> void:
+	match action:
+		"difficulty":
+			_on_top_bar_button_pressed()
+		"tuning":
+			_on_top_ai_tuning_button_pressed()
+		"helper":
+			_on_top_ai_helper_button_pressed()
+		"opponents":
+			_on_top_opponent_hand_button_pressed()
+		"settlement":
+			_on_top_settlement_info_pressed()
+		"next_round":
+			_on_top_next_round_pressed()
+		"view":
+			_set_neijiang_3d_ui_enabled(false)
+		"exit":
+			_on_top_exit_pressed()
+
+
+func _queue_neijiang_3d_layout() -> void:
+	call_deferred("_apply_neijiang_3d_layout")
+
+
+func _apply_neijiang_3d_layout() -> void:
+	if not table_3d_enabled or table_3d_ui_root == null or root_ui == null:
+		return
+	var viewport_size := root_ui.size
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		viewport_size = get_viewport_rect().size
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return
+	var safe_margins := _neijiang_safe_area_margins(viewport_size)
+	var ui_scale := clampf(viewport_size.y / DESIGN_BASE_SIZE.y, 0.72, 1.10)
+	var hud_size := Vector2(230.0, 146.0)
+	# 复用四川桌面的四席参考轨迹：尤其把对家名牌放到右上方，避开横向手牌。
+	# 位置随视口分别缩放，尺寸仍走统一的可读性缩放与安全区约束。
+	var reference_scale := Vector2(viewport_size.x / DESIGN_BASE_SIZE.x, viewport_size.y / DESIGN_BASE_SIZE.y)
+	var self_hand_top := 856.0 * reference_scale.y
+	# 工具抽屉现在默认收纳到左上角，右侧不再为旧竖向按钮栏预留空白。
+	var right_hud_max_x := viewport_size.x - safe_margins.z - hud_size.x * ui_scale - 18.0
+	var self_hud_position := Vector2(
+		safe_margins.x,
+		viewport_size.y - safe_margins.w - hud_size.y * ui_scale - 12.0
+	)
+	var hud_positions := {
+		0: self_hud_position,
+		1: Vector2(maxf(safe_margins.x, 80.0 * reference_scale.x), maxf(safe_margins.y, 170.0 * reference_scale.y)),
+		2: Vector2(clampf(1450.0 * reference_scale.x, safe_margins.x, viewport_size.x - safe_margins.z - hud_size.x * ui_scale), safe_margins.y + 16.0),
+		3: Vector2(clampf(1750.0 * reference_scale.x, safe_margins.x, right_hud_max_x), maxf(safe_margins.y, 170.0 * reference_scale.y)),
+	}
+	for seat in range(4):
+		var seat_hud := table_3d_seat_huds.get(seat) as NeijiangSeatHUD
+		if seat_hud == null:
+			continue
+		seat_hud.size = hud_size
+		seat_hud.scale = Vector2.ONE * ui_scale
+		seat_hud.position = hud_positions[seat]
+	if table_3d_utility_bar != null:
+		table_3d_utility_bar.reset_size()
+		var utility_scale := clampf(ui_scale, 0.78, 1.0)
+		table_3d_utility_bar.scale = Vector2.ONE * utility_scale
+		table_3d_utility_bar.size = table_3d_utility_bar.custom_minimum_size
+		table_3d_utility_bar.position = Vector2(
+			safe_margins.x + 18.0,
+			safe_margins.y + 16.0
+		)
+	if table_3d_action_bar != null and table_3d_action_bar.visible:
+		table_3d_action_bar.reset_size()
+		var action_scale := clampf(ui_scale, 0.74, 1.0)
+		table_3d_action_bar.scale = Vector2.ONE * action_scale
+		table_3d_action_bar.size = table_3d_action_bar.custom_minimum_size
+		table_3d_action_bar.position = Vector2(
+			clampf(
+				viewport_size.x - safe_margins.z - table_3d_action_bar.size.x * action_scale - 150.0,
+				safe_margins.x + 320.0 * ui_scale,
+				viewport_size.x - table_3d_action_bar.size.x * action_scale - safe_margins.z
+			),
+			minf(
+				viewport_size.y - safe_margins.w - table_3d_action_bar.size.y * action_scale - 20.0,
+				viewport_size.y * 0.68 - table_3d_action_bar.size.y * action_scale
+			)
+		)
+
+
+func _neijiang_safe_area_margins(viewport_size: Vector2) -> Vector4:
+	var fallback := Vector4(18.0, 14.0, 18.0, 18.0)
+	if not (OS.has_feature("ios") or OS.has_feature("android")):
+		return fallback
+	var window_size := Vector2(DisplayServer.window_get_size())
+	var safe_rect := Rect2(DisplayServer.get_display_safe_area())
+	if window_size.x <= 1.0 or window_size.y <= 1.0 or safe_rect.size.x <= 1.0 or safe_rect.size.y <= 1.0:
+		return fallback
+	var left := safe_rect.position.x / window_size.x * viewport_size.x
+	var top := safe_rect.position.y / window_size.y * viewport_size.y
+	var right := (window_size.x - safe_rect.end.x) / window_size.x * viewport_size.x
+	var bottom := (window_size.y - safe_rect.end.y) / window_size.y * viewport_size.y
+	return Vector4(maxf(12.0, left), maxf(10.0, top), maxf(12.0, right), maxf(12.0, bottom))
+
+
+func _handle_neijiang_3d_table_pointer(event: InputEvent) -> bool:
+	if table_stage_3d == null or not table_stage_3d.visible:
+		return false
+	if event is InputEventScreenTouch:
+		var touch_event := event as InputEventScreenTouch
+		if not touch_event.pressed or _is_neijiang_3d_ui_point_blocked(touch_event.position):
+			return false
+		var touch_tile_id := table_stage_3d.find_tile_at_screen(touch_event.position)
+		if touch_tile_id < 0:
+			return false
+		pending_emulated_mouse_press = true
+		pending_emulated_mouse_position = touch_event.position
+		pending_emulated_mouse_msec = Time.get_ticks_msec()
+		table_stage_3d.pick_tile(touch_event.position)
+		return true
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+			return false
+		if _consume_neijiang_emulated_mouse_press(mouse_event.position):
+			return true
+		if _is_neijiang_3d_ui_point_blocked(mouse_event.position):
+			return false
+		var mouse_tile_id := table_stage_3d.find_tile_at_screen(mouse_event.position)
+		if mouse_tile_id < 0:
+			return false
+		table_stage_3d.pick_tile(mouse_event.position)
+		return true
+	return false
+
+
+func _handle_neijiang_3d_utility_pointer(event: InputEvent) -> bool:
+	if table_3d_utility_bar == null or not table_3d_utility_bar.visible:
+		return false
+	var pointer_position := Vector2.ZERO
+	if event is InputEventScreenTouch:
+		var touch_event := event as InputEventScreenTouch
+		if not touch_event.pressed:
+			return false
+		pointer_position = touch_event.position
+		if not table_3d_utility_bar.activate_at_global_position(pointer_position):
+			return false
+		pending_emulated_mouse_press = true
+		pending_emulated_mouse_position = pointer_position
+		pending_emulated_mouse_msec = Time.get_ticks_msec()
+		_queue_neijiang_3d_layout()
+		return true
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
+			return false
+		pointer_position = mouse_event.position
+		if _consume_neijiang_emulated_mouse_press(pointer_position):
+			return true
+		if not table_3d_utility_bar.activate_at_global_position(pointer_position):
+			return false
+		_queue_neijiang_3d_layout()
+		return true
+	return false
+
+
+func _consume_neijiang_emulated_mouse_press(global_pos: Vector2) -> bool:
+	if not pending_emulated_mouse_press:
+		return false
+	var elapsed := Time.get_ticks_msec() - pending_emulated_mouse_msec
+	var matches := elapsed >= 0 \
+		and elapsed <= EMULATED_MOUSE_SUPPRESSION_MSEC \
+		and pending_emulated_mouse_position.distance_to(global_pos) <= EMULATED_MOUSE_POSITION_TOLERANCE
+	pending_emulated_mouse_press = false
+	pending_emulated_mouse_msec = -1
+	return matches
+
+
+func _is_neijiang_3d_ui_point_blocked(global_pos: Vector2) -> bool:
+	if table_3d_action_bar != null and table_3d_action_bar.visible and table_3d_action_bar.get_global_rect().has_point(global_pos):
+		return true
+	if table_3d_utility_bar != null and table_3d_utility_bar.visible and table_3d_utility_bar.get_global_rect().has_point(global_pos):
+		return true
+	if settlement_overlay != null and settlement_overlay.visible:
+		return true
+	if ai_tuning_overlay != null and ai_tuning_overlay.visible:
+		return true
+	if bao_gang_dialog != null and bao_gang_dialog.visible:
+		return true
+	return false
+
+
 func _input(event: InputEvent) -> void:
+	if table_3d_enabled and _handle_neijiang_3d_utility_pointer(event):
+		get_viewport().set_input_as_handled()
+		return
+	if table_3d_enabled and _handle_neijiang_3d_table_pointer(event):
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
@@ -2384,6 +2833,7 @@ func _on_snapshot_changed(snapshot: Dictionary) -> void:
 	_update_center_area(snapshot, players, self_player)
 	_update_self_area(snapshot, self_hand_tiles)
 	_refresh_action_panel(snapshot)
+	_refresh_neijiang_3d_action_bar(snapshot)
 	_refresh_ding_que_panel(snapshot)
 	_refresh_settlement(snapshot)
 	_refresh_ai_tuning_panel(snapshot)
@@ -2392,6 +2842,7 @@ func _on_snapshot_changed(snapshot: Dictionary) -> void:
 	_layout_action_panel()
 	_refresh_opening_roll_ui(snapshot)
 	_handle_audio_transitions(previous_snapshot, snapshot)
+	_update_neijiang_3d_ui(snapshot)
 
 	if bool(snapshot.get("opening_roll_pending", false)):
 		var opening_roll: Dictionary = snapshot.get("opening_roll", {})
@@ -7284,12 +7735,14 @@ func _load_ui_preferences() -> void:
 		return
 	ai_helper_enabled = bool(config.get_value(UI_PREFS_SECTION, UI_PREFS_KEY_AI_HELPER, false))
 	opponent_hands_enabled = bool(config.get_value(UI_PREFS_SECTION, UI_PREFS_KEY_OPPONENT_HANDS, false))
+	table_3d_enabled = bool(config.get_value(UI_PREFS_SECTION, UI_PREFS_KEY_3D_TABLE, true))
 
 
 func _save_ui_preferences() -> void:
 	var config := ConfigFile.new()
 	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_AI_HELPER, ai_helper_enabled)
 	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_OPPONENT_HANDS, opponent_hands_enabled)
+	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_3D_TABLE, table_3d_enabled)
 	config.save(UI_PREFS_PATH)
 
 

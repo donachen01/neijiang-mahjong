@@ -1,5 +1,21 @@
 # 当前 Handoff - 内江麻将工程
 
+## 2026-08-13 / 1.0.62 最新状态
+
+- 当前分支：`codex/neijiang-sichuan-3d-ui-port`。
+- 当前源码版本：`1.0.62`。
+- 四川风格 3D UI 已移植到内江牌局表现层，原内江规则、同步 C# AI、动作合法性、计分和回合推进仍由原链路负责。
+- 左上工具抽屉已完成真实鼠标/触摸展开与收起修复，并覆盖缩放视口重复原生按下去重。
+- 本家名牌已固定到左下安全区，不再遮挡左家竖向牌列。
+- 麻将牌恢复 Blender 双实体“翡翠背层 + 暖象牙牌身”结构和受光 PBR 质感；本家字图使用稳定实色印刷层，不再呈现灰白雾感。
+- Android 1.0.62 APK 已完成导出、v2/v3 签名、版本、包名、zipalign 与发布内容检查。
+- iOS 1.0.62 Xcode 工程与最新 NativeAOT 已生成；最终个人开发签名依赖 Xcode Apple Account 登录，因为上一份 1.0.60 免费描述文件已于 2026-07-18 到期。
+- 实现与逻辑边界：`docs/ui_rework/内江麻将3DUI移植实现记录_20260813.md`。
+- 牌体层数、厚度和颜色审计：`docs/ui_rework/四川麻将牌体结构与内江迁移审计_20260813.md`。
+- 最终视觉/真实点击证据：`evidence/neijiang_3d_ui_port_20260813/final_click_open_and_hud_2048x1152.png` 与 `final_click_close_and_hud_1365x768.png`。
+
+以下 2026-05-22 内容保留为旧阶段历史记录，当前分支、HEAD、版本和未提交清单不再以该段为准。
+
 更新时间：2026-05-22  
 工作目录：`/Users/chendong/Documents/内江麻将工程_20260502_103823_v2`  
 当前分支：`codex/matte-2p5d-tile-redesign`  
@@ -53,12 +69,14 @@
   - `HELL_TRAINING_DIR := "res://测试数据统计/hell_training"`
   - `HELL_MARKED_CASE_DIR := "res://测试数据统计/hell_marked_cases"`
   - `HELL_REPLAY_DIR := "res://测试数据统计/hell_replay"`
-  - `DEBUG_TRAINING_RECORDING_ENABLED := true`
+  - `DEBUG_TRAINING_RECORDING_ENABLED := true`（训练记录）
+  - `AI_ANALYSIS_RECORDING_ENABLED := false`（完整 `user://ai_analysis` 原始快照需明确开启）
   - `_is_debug_training_recording_enabled()` 排除 `android / ios / web`
 
 当前意图：
 
-- Godot.NET 编辑器/桌面 debug：开启训练记录，方便实战复盘。
+- Godot.NET 编辑器/桌面 debug：保留训练记录，方便实战复盘；不会再默认写入体积可能达到 GB 级的完整 `user://ai_analysis` 原始快照。
+- 如确实需要逐事件完整 AI 快照，再临时把 `AI_ANALYSIS_RECORDING_ENABLED` 设为 `true`，完成采样后恢复为 `false`。
 - 安卓/实用包：不靠该 debug 训练开关写 `res://` 训练样本。
 
 ### 2. 训练样本补充候选评分事实

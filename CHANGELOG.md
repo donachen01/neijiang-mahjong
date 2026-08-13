@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.62 - 2026-08-13
+
+- Fixed the top-left 3D utility drawer so real mouse and touch presses open and close it reliably at scaled desktop and mobile viewports, including duplicate native-press suppression and executable coordinate-click regression checks.
+- Moved the self player nameplate to the lower-left safe area so it no longer overlaps the left player's vertical tile rail at desktop or compact 16:9 resolutions.
+- Restored the manufactured Sichuan tile presentation with a two-layer Blender jade/ivory body, warm PBR self-hand faces, controlled clearcoat/contact shadows and tile-only warm fill lighting instead of flat white or cold-grey surfaces.
+- Preserved all original Neijiang utility action IDs, hand/discard input, bao-jiao/bao-gang, reaction, scoring and realtime C# AI event routes while extending the 3D UI contract and Metal evidence.
+
+## 1.0.61 - 2026-08-13
+
+- Replaced the default Neijiang table presentation with the mature Sichuan-style 3D table, tile, center-compass, action-seal and settlement visual language without moving rule, AI, scoring or action legality into the UI layer.
+- Preserved original Neijiang hand selection/discard, hu, peng, gang, an-gang, add-gang, bao-jiao, bao-gang and pass callbacks; native touch and emulated mouse presses are paired so a phone tap cannot become a double tile action.
+- Adapted the 3D presentation to the 72-tile, two-suit Neijiang contract, including snapshot wall counts, persistent bao-gang markers, six simultaneous actions and no Sichuan ding-que/flower-pig settlement state.
+- Added Blender 5.2 LTS generators for the PBR table, Mahjong bodies, center compass, bright ivory/gold HUD shell, action seals and settlement shell; runtime assets have no dependency on the Sichuan source project.
+- Redesigned all four player nameplates with bright pearl-ivory fields, aged-gold edging, emerald wind medallions, score capsules, explicit seat-role labels and a text-plus-color current-turn badge.
+- Increased self-hand clarity with a brighter warm-ivory PBR face, lower roughness and restrained Filmic compensation while retaining 3D thickness, highlights, shadows and unlit high-contrast printed glyphs.
+- Added responsive safe-area placement, keyboard/gamepad focus navigation, a saved 3D/legacy UI preference and a non-destructive in-round fallback to the original 2D interface.
+- Added a dedicated 3D UI regression runner and verified the existing UI, bao-jiao/bao-gang, C# transport/synchronous-decision contracts, .NET build and Metal captures at desktop and compact 16:9 resolutions.
+
 ## 1.0.60 - 2026-07-11
 
 - Isolated strategic AI context by seat and unified early/middle/late stage facts, hand caching, opponent danger, tile danger and exact meld-group transport.

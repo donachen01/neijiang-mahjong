@@ -27,6 +27,18 @@ evidence/1.0.42_to_1.0.44_github_diff/extracted/**
 !测试数据统计/
 !测试数据统计/.gdignore
 
+# Keep only curated final UI captures; iterative render/click probes remain local.
+evidence/neijiang_3d_ui_port_20260813/*.png
+!evidence/neijiang_3d_ui_port_20260813/final_1365x768.png
+!evidence/neijiang_3d_ui_port_20260813/final_2048x1152.png
+!evidence/neijiang_3d_ui_port_20260813/final_2400x1080_actions.png
+!evidence/neijiang_3d_ui_port_20260813/sichuan_aligned_final_v2_1365x768.png
+!evidence/neijiang_3d_ui_port_20260813/sichuan_aligned_final_v2_2048x1152.png
+!evidence/neijiang_3d_ui_port_20260813/tile_warm_pbr_collapsed_2048x1152.png
+!evidence/neijiang_3d_ui_port_20260813/tile_warm_pbr_expanded_1365x768.png
+!evidence/neijiang_3d_ui_port_20260813/final_click_open_and_hud_2048x1152.png
+!evidence/neijiang_3d_ui_port_20260813/final_click_close_and_hud_1365x768.png
+
 # Signing and local secrets
 *.keystore
 *.jks
