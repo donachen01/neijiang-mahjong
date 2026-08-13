@@ -7,7 +7,6 @@ const DICE_FACE_SCRIPT := preload("res://scripts/ui/DiceFace.gd")
 const WALL_COUNT_DISC_SCRIPT := preload("res://scripts/ui/WallCountDisc.gd")
 const TABLE_MATERIAL_OVERLAY_SCRIPT := preload("res://scripts/ui/TableMaterialOverlay.gd")
 const CIRCULAR_ACTION_BUTTON_OVERLAY_SCRIPT := preload("res://scripts/ui/CircularActionButtonOverlay.gd")
-const TABLE_STAGE_3D_SCRIPT := preload("res://scripts/ui/3d/NeijiangTableStage3D.gd")
 const SEAT_HUD_3D_SCRIPT := preload("res://scripts/ui/table/NeijiangSeatHUD.gd")
 const ACTION_BAR_3D_SCRIPT := preload("res://scripts/ui/table/NeijiangActionBar.gd")
 const UTILITY_BAR_3D_SCRIPT := preload("res://scripts/ui/table/NeijiangUtilityBar.gd")
@@ -249,13 +248,20 @@ var selected_tile_id: int = -1
 var settlement_selected_seat: int = -1
 var last_snapshot: Dictionary = {}
 var table_3d_enabled := true
-var table_stage_3d: NeijiangTableStage3D
+# Keep the authored stage through its engine-native base type. On iOS release
+# exports, casting a scene-authored scripted node to its `class_name` can yield
+# null even though the Node3D itself and its script are both present in the
+# scene tree. Calls below intentionally use the script's public method/signal
+# contract through `call()`/`get()` so the mobile runtime never depends on that
+# custom-class cast.
+var table_stage_3d: Node3D
 var table_3d_ui_root: Control
 var table_3d_seat_huds: Dictionary = {}
 var table_3d_action_bar: NeijiangActionBar
 var table_3d_utility_bar: NeijiangUtilityBar
 var table_3d_restore_button: Button
 var table_3d_runtime_probe_signature := ""
+var table_3d_fallback_reason := ""
 var pending_emulated_mouse_press := false
 var pending_emulated_mouse_position := Vector2.ZERO
 var pending_emulated_mouse_msec := -1
@@ -442,13 +448,25 @@ func _ready() -> void:
 
 
 func _setup_neijiang_3d_ui() -> void:
-	if table_stage_3d != null or root_ui == null:
+	if root_ui == null:
 		return
-	table_stage_3d = TABLE_STAGE_3D_SCRIPT.new() as NeijiangTableStage3D
-	table_stage_3d.name = "NeijiangTableStage3D"
-	table_stage_3d.set_reduced_motion(bool(ProjectSettings.get_setting("accessibility/reduced_motion", false)))
-	table_stage_3d.tile_pressed.connect(_on_hand_tile_pressed)
-	$GameScene.add_child(table_stage_3d)
+	if table_stage_3d == null or not is_instance_valid(table_stage_3d):
+		table_stage_3d = get_node_or_null("GameScene/NeijiangTableStage3D") as Node3D
+	if table_stage_3d == null:
+		table_3d_fallback_reason = "missing_static_stage"
+		push_error("[MainSceneV2] fixed Neijiang 3D stage is missing; keeping the complete legacy UI visible")
+		_apply_neijiang_3d_fallback()
+		return
+	if not table_stage_3d.has_method("set_reduced_motion") or not table_stage_3d.has_method("get_startup_health"):
+		table_3d_fallback_reason = "stage_script_unavailable"
+		push_error("[MainSceneV2] Neijiang 3D stage script is unavailable; keeping the complete legacy UI visible")
+		_apply_neijiang_3d_fallback()
+		return
+	table_stage_3d.call("set_reduced_motion", bool(ProjectSettings.get_setting("accessibility/reduced_motion", false)))
+	if not table_stage_3d.is_connected("tile_pressed", _on_hand_tile_pressed):
+		table_stage_3d.connect("tile_pressed", _on_hand_tile_pressed)
+	if table_3d_ui_root != null:
+		return
 
 	table_3d_ui_root = Control.new()
 	table_3d_ui_root.name = "NeijiangTableUI"
@@ -496,6 +514,50 @@ func _setup_neijiang_3d_ui() -> void:
 	_queue_neijiang_3d_layout()
 
 
+func _is_neijiang_3d_stage_ready() -> bool:
+	return (
+		table_stage_3d != null
+		and is_instance_valid(table_stage_3d)
+		and table_stage_3d.has_method("is_render_ready")
+		and bool(table_stage_3d.call("is_render_ready"))
+	)
+
+
+func _apply_neijiang_3d_fallback() -> void:
+	if table_stage_3d != null and is_instance_valid(table_stage_3d):
+		table_stage_3d.visible = false
+	if table_3d_ui_root != null:
+		table_3d_ui_root.visible = false
+	if table_3d_restore_button != null:
+		table_3d_restore_button.visible = true
+		table_3d_restore_button.text = "重试 3D 牌桌"
+	if background_rect != null:
+		background_rect.visible = true
+	if safe_area != null:
+		safe_area.visible = true
+	for legacy_control in [
+		player_top_host,
+		player_left_host,
+		player_right_host,
+		self_hand_host,
+		board_area,
+		self_info_bar,
+		top_exit_button,
+		top_next_round_button,
+		v17_top_button_stack,
+		floating_right_button_bar,
+		floating_left_button_bar,
+		self_hu_tile_host,
+		discard_helper_panel,
+	]:
+		if legacy_control != null:
+			legacy_control.visible = true
+	for panel_value in v17_player_info_panels.values():
+		var panel := panel_value as Control
+		if panel != null:
+			panel.visible = true
+
+
 func _apply_neijiang_settlement_shell() -> void:
 	if settlement_panel == null:
 		return
@@ -516,6 +578,12 @@ func _apply_neijiang_settlement_shell() -> void:
 
 func _set_neijiang_3d_ui_enabled(enabled: bool) -> void:
 	table_3d_enabled = enabled
+	if enabled and not _is_neijiang_3d_stage_ready():
+		table_3d_fallback_reason = "stage_not_render_ready"
+		_apply_neijiang_3d_fallback()
+		_write_neijiang_3d_runtime_probe()
+		return
+	table_3d_fallback_reason = ""
 	if table_stage_3d != null:
 		table_stage_3d.visible = enabled
 	if table_3d_ui_root != null:
@@ -559,8 +627,13 @@ func _set_neijiang_3d_ui_enabled(enabled: bool) -> void:
 
 
 func _update_neijiang_3d_ui(snapshot: Dictionary) -> void:
-	if not table_3d_enabled or table_stage_3d == null or game_manager == null or game_manager.game_state == null:
+	if not table_3d_enabled or game_manager == null or game_manager.game_state == null:
 		return
+	if not _is_neijiang_3d_stage_ready():
+		table_3d_fallback_reason = "stage_not_render_ready"
+		_apply_neijiang_3d_fallback()
+		return
+	table_3d_fallback_reason = ""
 	_enforce_neijiang_3d_legacy_visibility()
 	var all_hands: Array = []
 	for seat in range(4):
@@ -570,7 +643,7 @@ func _update_neijiang_3d_ui(snapshot: Dictionary) -> void:
 		"recommended_tile_id": int(trainer_hint.get("recommended_tile_id", -1)),
 		"danger_tile_ids": Array(trainer_hint.get("danger_tile_ids", [])).duplicate(),
 	}
-	table_stage_3d.render_snapshot(snapshot, all_hands, opponent_hands_enabled, selected_tile_id, markers)
+	table_stage_3d.call("render_snapshot", snapshot, all_hands, opponent_hands_enabled, selected_tile_id, markers)
 	var players: Array = snapshot.get("players", [])
 	var active_seat := int(snapshot.get("current_turn_seat", -1))
 	var dealer_seat := int(snapshot.get("current_dealer_seat", -1))
@@ -784,13 +857,13 @@ func _handle_neijiang_3d_table_pointer(event: InputEvent) -> bool:
 		var touch_event := event as InputEventScreenTouch
 		if not touch_event.pressed or _is_neijiang_3d_ui_point_blocked(touch_event.position):
 			return false
-		var touch_tile_id := table_stage_3d.find_tile_at_screen(touch_event.position)
+		var touch_tile_id := int(table_stage_3d.call("find_tile_at_screen", touch_event.position))
 		if touch_tile_id < 0:
 			return false
 		pending_emulated_mouse_press = true
 		pending_emulated_mouse_position = touch_event.position
 		pending_emulated_mouse_msec = Time.get_ticks_msec()
-		table_stage_3d.pick_tile(touch_event.position)
+		table_stage_3d.call("pick_tile", touch_event.position)
 		return true
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
@@ -800,10 +873,10 @@ func _handle_neijiang_3d_table_pointer(event: InputEvent) -> bool:
 			return true
 		if _is_neijiang_3d_ui_point_blocked(mouse_event.position):
 			return false
-		var mouse_tile_id := table_stage_3d.find_tile_at_screen(mouse_event.position)
+		var mouse_tile_id := int(table_stage_3d.call("find_tile_at_screen", mouse_event.position))
 		if mouse_tile_id < 0:
 			return false
-		table_stage_3d.pick_tile(mouse_event.position)
+		table_stage_3d.call("pick_tile", mouse_event.position)
 		return true
 	return false
 
@@ -2878,7 +2951,18 @@ func _write_neijiang_3d_runtime_probe() -> void:
 		var panel := panel_value as Control
 		if panel != null and panel.visible:
 			legacy_visible.append(panel.name)
-	var stage_camera := table_stage_3d.get_camera() if table_stage_3d != null else null
+	var stage_valid := table_stage_3d != null and is_instance_valid(table_stage_3d)
+	var stage_camera := table_stage_3d.call("get_camera") as Camera3D if stage_valid and table_stage_3d.has_method("get_camera") else null
+	var stage_tiles: Variant = table_stage_3d.get("tile_nodes") if stage_valid else null
+	var stage_health: Dictionary = table_stage_3d.call("get_startup_health") if stage_valid and table_stage_3d.has_method("get_startup_health") else {
+		"status": "missing_or_freed",
+		"render_ready": false,
+	}
+	var game_scene_children: Array[String] = []
+	var game_scene := get_node_or_null("GameScene")
+	if game_scene != null:
+		for child in game_scene.get_children():
+			game_scene_children.append(str(child.name))
 	var probe := {
 		"app_version": str(ProjectSettings.get_setting("application/config/version", "")),
 		"platform": OS.get_name(),
@@ -2886,11 +2970,15 @@ func _write_neijiang_3d_runtime_probe() -> void:
 		"active_rendering_method": RenderingServer.get_current_rendering_method(),
 		"video_adapter": RenderingServer.get_video_adapter_name(),
 		"table_3d_enabled": table_3d_enabled,
-		"stage_in_tree": table_stage_3d != null and table_stage_3d.is_inside_tree(),
-		"stage_visible": table_stage_3d != null and table_stage_3d.visible,
+		"stage_reference_valid": stage_valid,
+		"stage_in_tree": stage_valid and table_stage_3d.is_inside_tree(),
+		"stage_visible": stage_valid and table_stage_3d.visible,
+		"stage_health": stage_health,
+		"fallback_reason": table_3d_fallback_reason,
+		"game_scene_children": game_scene_children,
 		"camera_current": stage_camera != null and stage_camera.current,
-		"table_model_present": table_stage_3d != null and table_stage_3d.get_node_or_null("ManufacturedClubTable") != null,
-		"gameplay_tile_count": table_stage_3d.tile_nodes.size() if table_stage_3d != null else 0,
+		"table_model_present": stage_valid and table_stage_3d.get_node_or_null("ManufacturedClubTable") != null,
+		"gameplay_tile_count": (stage_tiles as Dictionary).size() if stage_tiles is Dictionary else 0,
 		"new_seat_hud_count": table_3d_seat_huds.size(),
 		"legacy_visible_controls": legacy_visible,
 		"viewport_size": [get_viewport_rect().size.x, get_viewport_rect().size.y],

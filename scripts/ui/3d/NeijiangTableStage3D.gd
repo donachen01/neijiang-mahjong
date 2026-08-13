@@ -133,16 +133,53 @@ var meld_tile_counts_by_seat: Array[int] = [0, 0, 0, 0]
 var discard_slots_by_seat: Array[Dictionary] = [{}, {}, {}, {}]
 var active_motion_tweens: Array[Tween] = []
 var last_desired_entries: Dictionary = {}
+var startup_status := "created"
+
+
+func _enter_tree() -> void:
+	startup_status = "entered_tree"
 
 
 func _ready() -> void:
+	startup_status = "building_world"
 	_setup_world()
+	startup_status = "building_table"
 	_setup_table()
+	startup_status = "building_compass"
 	_setup_center_compass()
+	startup_status = "building_counter"
 	_setup_center_wall_count()
+	startup_status = "building_tile_root"
 	tile_root = Node3D.new()
 	tile_root.name = "GameplayTiles"
 	add_child(tile_root)
+	startup_status = "ready"
+
+
+func is_render_ready() -> bool:
+	return (
+		is_inside_tree()
+		and startup_status == "ready"
+		and camera != null
+		and camera.is_inside_tree()
+		and camera.current
+		and tile_root != null
+		and tile_root.is_inside_tree()
+		and get_node_or_null("ManufacturedClubTable") != null
+	)
+
+
+func get_startup_health() -> Dictionary:
+	return {
+		"status": startup_status,
+		"inside_tree": is_inside_tree(),
+		"parent_path": str(get_parent().get_path()) if get_parent() != null else "",
+		"camera_present": camera != null,
+		"camera_current": camera != null and camera.current,
+		"tile_root_present": tile_root != null,
+		"table_present": get_node_or_null("ManufacturedClubTable") != null,
+		"render_ready": is_render_ready(),
+	}
 
 
 func render_snapshot(

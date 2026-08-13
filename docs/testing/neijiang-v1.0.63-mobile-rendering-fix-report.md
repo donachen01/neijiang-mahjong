@@ -6,12 +6,11 @@
 
 1.0.62 安装到 iPhone 后可启动且牌局状态正常推进，但画面只显示灰色底图和 2D HUD；3D 桌体、牌、摄像机环境和中心方位盘全部缺失。同时新座位名牌与旧 V17 玩家面板重叠。
 
-## 根因
+## 当时判断（后续已被真机证据修正）
 
-- 四川 3D 源工程的 `rendering/renderer/rendering_method.mobile` 为 `forward_plus`。
-- 内江工程在 UI 移植后仍保留了老版 `gl_compatibility`。
-- 新 3D 舞台使用 Filmic 色调映射、SSAO、分层灯光和 PBR GLB 材质，移动渲染合同不一致导致 iOS 只保留 CanvasLayer 2D 内容。
-- `_update_v17_player_info_panels()` 与旧顶栏刷新仍可无条件重新显示旧控件，破坏 3D 模式的可见性状态。
+- 四川 3D 源工程的 `rendering/renderer/rendering_method.mobile` 为 `forward_plus`，内江工程移植后仍保留老版 `gl_compatibility`；对齐渲染器是必要修复。
+- `_update_v17_player_info_panels()` 与旧顶栏刷新仍可无条件重新显示旧控件，破坏 3D 模式的可见性状态；隐藏旧控件也是有效修复。
+- 但是，“渲染器不一致就是灰屏根因”的结论证据不足。1.0.63 真机启动后的探针明确显示：实际渲染方法已是 `forward_plus`、GPU 为 Apple A16，但 `stage_in_tree=false`、`camera_current=false`、`table_model_present=false`、`gameplay_tile_count=0`。因此 1.0.63 灰屏的直接根因是运行时动态创建的 3D 舞台没有留在真机场景树中，而不是 Forward+ 本身失效。
 
 ## 修复
 
@@ -31,6 +30,6 @@
 - iPhone 局域网升级安装：已覆盖安装成功，设备回读版本为 `1.0.63`。安装后 `ui_prefs.cfg` 仍保留，且 `neijiang_3d_table_enabled=true`；未卸载、未丢失配置。
 - iPhone 启动和探针回读：设备当时为锁屏，iOS 拒绝远程启动，待解锁后补充。
 
-## 验证边界
+## 验证边界与后续结论
 
-当前最强证据到达：源码与合同回归、桌面 Metal 双移动渲染路径、Android 发布包、iOS NativeAOT/签名构建、iPhone 覆盖安装和数据保留。因安装后手机处于锁屏，尚不能声称已完成该台 iPhone 上的启动画面和完整玩法验收。
+当时最强证据只到达：源码与合同回归、桌面 Metal 双移动渲染路径、Android 发布包、iOS NativeAOT/签名构建、iPhone 覆盖安装和数据保留。后续用户真机启动仍复现灰屏，证明“构建、安装和桌面渲染通过”不能替代真机 3D 场景树验收。直接根因及固定场景节点修复转入 1.0.64。

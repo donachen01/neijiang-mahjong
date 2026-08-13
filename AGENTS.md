@@ -20,6 +20,8 @@
 - 导出后要用 `strings` 或等价方式检查 `ios-arm64` framework 是否含有本轮关键符号。只看源码或桌面 DLL 不够。
 - NativeAOT 下 `System.Text.Json` 反射序列化/反序列化可能在真机暴露问题。关键 iOS C# 入口应优先用源生成或 `JsonDocument` 手动解析，输出用手写紧凑 JSON 或 AOT 安全方案。
 - iOS 上缺失或陈旧的 `.NET AOT xcframework` 会导致启动闪退或 C# runtime 入口异常。每次重新打包都要确认 framework 被 Xcode project 嵌入并随 app 签名。
+- 3D 模型使用 VRAM 压缩纹理时，桌面 `.godot/imported` 缓存会掩盖移动包缺少纹理格式的问题。iOS/Android 必须启用并重新生成 ETC2/ASTC 纹理，且检查最终 PCK/APK 中既有 `.import` 映射，也有对应的压缩纹理实体。
+- GDScript 顶部 `preload()` 的 GLB 只要有一个纹理依赖缺失，整份舞台脚本就可能解析失败，场景节点会退化成无脚本的原生节点。出现“有声音和 2D HUD、没有 3D 桌面”时，要直接运行或检查最终导出 PCK，并通过真机探针区分节点存在、脚本存在和 render-ready 三层状态。
 
 ### 同步 AI 和玩法验证边界
 

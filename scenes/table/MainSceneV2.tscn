@@ -1,9 +1,10 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/MainSceneV2.gd" id="1_q1t8j"]
 [ext_resource type="Script" path="res://scripts/game/GameManager.gd" id="2_dxt7q"]
 [ext_resource type="Resource" path="res://res/ui/default_ui_style.tres" id="3_6mkjg"]
 [ext_resource type="PackedScene" path="res://scenes/ui/PlayerHandViewport.tscn" id="4_j1h1j"]
+[ext_resource type="Script" path="res://scripts/ui/3d/NeijiangTableStage3D.gd" id="5_3d_stage"]
 
 [node name="MainScene" type="Node2D"]
 script = ExtResource("1_q1t8j")
@@ -13,6 +14,10 @@ unique_name_in_owner = true
 script = ExtResource("2_dxt7q")
 
 [node name="GameScene" type="Node2D" parent="."]
+
+[node name="NeijiangTableStage3D" type="Node3D" parent="GameScene"]
+unique_name_in_owner = true
+script = ExtResource("5_3d_stage")
 
 [node name="UILayer" type="CanvasLayer" parent="."]
 

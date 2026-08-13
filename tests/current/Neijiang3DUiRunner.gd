@@ -35,6 +35,10 @@ func _verify_mobile_renderer_contract(failures: Array[String]) -> void:
 		failures.append(
 			"Sichuan-derived PBR table requires forward_plus on mobile, got %s" % mobile_renderer
 		)
+	if not bool(ProjectSettings.get_setting("rendering/textures/vram_compression/import_etc2_astc", false)):
+		failures.append(
+			"Sichuan-derived PBR table requires ETC2/ASTC imports for iOS and Android packages"
+		)
 
 
 func _verify_table_stage_contract(failures: Array[String]) -> void:
@@ -197,13 +201,21 @@ func _verify_tile_manufacturing_contract(failures: Array[String]) -> void:
 
 func _verify_main_scene_adapter(failures: Array[String]) -> void:
 	var main_scene := MAIN_SCENE.instantiate()
+	var authored_stage := main_scene.get_node_or_null("GameScene/NeijiangTableStage3D") as Node3D
+	if authored_stage == null:
+		failures.append("MainScene does not author the 3D stage as a fixed scene node")
 	get_root().add_child(main_scene)
 	await process_frame
 	await process_frame
 	if not bool(main_scene.get("table_3d_enabled")):
 		failures.append("Neijiang 3D table is not the default UI")
-	if main_scene.get("table_stage_3d") == null:
+	var installed_stage := main_scene.get("table_stage_3d") as Node3D
+	if installed_stage == null:
 		failures.append("MainScene did not install the snapshot-driven 3D stage")
+	elif installed_stage != authored_stage:
+		failures.append("MainScene replaced the fixed 3D stage with a runtime-only node")
+	elif not installed_stage.has_method("is_render_ready") or not bool(installed_stage.call("is_render_ready")):
+		failures.append("MainScene fixed 3D stage did not reach render-ready state")
 	if main_scene.get("table_3d_action_bar") == null or main_scene.get("table_3d_utility_bar") == null:
 		failures.append("MainScene did not install the Neijiang action/utility adapters")
 	main_scene.call("_on_snapshot_changed", main_scene.get("last_snapshot"))
@@ -218,6 +230,14 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 		if legacy_panel != null and legacy_panel.visible:
 			failures.append("legacy seat panel resurfaced during a 3D snapshot refresh")
 			break
+	main_scene.call("_apply_neijiang_3d_fallback")
+	var background := main_scene.get_node_or_null("UILayer/RootUI/Background") as Control
+	var safe_area := main_scene.get_node_or_null("UILayer/RootUI/SafeArea") as Control
+	var table_ui := main_scene.get("table_3d_ui_root") as Control
+	if background == null or not background.visible or safe_area == null or not safe_area.visible:
+		failures.append("3D startup failure does not restore the complete legacy table surface")
+	if table_ui != null and table_ui.visible:
+		failures.append("3D startup failure leaves the partial 3D HUD over the legacy fallback")
 	main_scene.call("_set_neijiang_3d_ui_enabled", false)
 	var restore_button := main_scene.get("table_3d_restore_button") as Button
 	if restore_button == null or not restore_button.visible:

@@ -102,7 +102,7 @@ rm -rf "$PROJECT_DIR/.godot/mono/temp/bin/$EXPORT_CONFIG/NeijiangMahjong.Godot_a
 echo "Using Godot: $("$GODOT_BIN" --version)"
 echo "Using iOS template: $IOS_TEMPLATE"
 echo "Export output: $EXPORT_DIR"
-echo "Team ID: ${GODOT_IOS_TEAM_ID:-FCB4ZVWWD8}"
+echo "Team ID: ${GODOT_IOS_TEAM_ID:-A5BDW7465Q}"
 echo "Bundle ID: ${GODOT_IOS_BUNDLE_ID:-com.chendong.neijiangmahjong.iosdev}"
 
 "$GODOT_BIN" \
