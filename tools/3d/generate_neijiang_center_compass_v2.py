@@ -1,9 +1,9 @@
-"""Generate the premium Blender-authored flush glass four-way table inlay.
+"""Generate the Blender-authored single-ring four-way turn instrument.
 
 The GLB owns all visible physical geometry and PBR materials. Godot keeps only
-the live wall count and direction glyphs, plus visibility of the four authored
-red-enamel active-sector overlays. This split preserves localization and turn
-state without rebuilding the manufactured object from runtime flat meshes.
+the live wall count plus visibility of the four authored champagne-gold active
+sector overlays. This preserves turn state without rebuilding the manufactured
+object from runtime flat meshes or adding direction glyphs.
 
 Usage:
   Blender --background --python tools/3d/generate_neijiang_center_compass_v2.py
@@ -20,18 +20,18 @@ import bpy
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "res" / "art" / "3d" / "neijiang_center_compass_v2.glb"
-ACTIVE_RED_DISPLAY_HEX = "A13D2D"
-# The table uses Godot's filmic tonemapper. Its display transform lifts a raw
-# unlit A13D2D material to a salmon RGB around 195/76/54. This calibrated
-# authoring value renders back to the requested display RGB 161/61/45 while the
-# semantic target remains ACTIVE_RED_DISPLAY_HEX and the 2D fallback uses it
-# directly (Canvas output is not processed through the 3D filmic transform).
-ACTIVE_RED_FILMIC_AUTHORING_HEX = "7F3226"
-COUNTER_BEZEL_RADIUS = 0.455
-COUNTER_LENS_RADIUS = 0.365
+ACTIVE_GOLD_DISPLAY_HEX = "F2CD70"
+# The active field is a warm champagne-gold PBR lacquer, matching the supplied
+# reference instead of the former flat red enamel.
+ACTIVE_GOLD_AUTHORING_HEX = "C78B26"
+COUNTER_RING_OUTER_RADIUS = 0.505
+COUNTER_RING_INNER_RADIUS = 0.355
+COUNTER_LENS_RADIUS = 0.340
+PANEL_WIDTH_SCALE = 1.08
+PANEL_DEPTH_SCALE = 0.96
 # Keep every red face outside the physical bezel. The small allowance also
 # keeps the straight chords between sampled arc points from crossing the ring.
-ACTIVE_SECTOR_CUTOUT_RADIUS = COUNTER_BEZEL_RADIUS + 0.005
+ACTIVE_SECTOR_CUTOUT_RADIUS = COUNTER_RING_OUTER_RADIUS + 0.005
 ACTIVE_SECTOR_ARC_SEGMENTS = 8
 SEPARATOR_INNER_X = 0.38
 SEPARATOR_INNER_Y = 0.20
@@ -295,6 +295,52 @@ def add_cylinder(
     return obj
 
 
+def add_annular_ring(
+    name: str,
+    outer_radius: float,
+    inner_radius: float,
+    bottom: float,
+    top: float,
+    material: bpy.types.Material,
+    *,
+    vertices: int = 96,
+    bevel: float = 0.010,
+) -> bpy.types.Object:
+    """Build one genuinely hollow metal ring instead of stacked solid discs."""
+    points: list[tuple[float, float, float]] = []
+    for height in (bottom, top):
+        for radius in (outer_radius, inner_radius):
+            points.extend([
+                (
+                    math.cos(math.tau * index / vertices) * radius,
+                    math.sin(math.tau * index / vertices) * radius,
+                    height,
+                )
+                for index in range(vertices)
+            ])
+    outer_bottom = 0
+    inner_bottom = vertices
+    outer_top = vertices * 2
+    inner_top = vertices * 3
+    faces: list[tuple[int, ...]] = []
+    for index in range(vertices):
+        next_index = (index + 1) % vertices
+        faces.extend([
+            (outer_top + index, outer_top + next_index, inner_top + next_index, inner_top + index),
+            (outer_bottom + next_index, outer_bottom + index, inner_bottom + index, inner_bottom + next_index),
+            (outer_bottom + index, outer_bottom + next_index, outer_top + next_index, outer_top + index),
+            (inner_bottom + next_index, inner_bottom + index, inner_top + index, inner_top + next_index),
+        ])
+    mesh = bpy.data.meshes.new(f"{name}Mesh")
+    mesh.from_pydata(points, [], faces)
+    mesh.materials.append(material)
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    if bevel > 0.0:
+        bevel_object(obj, bevel, 3)
+    return obj
+
+
 def join_objects(objects: list[bpy.types.Object], name: str) -> bpy.types.Object:
     if not objects:
         raise ValueError(f"Cannot join empty object list for {name}")
@@ -400,35 +446,42 @@ def direction_polygon_pieces() -> list[list[list[tuple[float, float]]]]:
 
 
 def build() -> list[bpy.types.Object]:
-    # The complete insert intersects the felt plane instead of sitting on it.
-    # Its highest authored surface is only 0.006 world units above the felt,
-    # which is the anti-z-fighting allowance for a visually flush glass inlay.
-    counter_bronze = make_material(
-        "CenterCounterAntiqueBronze",
-        "8F744B",
+    # The reference is deliberately simple: a shallow jade body, one luminous
+    # active field and exactly one broad gold ring around the number plate.
+    counter_gold = make_material(
+        "CenterSingleChampagneGoldRing",
+        "E8CA78",
         metallic=0.42,
-        roughness=0.58,
-        coat=0.04,
-        coat_roughness=0.36,
+        roughness=0.18,
+        coat=0.46,
+        coat_roughness=0.075,
         anisotropic=0.08,
+    )
+    gold_edge = make_material(
+        "CenterLowerGoldEdge",
+        "D7A947",
+        metallic=0.62,
+        roughness=0.30,
+        coat=0.16,
+        coat_roughness=0.18,
     )
     recess = make_material(
         "CenterGraphiteJadeRecess",
-        "0B2C26",
+        "2F5145",
         metallic=0.06,
         roughness=0.58,
         coat=0.12,
         coat_roughness=0.32,
     )
     smoked_glass = make_material(
-        "CenterGlossSmokedJadeGlass",
-        "123E35",
+        "CenterSoftSageGlass",
+        "57795D",
         metallic=0.02,
-        roughness=0.18,
-        coat=0.45,
-        coat_roughness=0.16,
-        alpha=0.92,
-        transmission=0.08,
+        roughness=0.40,
+        coat=0.24,
+        coat_roughness=0.22,
+        alpha=1.0,
+        transmission=0.0,
     )
     matte_counter = make_material(
         "CenterMatteSmokedJadeCounter",
@@ -439,46 +492,114 @@ def build() -> list[bpy.types.Object]:
         alpha=1.0,
         transmission=0.0,
     )
-    exact_active_red = make_material(
-        "CenterExactActiveRed",
-        ACTIVE_RED_FILMIC_AUTHORING_HEX,
-        metallic=0.0,
-        roughness=0.50,
+    separator_light = make_material(
+        "CenterSeparatorPearlLine",
+        "B9C9B8",
+        metallic=0.12,
+        roughness=0.32,
+        emission="667C6C",
+        emission_strength=0.16,
+    )
+    active_gold = make_material(
+        "CenterActiveChampagneGold",
+        ACTIVE_GOLD_DISPLAY_HEX,
+        metallic=0.08,
+        roughness=0.38,
+        coat=0.34,
+        coat_roughness=0.12,
+        emission="A77B2D",
+        emission_strength=0.018,
     )
 
     objects: list[bpy.types.Object] = [
-        flat_polygon("CenterRecessBed", chamfered_outline(2.40, 1.76, 0.18), 0.002, recess),
-        flat_polygon("CenterGlassInlay", chamfered_outline(2.40, 1.76, 0.18), 0.0040, smoked_glass),
-        flat_line_segments(
-            "DirectionSeparatorHairlines",
-            [
-                ((-SEPARATOR_INNER_X, SEPARATOR_INNER_Y), (-1.20, 0.70)),
-                ((SEPARATOR_INNER_X, SEPARATOR_INNER_Y), (1.20, 0.70)),
-                ((SEPARATOR_INNER_X, -SEPARATOR_INNER_Y), (1.20, -0.70)),
-                ((-SEPARATOR_INNER_X, -SEPARATOR_INNER_Y), (-1.20, -0.70)),
-            ],
-            0.010,
-            0.0044,
+        add_chamfered_panel(
+            "CenterLowerGoldTrim",
+            2.43,
+            1.79,
+            0.19,
+            -0.075,
+            0.000,
+            gold_edge,
+            bevel=0.022,
+        ),
+        add_chamfered_panel(
+            "CenterRecessBed",
+            2.40,
+            1.76,
+            0.18,
+            -0.055,
+            0.018,
             recess,
+            bevel=0.025,
         ),
     ]
 
-    # Only the current seat reveals one opaque deep-wine lacquer field. It
-    # reaches the outer boundary and sits above, rather than blending into, the
-    # independent glass sector underneath.
+    separator_segments = [
+        ((-SEPARATOR_INNER_X, SEPARATOR_INNER_Y), (-1.20, 0.70)),
+        ((SEPARATOR_INNER_X, SEPARATOR_INNER_Y), (1.20, 0.70)),
+        ((SEPARATOR_INNER_X, -SEPARATOR_INNER_Y), (1.20, -0.70)),
+        ((-SEPARATOR_INNER_X, -SEPARATOR_INNER_Y), (-1.20, -0.70)),
+    ]
+    for index, segment in enumerate(separator_segments):
+        objects.append(
+            flat_line_segments(
+                f"DirectionSeparator{index}",
+                [segment],
+                0.013,
+                0.025,
+                separator_light,
+            )
+        )
+
+    # Four independently authored base plates make the construction explicit
+    # and allow every direction to remain a distinct Blender component. They
+    # share one restrained sage material; lighting supplies the tonal gradient.
+    for index, polygon_pieces in enumerate(direction_polygon_pieces()):
+        objects.append(
+            flat_polygon_collection(
+                f"DirectionBase{index}",
+                polygon_pieces,
+                0.022,
+                smoked_glass,
+            )
+        )
+
+    # Only the current seat reveals one champagne-gold lacquer field. It reaches
+    # the outer boundary and sits above the independent jade field underneath.
     for index, polygon_pieces in enumerate(direction_polygon_pieces()):
         objects.append(
             flat_polygon_collection(
                 f"DirectionActive{index}",
                 polygon_pieces,
-                0.005,
-                exact_active_red,
+                0.028,
+                active_gold,
             )
         )
     objects.extend([
-        add_cylinder("CounterBronzeBezel", COUNTER_BEZEL_RADIUS, 0.001, 0.005, counter_bronze, vertices=40, bevel=0.0015),
-        add_cylinder("CounterGlassLens", COUNTER_LENS_RADIUS, 0.003, 0.006, matte_counter, vertices=40, bevel=0.001),
+        add_annular_ring(
+            "CounterSingleGoldRing",
+            COUNTER_RING_OUTER_RADIUS,
+            COUNTER_RING_INNER_RADIUS,
+            0.036,
+            0.094,
+            counter_gold,
+            vertices=96,
+            bevel=0.012,
+        ),
+        add_cylinder("CounterNumberPlate", COUNTER_LENS_RADIUS, 0.040, 0.080, matte_counter, vertices=96, bevel=0.006),
     ])
+    # The target body is a wide, shallow instrument while its counter remains
+    # truly circular. Scale only the body/fields here so the dial is not
+    # distorted into an ellipse by a runtime node transform.
+    for obj in objects:
+        if obj.name.startswith("Counter"):
+            continue
+        obj.scale.x = PANEL_WIDTH_SCALE
+        obj.scale.y = PANEL_DEPTH_SCALE
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        obj.select_set(False)
     return objects
 
 
@@ -501,8 +622,6 @@ def export(objects: list[bpy.types.Object]) -> None:
             "python3",
             str(ROOT / "tools" / "3d" / "canonicalize_glb_images.py"),
             str(OUTPUT),
-            "--unlit-material",
-            "CenterExactActiveRed",
         ],
         check=True,
     )

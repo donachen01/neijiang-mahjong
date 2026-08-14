@@ -82,7 +82,6 @@ const CENTER_COUNTER_BEZEL_RADIUS := 0.455
 const CENTER_ACTIVE_CUTOUT_RADIUS := 0.460
 const CENTER_SEPARATOR_CORNER_ANGLE_DEGREES := 27.75854
 const UPRIGHT_HAND_CLEARANCE_Y := 0.012
-const CENTER_PANEL_DIRECTIONS := ["东", "南", "西", "北"]
 # Segment order is top, right, bottom, left. Seats are self, left, opposite,
 # right, so this map highlights the physical side whose turn is active.
 const CENTER_PANEL_SEGMENT_FOR_SEAT := [2, 3, 0, 1]
@@ -99,7 +98,8 @@ var selected_marker_style_variant := 0
 # and a front-wide/back-narrow table trapezoid, so this camera must remain
 # perspective rather than merely geometrically balanced in isolation.
 const CAMERA_PROFILE := "commercial_reference_perspective_v2"
-const CAMERA_FOV := 49.5
+# 按宽度铺满保留原版手机沉浸式构图：超宽横屏不在左右露出大片蓝色桌外区。
+const CAMERA_HORIZONTAL_FOV := 49.5
 const CAMERA_POSITION := Vector3(0.0, 13.0, 13.0)
 const CAMERA_TARGET := Vector3(0.0, 0.0, -0.50)
 
@@ -112,7 +112,6 @@ var center_wall_count_surface: MeshInstance3D
 var center_wall_count_inset: MeshInstance3D
 var center_glass_diamond: MeshInstance3D
 var center_direction_active_overlays: Array[MeshInstance3D] = []
-var center_direction_labels: Array[Label3D] = []
 var center_active_turn_seat := -1
 var center_wall_count_visible := true
 var tile_nodes: Dictionary = {}
@@ -342,7 +341,7 @@ func _setup_world() -> void:
 	camera.position = CAMERA_POSITION
 	camera.projection = Camera3D.PROJECTION_PERSPECTIVE
 	camera.keep_aspect = Camera3D.KEEP_WIDTH
-	camera.fov = CAMERA_FOV
+	camera.fov = CAMERA_HORIZONTAL_FOV
 	camera.near = 0.1
 	camera.far = 50.0
 	camera.look_at_from_position(camera.position, CAMERA_TARGET, Vector3.UP)
@@ -356,18 +355,18 @@ func _setup_world() -> void:
 	# the dedicated layer-2 fill light, so this table calibration does not cost
 	# glyph readability.
 	key_light.light_color = Color("FFF0E3")
-	key_light.light_energy = 0.91
+	key_light.light_energy = 0.79
 	# DirectionalLight3D shines along local -Z. The -170-degree yaw points the
 	# ground component toward the player's right/down screen quadrant, matching
 	# the supplied commercial reference instead of the former right/up shadow.
-	key_light.rotation_degrees = Vector3(-60.0, -165.0, -8.0)
+	key_light.rotation_degrees = Vector3(-70.0, -170.0, -6.0)
 	key_light.shadow_enabled = true
 	# The table occupies a compact plane. Restricting the orthogonal shadow map to
 	# the visible play area gives every tile edge more texels; explicit opacity and
 	# blur keep the single contact shadow short and soft across render profiles.
-	key_light.directional_shadow_max_distance = 24.0
-	key_light.shadow_opacity = 0.82
-	key_light.shadow_blur = 1.65
+	key_light.directional_shadow_max_distance = 22.0
+	key_light.shadow_opacity = 0.64
+	key_light.shadow_blur = 1.90
 	key_light.shadow_bias = 0.035
 	key_light.shadow_normal_bias = 0.82
 	add_child(key_light)
@@ -432,9 +431,25 @@ func _setup_center_wall_count() -> void:
 		center_wall_count_anchor.add_child(center_compass_model)
 		_preserve_imported_pbr_materials(center_compass_model)
 		_configure_imported_center_meshes(center_compass_model)
-		center_wall_count_surface = center_compass_model.find_child("CenterGlassInlay", true, false) as MeshInstance3D
-		center_wall_count_inset = center_compass_model.find_child("CounterGlassLens", true, false) as MeshInstance3D
-		center_glass_diamond = center_compass_model.find_child("CounterGlassLens", true, false) as MeshInstance3D
+		center_wall_count_surface = center_compass_model.find_child("DirectionBase0", true, false) as MeshInstance3D
+		center_wall_count_inset = center_compass_model.find_child("CounterNumberPlate", true, false) as MeshInstance3D
+		center_glass_diamond = center_compass_model.find_child("CounterNumberPlate", true, false) as MeshInstance3D
+		# Give the independently authored center components a restrained local
+		# photography light. It shares no layer with tiles/table, so the ring gets
+		# the target ivory-gold glint without bleaching the Mahjong faces or felt.
+		for mesh_value in center_compass_model.find_children("*", "MeshInstance3D", true, false):
+			var center_mesh := mesh_value as MeshInstance3D
+			if center_mesh != null:
+				center_mesh.layers |= 1 << 2
+		var center_glint := OmniLight3D.new()
+		center_glint.name = "CenterInstrumentGlint"
+		center_glint.position = Vector3(-0.72, 1.10, 0.58)
+		center_glint.light_color = Color("FFF0C8")
+		center_glint.light_energy = 0.38
+		center_glint.omni_range = 2.6
+		center_glint.light_cull_mask = 1 << 2
+		center_glint.shadow_enabled = false
+		center_wall_count_anchor.add_child(center_glint)
 		for index in range(4):
 			var overlay := center_compass_model.find_child("DirectionActive%d" % index, true, false) as MeshInstance3D
 			if overlay == null:
@@ -448,58 +463,30 @@ func _setup_center_wall_count() -> void:
 	center_wall_count_label.text = "55"
 	center_wall_count_label.font_size = 90
 	center_wall_count_label.pixel_size = 0.0058
-	center_wall_count_label.modulate = Color("E8DFC8")
+	center_wall_count_label.modulate = Color("FFF7DE")
 	center_wall_count_label.outline_modulate = Color("071713")
 	center_wall_count_label.outline_size = 5
 	center_wall_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	center_wall_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	center_wall_count_label.no_depth_test = false
 	center_wall_count_label.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
-	center_wall_count_label.position = Vector3(0.0, 0.010, 0.0)
+	center_wall_count_label.position = Vector3(0.0, 0.108, 0.0)
 	center_wall_count_anchor.add_child(center_wall_count_label)
 
-	var label_positions := [
-		Vector3(0.0, 0.012, -0.59),
-		Vector3(0.78, 0.012, -0.01),
-		Vector3(0.0, 0.012, 0.57),
-		Vector3(-0.78, 0.012, -0.01),
-	]
-	for index in range(CENTER_PANEL_DIRECTIONS.size()):
-		var direction_label := _make_center_direction_label(
-			"CenterDirectionLabel%d" % index,
-			CENTER_PANEL_DIRECTIONS[index],
-			label_positions[index]
-		)
-		center_direction_labels.append(direction_label)
-		center_wall_count_anchor.add_child(direction_label)
 	_set_center_panel_state(55, -1)
 
 
 func _configure_imported_center_meshes(node: Node) -> void:
 	if node is MeshInstance3D:
 		var mesh_instance := node as MeshInstance3D
-		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# Only the raised dial casts a contact shadow. The broad base stays
+		# shadowless so it reads as translucent glass rather than an opaque block.
+		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON \
+			if mesh_instance.name.begins_with("Counter") \
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mesh_instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	for child in node.get_children():
 		_configure_imported_center_meshes(child)
-
-
-func _make_center_direction_label(node_name: String, text: String, position: Vector3) -> Label3D:
-	var label := Label3D.new()
-	label.name = node_name
-	label.text = text
-	label.font_size = 58
-	label.pixel_size = 0.0056
-	label.modulate = Color.WHITE
-	label.outline_modulate = Color("071713")
-	label.outline_size = 3
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.no_depth_test = true
-	label.sorting_offset = 10.0
-	label.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
-	label.position = position
-	return label
 
 
 func _set_center_panel_state(wall_count: int, turn_seat: int) -> void:
@@ -511,9 +498,43 @@ func _set_center_panel_state(wall_count: int, turn_seat: int) -> void:
 		active_segment = int(CENTER_PANEL_SEGMENT_FOR_SEAT[center_active_turn_seat])
 	for index in range(center_direction_active_overlays.size()):
 		center_direction_active_overlays[index].visible = index == active_segment
-		if index < center_direction_labels.size():
-			center_direction_labels[index].modulate = Color("FFF4E0") if index == active_segment else Color.WHITE
-			center_direction_labels[index].outline_modulate = Color("2A090B") if index == active_segment else Color("071713")
+
+
+func get_seat_play_screen_rect(seat: int) -> Rect2:
+	if camera == null or seat < 0 or seat > 3:
+		return Rect2()
+	var tile_rects := get_seat_play_screen_rects(seat)
+	var result := Rect2()
+	var has_result := false
+	for tile_rect_value in tile_rects:
+		var tile_rect := tile_rect_value as Rect2
+		result = tile_rect if not has_result else result.merge(tile_rect)
+		has_result = true
+	return result if has_result else Rect2()
+
+
+func get_seat_play_screen_rects(seat: int) -> Array[Rect2]:
+	var result: Array[Rect2] = []
+	if camera == null or seat < 0 or seat > 3:
+		return result
+	var prefixes := ["hand_%d_" % seat, "meld_%d_" % seat, "winning_%d_" % seat]
+	for tile_key_value in tile_nodes.keys():
+		var tile_key := str(tile_key_value)
+		var matches_seat := false
+		for prefix in prefixes:
+			if tile_key.begins_with(prefix):
+				matches_seat = true
+				break
+		if not matches_seat:
+			continue
+		var tile := tile_nodes.get(tile_key_value) as NeijiangTile3D
+		if tile == null or not tile.visible:
+			continue
+		var tile_rect := tile.get_screen_rect(camera)
+		if tile_rect.size.x <= 0.0 or tile_rect.size.y <= 0.0:
+			continue
+		result.append(tile_rect.grow(12.0))
+	return result
 
 
 func _preserve_imported_pbr_materials(node: Node) -> void:
@@ -1057,9 +1078,8 @@ func _upright_hand_center_y(seat: int) -> float:
 func _self_hand_depth() -> float:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var aspect := viewport_size.x / maxf(1.0, viewport_size.y)
-	# KEEP_WIDTH magnifies vertical composition on ultra-wide phones. Pull the
-	# local rack slightly toward the table centre so its resin base remains fully
-	# inside the bottom safe edge instead of losing 0.5%–1.8% of the tile.
+	# 手机继续按宽度铺满桌面，超宽屏只把本家牌架向桌心收少量，
+	# 避免底边被裁，不通过缩小整张桌面来获取上下空间。
 	return 3.35 if aspect >= 2.0 else 3.57
 
 
@@ -1291,7 +1311,7 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"mode": "hybrid_3d_world_2d_hud",
 		"camera_profile": CAMERA_PROFILE,
 		"camera_projection": "perspective_3d",
-		"camera_aspect_policy": "keep_width",
+		"camera_aspect_policy": "keep_width_mobile_full_bleed",
 		"camera_fov": camera.fov,
 		"camera_position": CAMERA_POSITION,
 		"camera_target": CAMERA_TARGET,
@@ -1304,11 +1324,12 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"rendered_wall_tile_count": 0,
 		"wall_representation": "static_numeric_count_on_blender_four_way_instrument",
 		"wall_count_surface": "central_opaque_matte_smoked_jade_counter_flush_with_felt",
-		"center_display_asset": "blender_authored_flush_glass_four_way_inlay",
-		"center_display_shape": "flush_chamfered_glass_inlay_with_circular_counter",
-		"center_display_material": "imported_blender_pbr_glass_matte_counter_graphite_bronze_and_vivid_red_lacquer",
-		"center_display_nodes": ["CenterRecessBed", "CenterGlassInlay", "DirectionSeparatorHairlines", "CounterBronzeBezel", "CounterGlassLens", "CenterWallCount3DText"],
-		"center_display_detail": "continuous_smoked_glass_with_matte_counter_graphite_hairlines_bronze_and_arc_cutout_vivid_red_active_sector",
+		"center_display_asset": "blender_authored_single_ring_four_way_turn_instrument",
+		"center_display_shape": "shallow_four_plate_sage_body_with_single_gold_ring",
+		"center_display_material": "imported_blender_pbr_sage_champagne_gold_and_matte_counter",
+		"center_display_nodes": ["CenterRecessBed", "DirectionBase0", "DirectionSeparator0", "CounterSingleGoldRing", "CounterNumberPlate", "CenterWallCount3DText"],
+		"center_display_detail": "four_independent_sage_plates_four_inlaid_lines_one_hollow_gold_ring_and_one_number_plate",
+		"center_light_rig": "isolated_warm_glint_plus_global_soft_shadow_key",
 		"center_display_mobile_cost": "static_shadowless_imported_glb_no_process_animation_under_3000_triangles",
 		"center_display_source": "res://tools/3d/generate_neijiang_center_compass_v2.py",
 		"center_display_triangle_budget": 1044,
@@ -1320,10 +1341,10 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"center_outer_keyline": "removed_clean_glass_and_recess_silhouette",
 		"center_inlay_max_rise_world": CENTER_PANEL_TOP_Y,
 		"center_inlay_flush_tolerance_world": 0.010,
-		"center_direction_labels": CENTER_PANEL_DIRECTIONS,
+		"center_direction_labels": [],
 		"center_component_boundaries": "continuous_glass_plane_separated_by_coplanar_graphite_hairlines_without_colour_overlap",
-		"center_active_encoding": ["opaque_vivid_red_main_field_and_both_chamfer_fills", "warm_ivory_direction_glyph_with_dark_outline"],
-		"center_active_color_hex": "A13D2D",
+		"center_active_encoding": ["pbr_champagne_gold_main_field_and_both_chamfer_fills", "shape_only_without_direction_glyphs"],
+		"center_active_color_hex": "F2CD70",
 		"center_active_geometry": "segmented_coplanar_top_faces_with_circular_counter_cutout_without_extrusion_or_dark_sidewalls",
 		"center_counter_bezel_radius": CENTER_COUNTER_BEZEL_RADIUS,
 		"center_active_counter_cutout_radius": CENTER_ACTIVE_CUTOUT_RADIUS,
@@ -1377,7 +1398,7 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"far_rack_tilt_degrees": absf(FAR_RACK_TILT_DEGREES),
 		"opponent_hand_contact_policy": "shared_glb_half_height_plus_12mm_felt_clearance",
 		"opponent_hand_contact_clearance": UPRIGHT_HAND_CLEARANCE_Y,
-		"opponent_hand_shadow": "physical_body_casts_short_soft_single_key_contact_shadow",
+		"opponent_hand_shadow": "sichuan_matched_low_opacity_1_90_blur_short_contact_shadow",
 		"opponent_concealed_surface": "jade_back_with_ivory_rim",
 		"opponent_concealed_owner_surface": "warm_ivory_sides_target_white_far",
 		"side_concealed_top_tilt": "perpendicular_to_table",
@@ -1437,6 +1458,8 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"light_count": 2,
 		"shadow_casting_light_count": 1,
 		"directional_shadow_max_distance": 22.0,
+		"directional_shadow_opacity": 0.64,
+		"directional_shadow_blur": 1.90,
 		"mobile_directional_shadow_size": int(ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/size.mobile", 0)),
 		"mobile_soft_shadow_filter_quality": int(ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile", 0)),
 		"physics_tiles": 0,

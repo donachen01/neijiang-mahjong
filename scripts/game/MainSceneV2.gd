@@ -783,24 +783,19 @@ func _apply_neijiang_3d_layout() -> void:
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
 		return
 	var safe_margins := _neijiang_safe_area_margins(viewport_size)
-	var ui_scale := clampf(viewport_size.y / DESIGN_BASE_SIZE.y, 0.72, 1.10)
+	# Keep HUD cards at their authored 230×146 maximum on very tall device
+	# viewports. The former 1.10 upscale made a 253px side card wider than the
+	# iPhone's exterior lane and forced decorative clipping or tile overlap.
+	var ui_scale := clampf(viewport_size.y / DESIGN_BASE_SIZE.y, 0.72, 1.00)
 	var hud_size := Vector2(230.0, 146.0)
-	# 复用四川桌面的四席参考轨迹：尤其把对家名牌放到右上方，避开横向手牌。
-	# 位置随视口分别缩放，尺寸仍走统一的可读性缩放与安全区约束。
-	var reference_scale := Vector2(viewport_size.x / DESIGN_BASE_SIZE.x, viewport_size.y / DESIGN_BASE_SIZE.y)
-	var self_hand_top := 856.0 * reference_scale.y
-	# 工具抽屉现在默认收纳到左上角，右侧不再为旧竖向按钮栏预留空白。
-	var right_hud_max_x := viewport_size.x - safe_margins.z - hud_size.x * ui_scale - 18.0
-	var self_hud_position := Vector2(
-		safe_margins.x,
-		viewport_size.y - safe_margins.w - hud_size.y * ui_scale - 12.0
+	# HUD 停靠以实际 3D 手牌/副露的屏幕投影为约束，不再把 2048×1152 的
+	# 固定像素位置等比套到超宽手机。这样名字牌在开局、碰杠和胡牌后都不会
+	# 遮挡实体麻将，且仍被 iOS/Android 安全区夹紧。
+	var hud_positions := _compute_neijiang_3d_hud_positions(
+		viewport_size,
+		safe_margins,
+		hud_size * ui_scale
 	)
-	var hud_positions := {
-		0: self_hud_position,
-		1: Vector2(maxf(safe_margins.x, 80.0 * reference_scale.x), maxf(safe_margins.y, 170.0 * reference_scale.y)),
-		2: Vector2(clampf(1450.0 * reference_scale.x, safe_margins.x, viewport_size.x - safe_margins.z - hud_size.x * ui_scale), safe_margins.y + 16.0),
-		3: Vector2(clampf(1750.0 * reference_scale.x, safe_margins.x, right_hud_max_x), maxf(safe_margins.y, 170.0 * reference_scale.y)),
-	}
 	for seat in range(4):
 		var seat_hud := table_3d_seat_huds.get(seat) as NeijiangSeatHUD
 		if seat_hud == null:
@@ -833,6 +828,119 @@ func _apply_neijiang_3d_layout() -> void:
 				viewport_size.y * 0.68 - table_3d_action_bar.size.y * action_scale
 			)
 		)
+
+
+func _compute_neijiang_3d_hud_positions(
+	viewport_size: Vector2,
+	safe_margins: Vector4,
+	hud_pixel_size: Vector2
+) -> Dictionary:
+	var outer_padding := 14.0
+	var play_gap := 18.0
+	var safe_bounds := Rect2(
+		Vector2(safe_margins.x + outer_padding, safe_margins.y + outer_padding),
+		Vector2(
+			maxf(1.0, viewport_size.x - safe_margins.x - safe_margins.z - outer_padding * 2.0),
+			maxf(1.0, viewport_size.y - safe_margins.y - safe_margins.w - outer_padding * 2.0)
+		)
+	)
+	var play_rects: Dictionary = {}
+	if table_stage_3d != null and table_stage_3d.has_method("get_seat_play_screen_rect"):
+		for seat in range(4):
+			var play_rect := table_stage_3d.call("get_seat_play_screen_rect", seat) as Rect2
+			if play_rect.size.x > 1.0 and play_rect.size.y > 1.0:
+				play_rects[seat] = play_rect
+
+	var positions: Dictionary = {}
+	var occupied: Array[Rect2] = []
+	if table_stage_3d != null and table_stage_3d.has_method("get_seat_play_screen_rects"):
+		for seat in range(4):
+			for tile_rect_value in table_stage_3d.call("get_seat_play_screen_rects", seat):
+				occupied.append((tile_rect_value as Rect2).grow(play_gap))
+	else:
+		for play_rect_value in play_rects.values():
+			occupied.append((play_rect_value as Rect2).grow(play_gap))
+
+	# 三家名牌使用图稿指定的屏幕外沿停靠位，而不是跟随每局手牌包围盒
+	# 漂移：本家左下、左家左外沿、右家右外沿。这样碰杠或摸牌改变牌数时
+	# 名牌不会突然跳进桌心；仅以设备安全区为边界，保留刘海/圆角可读性。
+	# 桌面 fallback 安全边距是 18px，并非真实刘海；外沿停靠时扣除该
+	# fallback，使 16:9 下本家名牌也能像参考图一样贴边让出第一张手牌。
+	var self_rect := play_rects.get(0, Rect2()) as Rect2
+	# 本家名牌按用户真机反馈移到手牌左上方：横向允许装饰性外框进入
+	# 刘海留白，但文字仍完整可见；纵向以手牌顶边为硬边界，永不压牌。
+	# 用户明确希望再向左移动；本家名牌固定在 6px 外沿，不让 iOS 的
+	# 横屏刘海安全区把整块名牌推回第一张手牌上。重要文字位于名牌右半部，
+	# 左侧进入圆角/刘海区的主要是装饰头像边缘。
+	var self_left := 6.0
+	var self_above_hand := self_rect.position.y - hud_pixel_size.y - play_gap \
+		if self_rect.size.y > 1.0 else viewport_size.y * 0.67
+	var self_position := Vector2(
+		self_left,
+		clampf(self_above_hand, safe_bounds.position.y, safe_bounds.end.y - hud_pixel_size.y)
+	)
+	positions[0] = self_position
+	occupied.append(Rect2(self_position, hud_pixel_size).grow(8.0))
+
+	var side_hud_y := clampf(
+		viewport_size.y * 0.15,
+		safe_bounds.position.y,
+		safe_bounds.end.y - hud_pixel_size.y
+	)
+	# On notched landscape phones the safe-area inset previously pushed both
+	# side HUDs inward onto the vertical hands. The capped authored size now fits
+	# the exterior lane completely, so both cards can stay visible at the real
+	# screen edges without touching any projected tile.
+	var left_position := Vector2(0.0, side_hud_y)
+	positions[1] = left_position
+	occupied.append(Rect2(left_position, hud_pixel_size).grow(8.0))
+
+	var right_position := Vector2(viewport_size.x - hud_pixel_size.x - 6.0, side_hud_y)
+	positions[3] = right_position
+	occupied.append(Rect2(right_position, hud_pixel_size).grow(8.0))
+
+	var far_rect := play_rects.get(2, Rect2()) as Rect2
+	var far_preferred := Vector2(
+		far_rect.end.x + play_gap if far_rect.size.x > 1.0 else safe_bounds.end.x - hud_pixel_size.x,
+		far_rect.position.y - hud_pixel_size.y * 0.25 if far_rect.size.y > 1.0 else safe_bounds.position.y
+	)
+	positions[2] = _find_nearest_clear_hud_slot(far_preferred, hud_pixel_size, safe_bounds, occupied)
+	return positions
+
+
+func _find_nearest_clear_hud_slot(
+	preferred: Vector2,
+	hud_size: Vector2,
+	safe_bounds: Rect2,
+	blockers: Array[Rect2]
+) -> Vector2:
+	var min_x := safe_bounds.position.x
+	var min_y := safe_bounds.position.y
+	var max_x := maxf(min_x, safe_bounds.end.x - hud_size.x)
+	var max_y := maxf(min_y, safe_bounds.end.y - hud_size.y)
+	var clamped := Vector2(clampf(preferred.x, min_x, max_x), clampf(preferred.y, min_y, max_y))
+	var best := clamped
+	var best_score := INF
+	var y := min_y
+	while y <= max_y + 0.1:
+		var x := min_x
+		while x <= max_x + 0.1:
+			var candidate := Rect2(Vector2(minf(x, max_x), minf(y, max_y)), hud_size)
+			if _hud_rect_is_clear(candidate, blockers):
+				var score := candidate.position.distance_squared_to(clamped)
+				if score < best_score:
+					best = candidate.position
+					best_score = score
+			x += 24.0
+		y += 24.0
+	return best
+
+
+func _hud_rect_is_clear(candidate: Rect2, blockers: Array[Rect2]) -> bool:
+	for blocker in blockers:
+		if candidate.intersects(blocker):
+			return false
+	return true
 
 
 func _neijiang_safe_area_margins(viewport_size: Vector2) -> Vector4:
@@ -2963,6 +3071,9 @@ func _write_neijiang_3d_runtime_probe() -> void:
 	if game_scene != null:
 		for child in game_scene.get_children():
 			game_scene_children.append(str(child.name))
+	var hud_layout_probe := _build_neijiang_3d_hud_layout_probe()
+	var stage_visual_contract: Dictionary = table_stage_3d.call("get_visual_contract") \
+		if stage_valid and table_stage_3d.has_method("get_visual_contract") else {}
 	var probe := {
 		"app_version": str(ProjectSettings.get_setting("application/config/version", "")),
 		"platform": OS.get_name(),
@@ -2980,6 +3091,13 @@ func _write_neijiang_3d_runtime_probe() -> void:
 		"table_model_present": stage_valid and table_stage_3d.get_node_or_null("ManufacturedClubTable") != null,
 		"gameplay_tile_count": (stage_tiles as Dictionary).size() if stage_tiles is Dictionary else 0,
 		"new_seat_hud_count": table_3d_seat_huds.size(),
+		"hud_layout": hud_layout_probe,
+		"hud_overlap_seats": hud_layout_probe.get("overlap_seats", []),
+		"seat_hud_font_paths": hud_layout_probe.get("seat_hud_font_paths", {}),
+		"utility_font_path": str(table_3d_utility_bar.get_visual_contract().get("font_path", "")) if table_3d_utility_bar != null else "",
+		"action_font_path": str(table_3d_action_bar.get_visual_contract().get("font_path", "")) if table_3d_action_bar != null else "",
+		"center_direction_label_count": Array(stage_visual_contract.get("center_direction_labels", [])).size() if not stage_visual_contract.is_empty() else -1,
+		"camera_aspect_policy": str(stage_visual_contract.get("camera_aspect_policy", "")),
 		"legacy_visible_controls": legacy_visible,
 		"viewport_size": [get_viewport_rect().size.x, get_viewport_rect().size.y],
 	}
@@ -2990,6 +3108,40 @@ func _write_neijiang_3d_runtime_probe() -> void:
 	var file := FileAccess.open("user://neijiang_3d_runtime_probe.json", FileAccess.WRITE)
 	if file != null:
 		file.store_string(JSON.stringify(probe, "\t"))
+
+
+func _build_neijiang_3d_hud_layout_probe() -> Dictionary:
+	var hud_rects: Dictionary = {}
+	var play_rects: Dictionary = {}
+	var font_paths: Dictionary = {}
+	var overlap_seats: Array[int] = []
+	for seat in range(4):
+		var seat_hud := table_3d_seat_huds.get(seat) as NeijiangSeatHUD
+		if seat_hud == null:
+			continue
+		var hud_rect := seat_hud.get_global_rect()
+		var play_rect := table_stage_3d.call("get_seat_play_screen_rect", seat) as Rect2 \
+			if table_stage_3d != null and table_stage_3d.has_method("get_seat_play_screen_rect") else Rect2()
+		hud_rects[str(seat)] = [hud_rect.position.x, hud_rect.position.y, hud_rect.size.x, hud_rect.size.y]
+		play_rects[str(seat)] = [play_rect.position.x, play_rect.position.y, play_rect.size.x, play_rect.size.y]
+		var contract := seat_hud.get_visual_contract()
+		font_paths[str(seat)] = {
+			"name": str(contract.get("name_font_path", "")),
+			"body": str(contract.get("body_font_path", "")),
+		}
+		if table_stage_3d != null and table_stage_3d.has_method("get_seat_play_screen_rects"):
+			for tile_rect_value in table_stage_3d.call("get_seat_play_screen_rects", seat):
+				if hud_rect.intersects(tile_rect_value as Rect2):
+					overlap_seats.append(seat)
+					break
+		elif play_rect.size.x > 1.0 and play_rect.size.y > 1.0 and hud_rect.intersects(play_rect):
+			overlap_seats.append(seat)
+	return {
+		"hud_rects": hud_rects,
+		"play_rects": play_rects,
+		"seat_hud_font_paths": font_paths,
+		"overlap_seats": overlap_seats,
+	}
 
 
 func _handle_audio_transitions(previous_snapshot: Dictionary, snapshot: Dictionary) -> void:

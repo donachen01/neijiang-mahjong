@@ -14,6 +14,8 @@ const TEXT_SECONDARY := Color("C9C6BC")
 const CINNABAR := Color("982F28")
 const GANG_BROWN := Color("76431F")
 const AVATAR_MEDALLION_SCRIPT := preload("res://scripts/ui/table/NeijiangSeatAvatarMedallion.gd")
+const BODY_FONT := preload("res://res/fonts/app_cjk.ttc")
+const NAME_FONT := preload("res://res/fonts/nameplate_calligraphy.ttf")
 
 var seat := 0
 var background_panel: Panel
@@ -73,6 +75,8 @@ func get_visual_contract() -> Dictionary:
 		"active_treatment": "single_thin_antique_gold_edge",
 		"active_text_badge": "none",
 		"badges_inside_bounds": true,
+		"name_font_path": NAME_FONT.resource_path,
+		"body_font_path": BODY_FONT.resource_path,
 	}
 
 
@@ -130,6 +134,7 @@ func _build_ui() -> void:
 	avatar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	avatar_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	avatar_label.add_theme_font_size_override("font_size", 34)
+	avatar_label.add_theme_font_override("font", NAME_FONT)
 	avatar_label.add_theme_color_override("font_color", Color("FFF1C4"))
 	avatar_label.add_theme_color_override("font_outline_color", Color("05110D"))
 	avatar_label.add_theme_constant_override("outline_size", 3)
@@ -153,6 +158,7 @@ func _build_ui() -> void:
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_label.add_theme_font_size_override("font_size", 28)
+	name_label.add_theme_font_override("font", NAME_FONT)
 	_apply_text_style(name_label, TEXT_PRIMARY)
 	text_column.add_child(name_label)
 
@@ -163,6 +169,7 @@ func _build_ui() -> void:
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	score_label.add_theme_font_size_override("font_size", 27)
+	score_label.add_theme_font_override("font", BODY_FONT)
 	_apply_text_style(score_label, TEXT_SECONDARY)
 	text_column.add_child(score_label)
 
@@ -206,6 +213,7 @@ func _make_badge(text_value: String, fill: Color, width: float) -> Label:
 	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	badge.add_theme_font_size_override("font_size", 16)
+	badge.add_theme_font_override("font", BODY_FONT)
 	badge.add_theme_color_override("font_color", Color("FFF1C4"))
 	badge.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.04, 0.96))
 	badge.add_theme_constant_override("outline_size", 2)

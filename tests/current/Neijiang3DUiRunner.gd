@@ -115,6 +115,10 @@ func _verify_action_bar_contract(failures: Array[String]) -> void:
 	var contract := action_bar.get_visual_contract()
 	if int(contract.get("maximum_actions", 0)) < 6:
 		failures.append("Neijiang action bar contract does not support all six action slots")
+	if str(contract.get("font_path", "")) != "res://res/fonts/app_cjk.ttc":
+		failures.append("Neijiang action bar does not bind the packaged CJK font")
+	if bao_button != null and bao_button.get_theme_font("font").resource_path != "res://res/fonts/app_cjk.ttc":
+		failures.append("Neijiang action button theme does not actually use the packaged CJK font")
 	action_bar.queue_free()
 	await process_frame
 
@@ -144,6 +148,12 @@ func _verify_seat_hud_contract(failures: Array[String]) -> void:
 		failures.append("Neijiang SeatHUD active state lost its stable edge treatment")
 	if hud.report_badge == null or hud.report_badge.text != "杠×2":
 		failures.append("Neijiang SeatHUD did not render the bao-gang count")
+	if str(contract.get("name_font_path", "")) != "res://res/fonts/nameplate_calligraphy.ttf" \
+		or str(contract.get("body_font_path", "")) != "res://res/fonts/app_cjk.ttc":
+		failures.append("Neijiang SeatHUD does not bind its packaged name/body CJK fonts")
+	if hud.name_label.get_theme_font("font").resource_path != "res://res/fonts/nameplate_calligraphy.ttf" \
+		or hud.score_label.get_theme_font("font").resource_path != "res://res/fonts/app_cjk.ttc":
+		failures.append("Neijiang SeatHUD theme does not actually use the packaged CJK fonts")
 	hud.queue_free()
 	await process_frame
 
@@ -157,6 +167,11 @@ func _verify_utility_bar_contract(failures: Array[String]) -> void:
 		failures.append("牌桌工具未默认折叠到左上角")
 	if utility_bar.get_button("toggle") == null or utility_bar.panel == null or utility_bar.panel.visible:
 		failures.append("牌桌工具折叠按钮或抽屉初始状态错误")
+	if str(contract.get("font_path", "")) != "res://res/fonts/app_cjk.ttc":
+		failures.append("牌桌工具没有绑定发布包内置中文字体")
+	var difficulty_button := utility_bar.get_button("difficulty")
+	if difficulty_button == null or difficulty_button.get_theme_font("font").resource_path != "res://res/fonts/app_cjk.ttc":
+		failures.append("牌桌工具按钮主题没有实际使用发布包内置中文字体")
 	utility_bar.set_collapsed(false)
 	if not utility_bar.panel.visible:
 		failures.append("牌桌工具抽屉无法展开")
@@ -216,9 +231,69 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 		failures.append("MainScene replaced the fixed 3D stage with a runtime-only node")
 	elif not installed_stage.has_method("is_render_ready") or not bool(installed_stage.call("is_render_ready")):
 		failures.append("MainScene fixed 3D stage did not reach render-ready state")
+	else:
+		var stage_contract := installed_stage.call("get_visual_contract") as Dictionary
+		if not Array(stage_contract.get("center_direction_labels", ["unexpected"])).is_empty():
+			failures.append("Center instrument reintroduced direction glyphs after the numeric-only decision")
+		if str(stage_contract.get("camera_aspect_policy", "")) != "keep_width_mobile_full_bleed":
+			failures.append("Camera no longer preserves the mobile full-bleed table contract")
+		if int(stage_contract.get("mobile_directional_shadow_size", 0)) < 4096:
+			failures.append("Mobile directional shadow map must retain the 4096 anti-jagged contract")
+		if int(stage_contract.get("mobile_soft_shadow_filter_quality", -1)) < 2:
+			failures.append("Mobile soft-shadow filtering must remain medium quality or better")
+		if not is_equal_approx(float(stage_contract.get("directional_shadow_opacity", 0.0)), 0.64):
+			failures.append("Opponent rack shadow opacity drifted from the Sichuan-matched 0.64")
+		if not is_equal_approx(float(stage_contract.get("directional_shadow_blur", 0.0)), 1.90):
+			failures.append("Opponent rack shadow blur drifted from the Sichuan-matched 1.90")
+		if not installed_stage.find_children("CenterDirectionLabel*", "Label3D", true, false).is_empty():
+			failures.append("Center instrument node tree still contains direction Label3D nodes")
+		if str(stage_contract.get("center_display_shape", "")) != "shallow_four_plate_sage_body_with_single_gold_ring":
+			failures.append("Center instrument regressed from the single-ring reference-style Blender model")
+		if str(stage_contract.get("center_active_color_hex", "")) != "F2CD70":
+			failures.append("Center instrument active sector is no longer champagne gold")
+		if installed_stage.find_child("CounterSingleGoldRing", true, false) == null \
+				or installed_stage.find_child("CounterNumberPlate", true, false) == null:
+			failures.append("Center instrument lost its single gold ring or number plate")
+		if installed_stage.find_child("CounterIvoryRing", true, false) != null \
+				or installed_stage.find_child("CounterInnerGoldLip", true, false) != null:
+			failures.append("Center instrument incorrectly retained stacked physical rings")
 	if main_scene.get("table_3d_action_bar") == null or main_scene.get("table_3d_utility_bar") == null:
 		failures.append("MainScene did not install the Neijiang action/utility adapters")
 	main_scene.call("_on_snapshot_changed", main_scene.get("last_snapshot"))
+	main_scene.call("_apply_neijiang_3d_layout")
+	var seat_huds: Dictionary = main_scene.get("table_3d_seat_huds")
+	for seat in range(4):
+		var seat_hud := seat_huds.get(seat) as Control
+		var tile_rects: Array = installed_stage.call("get_seat_play_screen_rects", seat) \
+			if installed_stage != null and installed_stage.has_method("get_seat_play_screen_rects") else []
+		for tile_rect_value in tile_rects:
+			if seat_hud != null and seat_hud.get_global_rect().intersects(tile_rect_value as Rect2):
+				failures.append("Seat %d HUD overlaps a projected 3D hand/meld tile" % seat)
+				break
+		if seat_hud != null and installed_stage != null:
+			var play_rect := installed_stage.call("get_seat_play_screen_rect", seat) as Rect2
+			if play_rect.size.x > 1.0:
+				var hud_center := seat_hud.get_global_rect().get_center()
+				var play_center := play_rect.get_center()
+				if seat in [0, 1] and hud_center.x >= play_center.x:
+					failures.append("Seat %d HUD is not docked to the requested left outer lane" % seat)
+				if seat in [2, 3] and hud_center.x <= play_center.x:
+					failures.append("Seat %d HUD is not docked to the requested right outer lane" % seat)
+	var root_ui := main_scene.get("root_ui") as Control
+	var viewport_size := root_ui.size if root_ui != null else Vector2(2560.0, 1440.0)
+	var self_rect := (seat_huds.get(0) as Control).get_global_rect()
+	var left_rect := (seat_huds.get(1) as Control).get_global_rect()
+	var right_rect := (seat_huds.get(3) as Control).get_global_rect()
+	var self_play_rect := installed_stage.call("get_seat_play_screen_rect", 0) as Rect2
+	var self_clear_left_or_above := self_play_rect.size.y <= 1.0 \
+		or self_rect.end.x <= self_play_rect.position.x - 4.0 \
+		or self_rect.end.y <= self_play_rect.position.y - 4.0
+	if self_rect.position.x > viewport_size.x * 0.04 or not self_clear_left_or_above:
+		failures.append("Self HUD is no longer pinned left and above the self hand: hud=%s play=%s viewport=%s" % [self_rect, self_play_rect, viewport_size])
+	if left_rect.position.x > viewport_size.x * 0.04 or left_rect.position.y > viewport_size.y * 0.22:
+		failures.append("Left HUD is no longer pinned to the requested upper-left screen lane: hud=%s viewport=%s" % [left_rect, viewport_size])
+	if right_rect.end.x < viewport_size.x * 0.96 or right_rect.position.y > viewport_size.y * 0.22:
+		failures.append("Right HUD is no longer pinned to the requested upper-right screen lane: hud=%s viewport=%s" % [right_rect, viewport_size])
 	var top_next_round := main_scene.get_node_or_null(
 		"UILayer/RootUI/SafeArea/MainVBox/TopBar/TopBarMargin/TopBarRow/TopNextRoundButton"
 	) as Control

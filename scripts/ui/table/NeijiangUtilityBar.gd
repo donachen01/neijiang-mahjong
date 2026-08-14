@@ -6,6 +6,7 @@ signal utility_selected(action: String)
 const BUTTON_SIZE := Vector2(102.0, 54.0)
 const BUTTON_GAP := 8
 const TOGGLE_SIZE := Vector2(62.0, 62.0)
+const BODY_FONT := preload("res://res/fonts/app_cjk.ttc")
 
 var buttons: Dictionary = {}
 var button_column: HBoxContainer
@@ -48,6 +49,7 @@ func get_visual_contract() -> Dictionary:
 		"collapsed_by_default": true,
 		"anchor": "top_left",
 		"actions": buttons.keys(),
+		"font_path": BODY_FONT.resource_path,
 	}
 
 
@@ -174,6 +176,7 @@ func _create_button(action: String, label_text: String) -> void:
 	button.custom_minimum_size = BUTTON_SIZE
 	button.focus_mode = Control.FOCUS_ALL
 	button.add_theme_font_size_override("font_size", 19)
+	button.add_theme_font_override("font", BODY_FONT)
 	button.add_theme_color_override("font_color", Color("FFF0CF"))
 	button.add_theme_color_override("font_outline_color", Color("24150C"))
 	button.add_theme_constant_override("outline_size", 2)

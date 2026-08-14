@@ -13,6 +13,7 @@ const MAX_ACTIONS := 6
 const BUTTON_LARGE := Vector2(148.0, 148.0)
 const BUTTON_COMPACT := Vector2(122.0, 122.0)
 const BUTTON_DENSE := Vector2(108.0, 108.0)
+const BODY_FONT := preload("res://res/fonts/app_cjk.ttc")
 
 var status_label: Label
 var action_row: HBoxContainer
@@ -85,6 +86,7 @@ func get_visual_contract() -> Dictionary:
 		"supports_separate_an_gang": true,
 		"focus_navigation": true,
 		"touch_target_minimum": BUTTON_DENSE,
+		"font_path": BODY_FONT.resource_path,
 	}
 
 
@@ -113,6 +115,7 @@ func _build_ui() -> void:
 	status_label.name = "ActionStatus"
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.add_theme_font_size_override("font_size", 23)
+	status_label.add_theme_font_override("font", BODY_FONT)
 	status_label.add_theme_color_override("font_color", Color("FFF1CD"))
 	status_label.add_theme_color_override("font_outline_color", Color("26170E"))
 	status_label.add_theme_constant_override("outline_size", 3)
@@ -134,6 +137,7 @@ func _ensure_button(action_id: String) -> Button:
 	button.focus_mode = Control.FOCUS_ALL
 	button.text = action_id
 	button.add_theme_font_size_override("font_size", 34)
+	button.add_theme_font_override("font", BODY_FONT)
 	button.add_theme_color_override("font_color", Color.WHITE)
 	button.add_theme_color_override("font_hover_color", Color.WHITE)
 	button.add_theme_color_override("font_pressed_color", Color("FFF0B2"))
