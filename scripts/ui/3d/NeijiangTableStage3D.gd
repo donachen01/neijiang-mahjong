@@ -78,10 +78,10 @@ const DISCARD_GLOBAL_Z_SHIFT := -1.60
 # Authored TableFelt AABB top in the manufactured table asset. The turn panel's
 # low shell starts here so it reads as a fitted table component, not a HUD card.
 const TABLETOP_CONTACT_Y := 0.155
-const CENTER_PANEL_TOP_Y := 0.074
-const CENTER_COUNTER_BEZEL_RADIUS := 0.455
-const CENTER_ACTIVE_CUTOUT_RADIUS := 0.460
-const CENTER_SEPARATOR_CORNER_ANGLE_DEGREES := 27.75854
+const CENTER_PANEL_TOP_Y := 0.0635
+const CENTER_COUNTER_BEZEL_RADIUS := 0.505
+const CENTER_ACTIVE_CUTOUT_RADIUS := 0.510
+const CENTER_SEPARATOR_CORNER_ANGLE_DEGREES := 30.02940
 const UPRIGHT_HAND_CLEARANCE_Y := 0.012
 # Segment order is top, right, bottom, left. Seats are self, left, opposite,
 # right, so this map highlights the physical side whose turn is active.
@@ -495,13 +495,12 @@ func _setup_center_wall_count() -> void:
 func _configure_imported_center_meshes(node: Node) -> void:
 	if node is MeshInstance3D:
 		var mesh_instance := node as MeshInstance3D
-		# Raised sector plates now own real depth, so they must participate in the
-		# global key shadow together with the dial. Hairline separators remain free
-		# of self-shadow noise.
+		# The single centre body owns physical depth and shadow. Active fields and
+		# pearl separators are flush inlays, so casting their own shadows would
+		# recreate a dark line beside the intended white field boundary.
 		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON \
 			if mesh_instance.name.begins_with("Counter") \
 				or mesh_instance.name.begins_with("DirectionBase") \
-				or mesh_instance.name.begins_with("DirectionActive") \
 			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mesh_instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	for child in node.get_children():
@@ -1344,16 +1343,16 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"wall_representation": "static_numeric_count_on_blender_four_way_instrument",
 		"wall_count_surface": "central_opaque_matte_smoked_jade_counter_flush_with_felt",
 		"center_display_asset": "blender_authored_single_ring_four_way_turn_instrument",
-		"center_display_shape": "raised_four_plate_deep_jade_body_with_single_gold_ring",
+		"center_display_shape": "single_extruded_deep_jade_body_with_four_flush_colour_fields_and_single_gold_ring",
 		"center_display_material": "imported_blender_pbr_deep_jade_signal_yellow_gold_ring_and_matte_counter",
 		"center_display_nodes": ["CenterRecessBed", "DirectionBase0", "DirectionSeparator0", "CounterSingleGoldRing", "CounterNumberPlate", "CenterWallCount3DText"],
-		"center_display_detail": "four_independent_extruded_dark_jade_plates_four_raised_lines_one_hollow_gold_ring_and_one_number_plate",
+		"center_display_detail": "one_continuous_extruded_dark_jade_body_four_boundary_matched_flush_colour_inlays_four_pearl_lines_one_hollow_gold_ring_and_one_number_plate",
 		"center_light_rig": "isolated_ring_glint_plus_whole_instrument_warm_spot_plus_global_soft_shadow_key",
 		"center_display_mobile_cost": "static_imported_glb_no_process_animation_under_10000_triangles",
 		"center_display_source": "res://tools/3d/generate_neijiang_center_compass_v2.py",
-		"center_display_triangle_budget": 8732,
-		"center_display_material_count": 5,
-		"center_display_object_count": 9,
+		"center_display_triangle_budget": 5440,
+		"center_display_material_count": 7,
+		"center_display_object_count": 13,
 		"center_display_runtime_mesh_generation": false,
 		"center_glass_finish": "low_gloss_smoked_jade_alpha_blend_with_restrained_transmission",
 		"center_counter_finish": "opaque_matte_smoked_jade_without_emission_or_transmission",
@@ -1361,11 +1360,11 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"center_inlay_max_rise_world": CENTER_PANEL_TOP_Y,
 		"center_inlay_flush_tolerance_world": 0.010,
 		"center_direction_labels": [],
-		"center_component_boundaries": "four_manufactured_plates_with_real_sidewalls_bevels_and_raised_pearl_separators",
+		"center_component_boundaries": "colour_inlay_boundaries_and_pearl_separators_share_one_coordinate_system_without_internal_physical_bevel_seams",
 		"center_active_encoding": ["non_metallic_signal_yellow_lacquer_field", "shape_only_without_direction_glyphs"],
 		"center_active_color_hex": "F4C430",
 		"center_inactive_color_hex": "3A644D",
-		"center_active_geometry": "thin_extruded_bevelled_yellow_overlay_with_circular_counter_cutout",
+		"center_active_geometry": "flush_signal_yellow_inlay_with_circular_counter_cutout_and_no_internal_bevel_shadow",
 		"center_counter_bezel_radius": CENTER_COUNTER_BEZEL_RADIUS,
 		"center_active_counter_cutout_radius": CENTER_ACTIVE_CUTOUT_RADIUS,
 		"center_separator_corner_angle_degrees": CENTER_SEPARATOR_CORNER_ANGLE_DEGREES,

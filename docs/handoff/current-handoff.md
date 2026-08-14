@@ -1,5 +1,15 @@
 # 当前 Handoff - 内江麻将工程
 
+## 2026-08-14 / 1.0.70 中心颜色区与模型边界统一
+
+- 当前分支：`codex/neijiang-sichuan-3d-ui-port`；当前源码版本：`1.0.70`。
+- 中心四方板不再是四块独立倒角实体，改为一个连续挤出底座加四块齐平颜色嵌片；黄色/深绿颜色区、珠白线和分区射线共用同一套精确坐标，消除同一颜色内部多出来的黑色物理边界。
+- Blender 模型重新生成后为 13 个对象、7 种材质、约 5,440 三角形；四个活动方位的 Android OpenGL 2400×1080 强制渲染均通过。
+- 7 项 Godot 回归、.NET Release、AI.Core.Smoke、Android 最终 APK、iOS NativeAOT/Xcode Release 全部通过。
+- Android：`build/android/NeijiangMahjong-1.0.70-release.apk`，SHA-256 `836f463c597e427386f8180e4fe022972557952aacf1836769bfb7f1d2f27c2a`，versionCode 70，OpenGL 启动合同、zipalign、v2/v3 签名通过。
+- iOS：`/Volumes/AI/NeijiangMahjongRuntime/NeijiangMahjong-1.0.70-development.ipa`，SHA-256 `40430d8a4a744938e79f6473e9b7653f697f125d14c5b8c7503c8e3714cd9810`；已局域网覆盖安装到 iPhone 15 并启动，真机探针回读新中心合同和版本 1.0.70。
+- 完整证据：`docs/testing/neijiang-v1.0.70-center-boundary-unification-report.md`。
+
 ## 2026-08-14 / 1.0.69 Android 黑屏退出修复
 
 - 当前分支：`codex/neijiang-sichuan-3d-ui-port`。

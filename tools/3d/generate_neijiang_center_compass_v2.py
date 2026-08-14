@@ -33,15 +33,12 @@ PANEL_DEPTH_SCALE = 0.96
 # keeps the straight chords between sampled arc points from crossing the ring.
 ACTIVE_SECTOR_CUTOUT_RADIUS = COUNTER_RING_OUTER_RADIUS + 0.005
 ACTIVE_SECTOR_ARC_SEGMENTS = 8
-SEPARATOR_INNER_X = 0.38
-SEPARATOR_INNER_Y = 0.20
-# The separator hairlines do not divide the wide panel into four equal 90°
-# wedges. Top/bottom span about 124.5°, while left/right span about 55.5°.
-# Active lacquer must use the same rays or East/West leave dark wedges beside
-# the counter even though their outer bands look red.
-SEPARATOR_CORNER_ANGLE_DEGREES = math.degrees(
-    math.atan2(SEPARATOR_INNER_Y, SEPARATOR_INNER_X)
-)
+SEPARATOR_LINE_START_RADIUS = COUNTER_RING_OUTER_RADIUS - 0.06
+# One coordinate system owns the physical field boundary, the signal-yellow
+# inlay boundary and the pearl separator.  The former model used an approximate
+# 0.38/0.20 separator ray beside a 1.22/0.705 plate ray; their divergence exposed
+# a second dark bevel line inside one colour field on mobile.
+SEPARATOR_CORNER_ANGLE_DEGREES = math.degrees(math.atan2(0.705, 1.22))
 
 
 def srgb_to_linear(value: float) -> float:
@@ -437,6 +434,27 @@ def arc_points(start_degrees: float, end_degrees: float) -> list[tuple[float, fl
     ]
 
 
+def polar_point(radius: float, degrees: float) -> tuple[float, float]:
+    return (
+        math.cos(math.radians(degrees)) * radius,
+        math.sin(math.radians(degrees)) * radius,
+    )
+
+
+def direction_panel_outline() -> list[tuple[float, float]]:
+    """Return the single manufactured body shared by all four colour fields."""
+    return [
+        (-1.025, 0.90),
+        (1.025, 0.90),
+        (1.22, 0.705),
+        (1.22, -0.705),
+        (1.025, -0.90),
+        (-1.025, -0.90),
+        (-1.22, -0.705),
+        (-1.22, 0.705),
+    ]
+
+
 def sector_with_counter_cutout(
     outer_start: tuple[float, float],
     outer_end: tuple[float, float],
@@ -595,11 +613,22 @@ def build() -> list[bpy.types.Object]:
         ),
     ]
 
+    corner_angle = SEPARATOR_CORNER_ANGLE_DEGREES
+    separator_angles = [
+        180.0 - corner_angle,
+        corner_angle,
+        -corner_angle,
+        -180.0 + corner_angle,
+    ]
+    separator_outer_points = [
+        (-1.22, 0.705),
+        (1.22, 0.705),
+        (1.22, -0.705),
+        (-1.22, -0.705),
+    ]
     separator_segments = [
-        ((-SEPARATOR_INNER_X, SEPARATOR_INNER_Y), (-1.20, 0.70)),
-        ((SEPARATOR_INNER_X, SEPARATOR_INNER_Y), (1.20, 0.70)),
-        ((SEPARATOR_INNER_X, -SEPARATOR_INNER_Y), (1.20, -0.70)),
-        ((-SEPARATOR_INNER_X, -SEPARATOR_INNER_Y), (-1.20, -0.70)),
+        (polar_point(SEPARATOR_LINE_START_RADIUS, angle), separator_outer_points[index])
+        for index, angle in enumerate(separator_angles)
     ]
     for index, segment in enumerate(separator_segments):
         objects.append(
@@ -607,39 +636,36 @@ def build() -> list[bpy.types.Object]:
                 f"DirectionSeparator{index}",
                 [segment],
                 0.013,
-                0.076,
+                0.0635,
                 separator_light,
             )
         )
 
-    # Four independently authored dark-jade plates have real side walls and
-    # softened edges.  This is what separates a manufactured centre instrument
-    # from the former coplanar paper-like overlay.
-    for index, polygon_pieces in enumerate(direction_polygon_pieces()):
-        objects.append(
-            extruded_polygon_collection(
-                f"DirectionBase{index}",
-                polygon_pieces,
-                0.020,
-                0.060,
-                dark_jade,
-                bevel=0.012,
-                bevel_segments=3,
-            )
+    # One continuous extruded body supplies the manufactured depth and outer
+    # bevel. Internal fields are colour inlays, not four separately bevelled
+    # solids; therefore no black physical seam can appear inside a colour field.
+    objects.append(
+        prism_from_outline(
+            "DirectionBase0",
+            direction_panel_outline(),
+            0.020,
+            0.060,
+            dark_jade,
+            bevel=0.012,
+            bevel_segments=3,
         )
+    )
 
-    # Only the current seat reveals one clearly yellow lacquer field.  It is
-    # deliberately non-metallic so it can never be confused with the gold ring.
+    # Only the current seat reveals one clearly yellow lacquer field. These
+    # top-only flush inlays share the exact boundary rays used by the pearl
+    # separators; bevelled overlay edges previously created the extra dark line.
     for index, polygon_pieces in enumerate(direction_polygon_pieces()):
         objects.append(
-            extruded_polygon_collection(
+            flat_polygon_collection(
                 f"DirectionActive{index}",
                 polygon_pieces,
-                0.061,
-                0.074,
+                0.0615,
                 active_yellow,
-                bevel=0.006,
-                bevel_segments=2,
             )
         )
     objects.extend([

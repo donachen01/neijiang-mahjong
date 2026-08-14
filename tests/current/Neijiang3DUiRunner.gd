@@ -247,8 +247,13 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 			failures.append("Opponent rack shadow blur drifted from the Sichuan-matched 1.90")
 		if not installed_stage.find_children("CenterDirectionLabel*", "Label3D", true, false).is_empty():
 			failures.append("Center instrument node tree still contains direction Label3D nodes")
-		if str(stage_contract.get("center_display_shape", "")) != "raised_four_plate_deep_jade_body_with_single_gold_ring":
+		if str(stage_contract.get("center_display_shape", "")) != "single_extruded_deep_jade_body_with_four_flush_colour_fields_and_single_gold_ring":
 			failures.append("Center instrument regressed from the single-ring reference-style Blender model")
+		for extra_base_index in range(1, 4):
+			if installed_stage.find_child("DirectionBase%d" % extra_base_index, true, false) != null:
+				failures.append("Center instrument reintroduced an extra physical field boundary at DirectionBase%d" % extra_base_index)
+		if str(stage_contract.get("center_component_boundaries", "")).find("without_internal_physical_bevel_seams") < 0:
+			failures.append("Center colour fields and pearl separators no longer share the seam-free boundary contract")
 		if str(stage_contract.get("center_active_color_hex", "")) != "F4C430":
 			failures.append("Center instrument active sector must be signal yellow rather than metallic gold")
 		if str(stage_contract.get("center_inactive_color_hex", "")) != "3A644D":

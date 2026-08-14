@@ -23,6 +23,18 @@ func _capture() -> void:
 	await process_frame
 	await process_frame
 	await process_frame
+	var forced_center_seat := -1
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--force-center-seat="):
+			forced_center_seat = int(argument.trim_prefix("--force-center-seat="))
+	if forced_center_seat >= 0 and forced_center_seat < 4:
+		var table_stage := main_scene.get("table_stage_3d") as Node
+		if table_stage == null or not table_stage.has_method("_set_center_panel_state"):
+			push_error("无法强制中心活动方位：3D 牌桌未就绪")
+			quit(1)
+			return
+		table_stage.call("_set_center_panel_state", 17, forced_center_seat)
+		await process_frame
 	if OS.get_cmdline_user_args().has("--show-actions"):
 		var action_bar := main_scene.get("table_3d_action_bar") as NeijiangActionBar
 		if action_bar != null:
@@ -128,7 +140,7 @@ func _validate_mobile_ui_contract(main_scene: Node) -> bool:
 	if str(stage_contract.get("camera_aspect_policy", "")) != "keep_width_mobile_full_bleed":
 		push_error("摄像机必须保留手机满屏桌面合同")
 		return false
-	if str(stage_contract.get("center_display_shape", "")) != "raised_four_plate_deep_jade_body_with_single_gold_ring" \
+	if str(stage_contract.get("center_display_shape", "")) != "single_extruded_deep_jade_body_with_four_flush_colour_fields_and_single_gold_ring" \
 			or str(stage_contract.get("center_active_color_hex", "")) != "F4C430" \
 			or str(stage_contract.get("center_inactive_color_hex", "")) != "3A644D":
 		push_error("中心区域未保持深绿立体板、黄色活动区与单金环设计")
