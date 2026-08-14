@@ -23,9 +23,9 @@ ART_ROOT = PROJECT_ROOT / "res" / "art"
 OUTPUT_GLB = ART_ROOT / "3d" / "neijiang_table_v2.glb"
 TEXTURE_DIR = ART_ROOT / "materials" / "table_v2"
 
-TABLE_CENTER = np.array([0x32, 0x78, 0x43], dtype=np.float32) / 255.0
-TABLE_BASE = np.array([0x29, 0x69, 0x39], dtype=np.float32) / 255.0
-TABLE_EDGE = np.array([0x20, 0x55, 0x31], dtype=np.float32) / 255.0
+TABLE_CENTER = np.array([0x24, 0x7C, 0x73], dtype=np.float32) / 255.0
+TABLE_BASE = np.array([0x1D, 0x6A, 0x60], dtype=np.float32) / 255.0
+TABLE_EDGE = np.array([0x16, 0x58, 0x50], dtype=np.float32) / 255.0
 LEATHER_RAIL = np.array([0x1A, 0x3A, 0x2E], dtype=np.float32) / 255.0
 WALNUT_WARM = np.array([0x5E, 0x38, 0x28], dtype=np.float32) / 255.0
 # A near-neighbour of the felt, not a black painted outline.  Together with the
@@ -128,16 +128,23 @@ def generate_felt_maps(size: int = 2048) -> tuple[bpy.types.Image, bpy.types.Ima
         mid_nap += np.sin(projected * cycles * math.tau + phase)
     mid_nap /= math.sqrt(24.0)
 
-    # BaseColor is deliberately uniform. All visible short-nap response lives
-    # in the micro-scale Normal and roughness maps so mipmaps cannot reveal
-    # broad colour clouds on mobile devices.
+    # Real short-nap cloth is never a perfectly uniform painted plane. Keep the
+    # variation fine and isotropic so it reads as dense fibres after mobile
+    # mipmapping without becoming large stains or directional ribbing.
     clean_felt_color = TABLE_BASE * 0.82 + TABLE_CENTER * 0.18
     base = np.broadcast_to(clean_felt_color[None, None, :], (size, size, 3)).copy()
-    # Display calibration for the fixed Godot Metal/Filmic table-lighting rig.
-    # Author a natural warm green in the source map. These channel gains account
-    # for the fixed warm Metal/Filmic lighting rig without returning to the old
-    # cyan-biased result.
-    base *= np.array([0.66, 1.03, 0.90], dtype=np.float32)[None, None, :]
+    colour_nap = (
+        np.clip(mid_nap, -1.5, 1.5) * 0.012
+        + (fine - 0.5) * 0.028
+        + (fibre - 0.5) * 0.017
+    )
+    base *= 1.0 + colour_nap[:, :, None]
+    # Preserve an emerald-teal cloth under the warm Metal/Filmic key light.
+    base *= np.array([0.82, 1.03, 1.06], dtype=np.float32)[None, None, :]
+    # Sparse light-facing fibre tips give the surface a soft textile sparkle,
+    # not plastic clearcoat. The mask is deterministic and sub-pixel dense.
+    fibre_tips = np.clip((fine - 0.76) / 0.24, 0.0, 1.0) ** 3
+    base += fibre_tips[:, :, None] * np.array([0.010, 0.018, 0.017], dtype=np.float32)
 
     # Keep the legacy audit mask deterministic, but do not tint the production
     # base colour with it. The runtime table is clean short-nap felt throughout.
@@ -153,9 +160,9 @@ def generate_felt_maps(size: int = 2048) -> tuple[bpy.types.Image, bpy.types.Ima
     # The mid layer supplies readable short nap while the dense layer keeps the
     # close-up fibre response. Neither layer writes into BaseColor.
     height = (
-        mid_nap * 0.030
-        + sum(field * 0.035 for field in fibre_fields)
-        + (fine - 0.5) * 0.030
+        mid_nap * 0.052
+        + sum(field * 0.048 for field in fibre_fields)
+        + (fine - 0.5) * 0.046
     )
     grad_y, grad_x = np.gradient(height)
     normal = np.dstack((-grad_x * 2.15, -grad_y * 2.15, np.ones_like(height)))
@@ -165,12 +172,12 @@ def generate_felt_maps(size: int = 2048) -> tuple[bpy.types.Image, bpy.types.Ima
     felt_normal = save_non_color_image("FeltNormal2048", TEXTURE_DIR / "felt_normal.png", normal_rgba)
 
     roughness = np.clip(
-        0.85
-        + np.clip(mid_nap, -1.5, 1.5) * 0.006
-        + (fine - 0.5) * 0.012
-        + (fibre - 0.5) * 0.008,
-        0.83,
-        0.87,
+        0.82
+        + np.clip(mid_nap, -1.5, 1.5) * 0.018
+        + (fine - 0.5) * 0.040
+        + (fibre - 0.5) * 0.028,
+        0.76,
+        0.88,
     )
     orm = np.ones((size, size, 4), dtype=np.float32)
     orm[:, :, 0] = 0.97  # AO stays uniform; geometry provides the edge depth.
@@ -385,7 +392,7 @@ def build_table() -> list[bpy.types.Object]:
     felt_maps = generate_felt_maps()
     leather_maps = generate_surface_maps("leather", LEATHER_RAIL, 1024, 6101, 0.72, 0.0)
     walnut_maps = generate_surface_maps("walnut", WALNUT_WARM, 1024, 6201, 0.58, 0.0)
-    felt = pbr_material("DeepEmeraldShortNapFelt", *felt_maps, normal_strength=0.34)
+    felt = pbr_material("DeepEmeraldShortNapFelt", *felt_maps, normal_strength=0.58)
     leather = pbr_material("InkGreenLeather", *leather_maps)
     walnut = pbr_material("WarmWalnutFrame", *walnut_maps, normal_strength=0.38)
     groove = simple_material("PlayfieldRecessedGroove", PLAYFIELD_GROOVE, 0.94, 0.0)

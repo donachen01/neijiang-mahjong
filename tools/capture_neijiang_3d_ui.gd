@@ -128,9 +128,10 @@ func _validate_mobile_ui_contract(main_scene: Node) -> bool:
 	if str(stage_contract.get("camera_aspect_policy", "")) != "keep_width_mobile_full_bleed":
 		push_error("摄像机必须保留手机满屏桌面合同")
 		return false
-	if str(stage_contract.get("center_display_shape", "")) != "shallow_four_plate_sage_body_with_single_gold_ring" \
-			or str(stage_contract.get("center_active_color_hex", "")) != "F2CD70":
-		push_error("中心区域未保持目标图的单金环四分区设计")
+	if str(stage_contract.get("center_display_shape", "")) != "raised_four_plate_deep_jade_body_with_single_gold_ring" \
+			or str(stage_contract.get("center_active_color_hex", "")) != "F4C430" \
+			or str(stage_contract.get("center_inactive_color_hex", "")) != "3A644D":
+		push_error("中心区域未保持深绿立体板、黄色活动区与单金环设计")
 		return false
 	if stage.find_child("CounterSingleGoldRing", true, false) == null \
 			or stage.find_child("CounterNumberPlate", true, false) == null:

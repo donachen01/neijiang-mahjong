@@ -1,7 +1,7 @@
 """Generate the Blender-authored single-ring four-way turn instrument.
 
 The GLB owns all visible physical geometry and PBR materials. Godot keeps only
-the live wall count plus visibility of the four authored champagne-gold active
+the live wall count plus visibility of the four authored signal-yellow active
 sector overlays. This preserves turn state without rebuilding the manufactured
 object from runtime flat meshes or adding direction glyphs.
 
@@ -20,10 +20,10 @@ import bpy
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "res" / "art" / "3d" / "neijiang_center_compass_v2.glb"
-ACTIVE_GOLD_DISPLAY_HEX = "F2CD70"
-# The active field is a warm champagne-gold PBR lacquer, matching the supplied
-# reference instead of the former flat red enamel.
-ACTIVE_GOLD_AUTHORING_HEX = "C78B26"
+ACTIVE_YELLOW_TARGET_HEX = "F4C430"
+ACTIVE_YELLOW_AUTHORING_HEX = "D9A514"
+INACTIVE_JADE_TARGET_HEX = "3A644D"
+INACTIVE_JADE_AUTHORING_HEX = "24483A"
 COUNTER_RING_OUTER_RADIUS = 0.505
 COUNTER_RING_INNER_RADIUS = 0.355
 COUNTER_LENS_RADIUS = 0.340
@@ -179,6 +179,66 @@ def flat_polygon_collection(
     mesh.materials.append(material)
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(obj)
+    return obj
+
+
+def extruded_polygon_collection(
+    name: str,
+    polygons: list[list[tuple[float, float]]],
+    bottom: float,
+    top: float,
+    material: bpy.types.Material,
+    *,
+    bevel: float,
+    bevel_segments: int = 3,
+) -> bpy.types.Object:
+    """Build a watertight plate around the circular counter cutout.
+
+    The sector is tessellated for the hole, but every shared coordinate is
+    welded before faces are authored. Boundary edges are detected once and
+    receive one side wall each. This avoids Solidify's overlapping rims and the
+    long black shading spikes those non-manifold rims produced in Godot.
+    """
+    point_indices: dict[tuple[float, float], int] = {}
+    unique_points: list[tuple[float, float]] = []
+    top_faces: list[tuple[int, ...]] = []
+    edge_occurrences: dict[tuple[int, int], tuple[int, tuple[int, int]]] = {}
+    for polygon in polygons:
+        indices: list[int] = []
+        for x, y in polygon:
+            key = (round(x, 7), round(y, 7))
+            if key not in point_indices:
+                point_indices[key] = len(unique_points)
+                unique_points.append((x, y))
+            indices.append(point_indices[key])
+        top_faces.append(tuple(indices))
+        for index, start in enumerate(indices):
+            end = indices[(index + 1) % len(indices)]
+            edge_key = (min(start, end), max(start, end))
+            count, oriented = edge_occurrences.get(edge_key, (0, (start, end)))
+            edge_occurrences[edge_key] = (count + 1, oriented)
+
+    point_count = len(unique_points)
+    vertices = (
+        [(x, y, top) for x, y in unique_points]
+        + [(x, y, bottom) for x, y in unique_points]
+    )
+    faces: list[tuple[int, ...]] = list(top_faces)
+    faces.extend(tuple(point_count + index for index in reversed(face)) for face in top_faces)
+    for count, (start, end) in edge_occurrences.values():
+        if count == 1:
+            faces.append((start, end, point_count + end, point_count + start))
+
+    mesh = bpy.data.meshes.new(f"{name}Mesh")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.materials.append(material)
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    if bevel > 0.0:
+        bevel_object(obj, bevel, bevel_segments)
+    # Planar caps remain flat; only the bevel/side band shares smooth normals.
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = abs(polygon.normal.z) < 0.985
     return obj
 
 
@@ -446,8 +506,8 @@ def direction_polygon_pieces() -> list[list[list[tuple[float, float]]]]:
 
 
 def build() -> list[bpy.types.Object]:
-    # The reference is deliberately simple: a shallow jade body, one luminous
-    # active field and exactly one broad gold ring around the number plate.
+    # The reference is deliberately simple: a shallow dark-jade instrument,
+    # one unmistakably yellow active field and exactly one broad gold ring.
     counter_gold = make_material(
         "CenterSingleChampagneGoldRing",
         "E8CA78",
@@ -473,13 +533,14 @@ def build() -> list[bpy.types.Object]:
         coat=0.12,
         coat_roughness=0.32,
     )
-    smoked_glass = make_material(
-        "CenterSoftSageGlass",
-        "57795D",
+    dark_jade = make_material(
+        "CenterDeepJadeLacquer",
+        INACTIVE_JADE_AUTHORING_HEX,
         metallic=0.02,
-        roughness=0.40,
-        coat=0.24,
-        coat_roughness=0.22,
+        roughness=0.29,
+        coat=0.42,
+        coat_roughness=0.15,
+        anisotropic=0.05,
         alpha=1.0,
         transmission=0.0,
     )
@@ -500,15 +561,15 @@ def build() -> list[bpy.types.Object]:
         emission="667C6C",
         emission_strength=0.16,
     )
-    active_gold = make_material(
-        "CenterActiveChampagneGold",
-        ACTIVE_GOLD_DISPLAY_HEX,
-        metallic=0.08,
-        roughness=0.38,
-        coat=0.34,
-        coat_roughness=0.12,
-        emission="A77B2D",
-        emission_strength=0.018,
+    active_yellow = make_material(
+        "CenterActiveSignalYellow",
+        ACTIVE_YELLOW_AUTHORING_HEX,
+        metallic=0.0,
+        roughness=0.31,
+        coat=0.30,
+        coat_roughness=0.15,
+        emission="8C6A12",
+        emission_strength=0.012,
     )
 
     objects: list[bpy.types.Object] = [
@@ -546,33 +607,39 @@ def build() -> list[bpy.types.Object]:
                 f"DirectionSeparator{index}",
                 [segment],
                 0.013,
-                0.025,
+                0.076,
                 separator_light,
             )
         )
 
-    # Four independently authored base plates make the construction explicit
-    # and allow every direction to remain a distinct Blender component. They
-    # share one restrained sage material; lighting supplies the tonal gradient.
+    # Four independently authored dark-jade plates have real side walls and
+    # softened edges.  This is what separates a manufactured centre instrument
+    # from the former coplanar paper-like overlay.
     for index, polygon_pieces in enumerate(direction_polygon_pieces()):
         objects.append(
-            flat_polygon_collection(
+            extruded_polygon_collection(
                 f"DirectionBase{index}",
                 polygon_pieces,
-                0.022,
-                smoked_glass,
+                0.020,
+                0.060,
+                dark_jade,
+                bevel=0.012,
+                bevel_segments=3,
             )
         )
 
-    # Only the current seat reveals one champagne-gold lacquer field. It reaches
-    # the outer boundary and sits above the independent jade field underneath.
+    # Only the current seat reveals one clearly yellow lacquer field.  It is
+    # deliberately non-metallic so it can never be confused with the gold ring.
     for index, polygon_pieces in enumerate(direction_polygon_pieces()):
         objects.append(
-            flat_polygon_collection(
+            extruded_polygon_collection(
                 f"DirectionActive{index}",
                 polygon_pieces,
-                0.028,
-                active_gold,
+                0.061,
+                0.074,
+                active_yellow,
+                bevel=0.006,
+                bevel_segments=2,
             )
         )
     objects.extend([
@@ -580,13 +647,13 @@ def build() -> list[bpy.types.Object]:
             "CounterSingleGoldRing",
             COUNTER_RING_OUTER_RADIUS,
             COUNTER_RING_INNER_RADIUS,
-            0.036,
-            0.094,
+            0.058,
+            0.126,
             counter_gold,
             vertices=96,
             bevel=0.012,
         ),
-        add_cylinder("CounterNumberPlate", COUNTER_LENS_RADIUS, 0.040, 0.080, matte_counter, vertices=96, bevel=0.006),
+        add_cylinder("CounterNumberPlate", COUNTER_LENS_RADIUS, 0.062, 0.112, matte_counter, vertices=96, bevel=0.008),
     ])
     # The target body is a wide, shallow instrument while its counter remains
     # truly circular. Scale only the body/fields here so the dial is not

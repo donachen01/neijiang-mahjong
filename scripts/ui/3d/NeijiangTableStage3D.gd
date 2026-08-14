@@ -7,6 +7,7 @@ const TILE_SCRIPT := preload("res://scripts/ui/3d/NeijiangTile3D.gd")
 const TABLE_SCENE := preload("res://res/art/3d/neijiang_table_v2.glb")
 const CENTER_COMPASS_SCENE := preload("res://res/art/3d/neijiang_center_compass_v2.glb")
 const FALLBACK_TABLE_SCENE := preload("res://res/art/3d/neijiang_table.glb")
+const CENTER_NUMBER_FONT := preload("res://res/fonts/app_cjk.ttc")
 
 # Keep the original compact self-hand rhythm while preserving a real physical
 # seam. At the normal 1.94 scale each tile is 0.8148 world units wide, so 0.80
@@ -77,7 +78,7 @@ const DISCARD_GLOBAL_Z_SHIFT := -1.60
 # Authored TableFelt AABB top in the manufactured table asset. The turn panel's
 # low shell starts here so it reads as a fitted table component, not a HUD card.
 const TABLETOP_CONTACT_Y := 0.155
-const CENTER_PANEL_TOP_Y := 0.006
+const CENTER_PANEL_TOP_Y := 0.074
 const CENTER_COUNTER_BEZEL_RADIUS := 0.455
 const CENTER_ACTIVE_CUTOUT_RADIUS := 0.460
 const CENTER_SEPARATOR_CORNER_ANGLE_DEGREES := 27.75854
@@ -434,9 +435,9 @@ func _setup_center_wall_count() -> void:
 		center_wall_count_surface = center_compass_model.find_child("DirectionBase0", true, false) as MeshInstance3D
 		center_wall_count_inset = center_compass_model.find_child("CounterNumberPlate", true, false) as MeshInstance3D
 		center_glass_diamond = center_compass_model.find_child("CounterNumberPlate", true, false) as MeshInstance3D
-		# Give the independently authored center components a restrained local
-		# photography light. It shares no layer with tiles/table, so the ring gets
-		# the target ivory-gold glint without bleaching the Mahjong faces or felt.
+		# The first light is a restrained metal glint isolated to the authored
+		# instrument. The second is a broad warm spotlight that covers the complete
+		# centre assembly and creates a soft light pool on the surrounding felt.
 		for mesh_value in center_compass_model.find_children("*", "MeshInstance3D", true, false):
 			var center_mesh := mesh_value as MeshInstance3D
 			if center_mesh != null:
@@ -445,11 +446,22 @@ func _setup_center_wall_count() -> void:
 		center_glint.name = "CenterInstrumentGlint"
 		center_glint.position = Vector3(-0.72, 1.10, 0.58)
 		center_glint.light_color = Color("FFF0C8")
-		center_glint.light_energy = 0.38
+		center_glint.light_energy = 0.26
 		center_glint.omni_range = 2.6
 		center_glint.light_cull_mask = 1 << 2
 		center_glint.shadow_enabled = false
 		center_wall_count_anchor.add_child(center_glint)
+		var center_key := SpotLight3D.new()
+		center_key.name = "CenterInstrumentOverallKey"
+		center_key.position = Vector3(-0.42, 2.75, 0.62)
+		center_key.light_color = Color("FFE2A6")
+		center_key.light_energy = 0.86
+		center_key.spot_range = 4.4
+		center_key.spot_angle = 54.0
+		center_key.spot_attenuation = 1.55
+		center_key.shadow_enabled = false
+		center_wall_count_anchor.add_child(center_key)
+		center_key.look_at(Vector3(0.0, 0.0, 0.0), Vector3.UP)
 		for index in range(4):
 			var overlay := center_compass_model.find_child("DirectionActive%d" % index, true, false) as MeshInstance3D
 			if overlay == null:
@@ -461,6 +473,7 @@ func _setup_center_wall_count() -> void:
 	center_wall_count_label = Label3D.new()
 	center_wall_count_label.name = "CenterWallCount3DText"
 	center_wall_count_label.text = "55"
+	center_wall_count_label.font = CENTER_NUMBER_FONT
 	center_wall_count_label.font_size = 90
 	center_wall_count_label.pixel_size = 0.0058
 	center_wall_count_label.modulate = Color("FFF7DE")
@@ -470,7 +483,9 @@ func _setup_center_wall_count() -> void:
 	center_wall_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	center_wall_count_label.no_depth_test = false
 	center_wall_count_label.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
-	center_wall_count_label.position = Vector3(0.0, 0.108, 0.0)
+	# Noto CJK's tabular digits make every count stable; the small optical shift
+	# compensates for the oblique camera and the narrow left side-bearing of “1”.
+	center_wall_count_label.position = Vector3(-0.024, 0.142, 0.0)
 	center_wall_count_anchor.add_child(center_wall_count_label)
 
 	_set_center_panel_state(55, -1)
@@ -479,10 +494,13 @@ func _setup_center_wall_count() -> void:
 func _configure_imported_center_meshes(node: Node) -> void:
 	if node is MeshInstance3D:
 		var mesh_instance := node as MeshInstance3D
-		# Only the raised dial casts a contact shadow. The broad base stays
-		# shadowless so it reads as translucent glass rather than an opaque block.
+		# Raised sector plates now own real depth, so they must participate in the
+		# global key shadow together with the dial. Hairline separators remain free
+		# of self-shadow noise.
 		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON \
 			if mesh_instance.name.begins_with("Counter") \
+				or mesh_instance.name.begins_with("DirectionBase") \
+				or mesh_instance.name.begins_with("DirectionActive") \
 			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mesh_instance.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	for child in node.get_children():
@@ -1325,14 +1343,14 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"wall_representation": "static_numeric_count_on_blender_four_way_instrument",
 		"wall_count_surface": "central_opaque_matte_smoked_jade_counter_flush_with_felt",
 		"center_display_asset": "blender_authored_single_ring_four_way_turn_instrument",
-		"center_display_shape": "shallow_four_plate_sage_body_with_single_gold_ring",
-		"center_display_material": "imported_blender_pbr_sage_champagne_gold_and_matte_counter",
+		"center_display_shape": "raised_four_plate_deep_jade_body_with_single_gold_ring",
+		"center_display_material": "imported_blender_pbr_deep_jade_signal_yellow_gold_ring_and_matte_counter",
 		"center_display_nodes": ["CenterRecessBed", "DirectionBase0", "DirectionSeparator0", "CounterSingleGoldRing", "CounterNumberPlate", "CenterWallCount3DText"],
-		"center_display_detail": "four_independent_sage_plates_four_inlaid_lines_one_hollow_gold_ring_and_one_number_plate",
-		"center_light_rig": "isolated_warm_glint_plus_global_soft_shadow_key",
-		"center_display_mobile_cost": "static_shadowless_imported_glb_no_process_animation_under_3000_triangles",
+		"center_display_detail": "four_independent_extruded_dark_jade_plates_four_raised_lines_one_hollow_gold_ring_and_one_number_plate",
+		"center_light_rig": "isolated_ring_glint_plus_whole_instrument_warm_spot_plus_global_soft_shadow_key",
+		"center_display_mobile_cost": "static_imported_glb_no_process_animation_under_10000_triangles",
 		"center_display_source": "res://tools/3d/generate_neijiang_center_compass_v2.py",
-		"center_display_triangle_budget": 1044,
+		"center_display_triangle_budget": 8732,
 		"center_display_material_count": 5,
 		"center_display_object_count": 9,
 		"center_display_runtime_mesh_generation": false,
@@ -1342,10 +1360,11 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"center_inlay_max_rise_world": CENTER_PANEL_TOP_Y,
 		"center_inlay_flush_tolerance_world": 0.010,
 		"center_direction_labels": [],
-		"center_component_boundaries": "continuous_glass_plane_separated_by_coplanar_graphite_hairlines_without_colour_overlap",
-		"center_active_encoding": ["pbr_champagne_gold_main_field_and_both_chamfer_fills", "shape_only_without_direction_glyphs"],
-		"center_active_color_hex": "F2CD70",
-		"center_active_geometry": "segmented_coplanar_top_faces_with_circular_counter_cutout_without_extrusion_or_dark_sidewalls",
+		"center_component_boundaries": "four_manufactured_plates_with_real_sidewalls_bevels_and_raised_pearl_separators",
+		"center_active_encoding": ["non_metallic_signal_yellow_lacquer_field", "shape_only_without_direction_glyphs"],
+		"center_active_color_hex": "F4C430",
+		"center_inactive_color_hex": "3A644D",
+		"center_active_geometry": "thin_extruded_bevelled_yellow_overlay_with_circular_counter_cutout",
 		"center_counter_bezel_radius": CENTER_COUNTER_BEZEL_RADIUS,
 		"center_active_counter_cutout_radius": CENTER_ACTIVE_CUTOUT_RADIUS,
 		"center_separator_corner_angle_degrees": CENTER_SEPARATOR_CORNER_ANGLE_DEGREES,
@@ -1356,7 +1375,7 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"wall_count_format": "%d",
 		"wall_count_motion": "none_static_on_table_surface",
 		"wall_count_surface_height": TABLETOP_CONTACT_Y + CENTER_PANEL_TOP_Y,
-		"wall_count_surface_plane": "flush_coplanar_glass_inlay_without_visible_sidewalls_at_felt_y_0_155",
+		"wall_count_surface_plane": "raised_manufactured_plate_with_visible_bevels_above_felt_y_0_155",
 		"wall_count_surface_rotation_degrees": 0.0,
 		"wall_count_3d_node": center_wall_count_label != null,
 		"hand_counts": hand_counts,
@@ -1452,10 +1471,10 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"season_theme": "deep_emerald_refined_table",
 		"table_asset": "neijiang_table_v2_pbr",
 		"table_material_pipeline": "blender_pbr_preserved_without_flat_overrides",
-		"table_surface_finish": "splash_matched_natural_warm_green_dual_scale_short_nap_felt",
+		"table_surface_finish": "emerald_teal_visible_microfibre_short_nap_felt_with_basecolor_normal_and_roughness_variation",
 		"table_divider_finish": "subsurface_low_contrast_outer_boundary_with_fragmented_center_corners",
 		"concealed_gang_presentation": "outer_faces_middle_jade_backs",
-		"light_count": 2,
+		"light_count": 4,
 		"shadow_casting_light_count": 1,
 		"directional_shadow_max_distance": 22.0,
 		"directional_shadow_opacity": 0.64,

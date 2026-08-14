@@ -247,10 +247,14 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 			failures.append("Opponent rack shadow blur drifted from the Sichuan-matched 1.90")
 		if not installed_stage.find_children("CenterDirectionLabel*", "Label3D", true, false).is_empty():
 			failures.append("Center instrument node tree still contains direction Label3D nodes")
-		if str(stage_contract.get("center_display_shape", "")) != "shallow_four_plate_sage_body_with_single_gold_ring":
+		if str(stage_contract.get("center_display_shape", "")) != "raised_four_plate_deep_jade_body_with_single_gold_ring":
 			failures.append("Center instrument regressed from the single-ring reference-style Blender model")
-		if str(stage_contract.get("center_active_color_hex", "")) != "F2CD70":
-			failures.append("Center instrument active sector is no longer champagne gold")
+		if str(stage_contract.get("center_active_color_hex", "")) != "F4C430":
+			failures.append("Center instrument active sector must be signal yellow rather than metallic gold")
+		if str(stage_contract.get("center_inactive_color_hex", "")) != "3A644D":
+			failures.append("Center instrument inactive plates lost the sampled deep-jade colour")
+		if str(stage_contract.get("center_light_rig", "")).find("whole_instrument_warm_spot") < 0:
+			failures.append("Center instrument lost its whole-assembly key light")
 		if installed_stage.find_child("CounterSingleGoldRing", true, false) == null \
 				or installed_stage.find_child("CounterNumberPlate", true, false) == null:
 			failures.append("Center instrument lost its single gold ring or number plate")
