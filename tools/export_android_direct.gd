@@ -138,6 +138,11 @@ func _export_android() -> void:
 	preset.set("screen/support_large", true)
 	preset.set("screen/support_xlarge", true)
 	preset.set("screen/background_color", Color.BLACK)
+	# Android is forced to the Compatibility renderer at package startup.  Several
+	# Android Vulkan drivers present a black frame and terminate before the game
+	# scene can initialize, while the same scene is verified under OpenGL ES 3.
+	# Keeping this on the Android export preset leaves iOS/desktop on Forward+.
+	preset.set("command_line/extra_args", "--rendering-method gl_compatibility --rendering-driver opengl3")
 	preset.set("user_data_backup/allow", false)
 	preset.set("shader_baker/enabled", false)
 	preset.set("xr_features/xr_mode", 0)

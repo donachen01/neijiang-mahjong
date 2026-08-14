@@ -321,16 +321,17 @@ func _setup_world() -> void:
 	environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	# Small-radius SSAO grounds adjacent tiles without turning the ivory faces
-	# grey. This effect is available in the project's iOS Compatibility renderer;
-	# SSIL/GI remain off to preserve the mobile budget.
-	environment.ssao_enabled = true
-	environment.ssao_radius = 0.58
-	environment.ssao_intensity = 0.84
-	environment.ssao_power = 1.35
-	environment.ssao_detail = 0.45
-	environment.ssao_horizon = 0.06
-	environment.ssao_sharpness = 0.82
-	environment.ssao_light_affect = 0.28
+	# grey on Forward+. Compatibility/OpenGL ES has no SSAO implementation, so
+	# Android deliberately skips these unsupported RenderingDevice settings.
+	if RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		environment.ssao_enabled = true
+		environment.ssao_radius = 0.58
+		environment.ssao_intensity = 0.84
+		environment.ssao_power = 1.35
+		environment.ssao_detail = 0.45
+		environment.ssao_horizon = 0.06
+		environment.ssao_sharpness = 0.82
+		environment.ssao_light_affect = 0.28
 	world_environment.environment = environment
 	add_child(world_environment)
 

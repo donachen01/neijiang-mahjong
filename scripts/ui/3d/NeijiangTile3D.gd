@@ -553,8 +553,11 @@ func _ivory_body_material(bright_front: bool = false) -> StandardMaterial3D:
 	result.rim_enabled = true
 	result.rim = 0.035
 	result.rim_tint = 0.10
-	result.subsurf_scatter_enabled = true
-	result.subsurf_scatter_strength = 0.06
+	# Compatibility/OpenGL ES does not implement subsurface scattering.  Do not
+	# ask its shader compiler for an unsupported feature on Android startup.
+	if RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		result.subsurf_scatter_enabled = true
+		result.subsurf_scatter_strength = 0.06
 	result.emission_enabled = false
 	material_cache[cache_key] = result
 	return result

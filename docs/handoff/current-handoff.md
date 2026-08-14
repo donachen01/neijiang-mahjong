@@ -1,5 +1,17 @@
 # 当前 Handoff - 内江麻将工程
 
+## 2026-08-14 / 1.0.69 Android 黑屏退出修复
+
+- 当前分支：`codex/neijiang-sichuan-3d-ui-port`。
+- 当前源码版本：`1.0.69`。
+- 用户报告 1.0.68 APK 安装后启动黑屏并退出；最终包的 Mono、arm64 库、PCK/场景和 ETC2 纹理均存在。
+- Android 导出现已单独强制 `gl_compatibility + opengl3`，避开设备 Vulkan/Forward+ 驱动启动崩溃；iOS/工程默认仍保持 Forward+。
+- Compatibility 路径不再请求次表面散射和 SSAO；启动日志与真机探针已增加实际 renderer/driver。
+- 7 项 Godot 回归、.NET Release、AI.Core.Smoke、OpenGL 真实图形捕获全部通过。
+- 最终 APK：`build/android/NeijiangMahjong-1.0.69-release.apk`，versionCode 69，arm64，启动参数、zipalign 和 v2/v3 签名通过。
+- 当前无 ADB 设备，真机启动仍需用户安装 1.0.69 验收；如仍退出，必须采集本版 `logcat` 原始堆栈。
+- 完整证据：`docs/testing/neijiang-v1.0.69-android-opengl-startup-fix.md`。
+
 ## 2026-08-13 / 1.0.63 最新状态
 
 - 当前分支：`codex/neijiang-sichuan-3d-ui-port`。

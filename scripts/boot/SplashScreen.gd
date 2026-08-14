@@ -16,6 +16,14 @@ var _dice_faces := ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
 
 
 func _ready() -> void:
+	print(
+		"[Startup] version=%s platform=%s renderer=%s driver=%s" % [
+			str(ProjectSettings.get_setting("application/config/version", "")),
+			OS.get_name(),
+			RenderingServer.get_current_rendering_method(),
+			RenderingServer.get_current_rendering_driver_name(),
+		]
+	)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	modulate = Color(1, 1, 1, 0)
 	version_label.text = _app_version_text()

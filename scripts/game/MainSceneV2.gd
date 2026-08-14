@@ -3079,6 +3079,7 @@ func _write_neijiang_3d_runtime_probe() -> void:
 		"platform": OS.get_name(),
 		"configured_mobile_renderer": str(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile", "")),
 		"active_rendering_method": RenderingServer.get_current_rendering_method(),
+		"active_rendering_driver": RenderingServer.get_current_rendering_driver_name(),
 		"video_adapter": RenderingServer.get_video_adapter_name(),
 		"table_3d_enabled": table_3d_enabled,
 		"stage_reference_valid": stage_valid,

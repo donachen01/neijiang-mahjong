@@ -138,6 +138,21 @@ if [[ ! -f "$FINAL_APK" ]]; then
   exit 1
 fi
 
+verify_android_renderer_args() {
+  local apk_path="$1"
+  local command_line_dump
+  command_line_dump="$(unzip -p "$apk_path" 'assets/_cl_' | strings)"
+  for expected_arg in '--rendering-method' 'gl_compatibility' '--rendering-driver' 'opengl3'; do
+    if ! grep -Fqx -- "$expected_arg" <<< "$command_line_dump"; then
+      echo "Android APK is missing required renderer argument: $expected_arg"
+      exit 1
+    fi
+  done
+  echo "Android renderer startup contract: gl_compatibility / opengl3"
+}
+
+verify_android_renderer_args "$FINAL_APK"
+
 cp "$FINAL_APK" "$PRUNED_APK"
 zip -q -d "$PRUNED_APK" \
   'assets/docs/*' \
@@ -190,4 +205,5 @@ fi
   --out "$SIGNED_APK" \
   "$ALIGNED_APK"
 "$BUILD_TOOLS/apksigner" verify "$SIGNED_APK"
+verify_android_renderer_args "$SIGNED_APK"
 echo "Release APK: $SIGNED_APK"
