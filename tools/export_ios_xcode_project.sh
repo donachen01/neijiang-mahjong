@@ -56,7 +56,7 @@ if ! zipinfo -1 "$IOS_TEMPLATE" >/dev/null 2>&1; then
   exit 1
 fi
 
-EXPORT_DIR="$PROJECT_DIR/build/ios/NeijiangMahjong-${APP_VERSION}-ios-xcode"
+EXPORT_DIR="${GODOT_IOS_EXPORT_DIR:-$PROJECT_DIR/build/ios/NeijiangMahjong-${APP_VERSION}-ios-xcode}"
 rm -rf "$EXPORT_DIR"
 mkdir -p "$EXPORT_DIR"
 export GODOT_IOS_OUTPUT="$EXPORT_DIR/NeijiangMahjongIOS"
@@ -77,6 +77,12 @@ trap cleanup_export_guards EXIT
 cp "$PROJECT_DIR/tools/export_ios_xcode_direct.gd" "$TEMP_EXPORT_SCRIPT"
 for directory in docs evidence build dotnet tests tools backups 测试数据统计; do
   marker="$PROJECT_DIR/$directory/.gdignore"
+  # `build` is intentionally a symlink to the external runtime volume on this
+  # workstation. A symlinked external build tree is not part of the Godot
+  # resource scan and may be read-only in constrained release environments.
+  if [[ -L "$PROJECT_DIR/$directory" ]]; then
+    continue
+  fi
   if [[ -d "$PROJECT_DIR/$directory" && ! -e "$marker" ]]; then
     : > "$marker"
     CREATED_GDIGNORE+=("$marker")

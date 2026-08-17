@@ -462,6 +462,8 @@ def sector_with_counter_cutout(
     outer_after: tuple[float, float],
     arc_start_degrees: float,
     arc_end_degrees: float,
+    *,
+    include_corner_wings: bool,
 ) -> list[list[tuple[float, float]]]:
     """Tessellate one field around the counter with convex, deterministic faces."""
     inner_arc = arc_points(arc_start_degrees, arc_end_degrees)
@@ -473,8 +475,15 @@ def sector_with_counter_cutout(
         [outer_line[index], outer_line[index + 1], inner_arc[index + 1], inner_arc[index]]
         for index in range(ACTIVE_SECTOR_ARC_SEGMENTS)
     ]
-    pieces.append([outer_start, outer_before, inner_arc[0]])
-    pieces.append([outer_end, inner_arc[-1], outer_after])
+    # Only the top and bottom fields own the chamfered corner wings.  The old
+    # shared helper also added those triangles to the left/right fields.  Their
+    # tips crossed the diagonal separator rays, so a side player's yellow field
+    # visibly swallowed the white separator and leaked into the neighbouring
+    # colour region.  Side fields already span their complete outer edge and
+    # must end exactly on the two corner-to-counter rays.
+    if include_corner_wings:
+        pieces.append([outer_start, outer_before, inner_arc[0]])
+        pieces.append([outer_end, inner_arc[-1], outer_after])
     return pieces
 
 
@@ -495,6 +504,7 @@ def direction_polygon_pieces() -> list[list[list[tuple[float, float]]]]:
             (1.22, 0.705),
             upper_left_angle,
             corner_angle,
+            include_corner_wings=True,
         ),
         sector_with_counter_cutout(
             (1.22, 0.705),
@@ -503,6 +513,7 @@ def direction_polygon_pieces() -> list[list[list[tuple[float, float]]]]:
             (1.025, -0.90),
             corner_angle,
             -corner_angle,
+            include_corner_wings=False,
         ),
         sector_with_counter_cutout(
             (1.025, -0.90),
@@ -511,6 +522,7 @@ def direction_polygon_pieces() -> list[list[list[tuple[float, float]]]]:
             (-1.22, -0.705),
             -corner_angle,
             lower_left_angle,
+            include_corner_wings=True,
         ),
         sector_with_counter_cutout(
             (-1.22, -0.705),
@@ -519,6 +531,7 @@ def direction_polygon_pieces() -> list[list[list[tuple[float, float]]]]:
             (-1.025, 0.90),
             lower_left_angle,
             -180.0 - corner_angle,
+            include_corner_wings=False,
         ),
     ]
 

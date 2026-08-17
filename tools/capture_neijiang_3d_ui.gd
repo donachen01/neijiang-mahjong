@@ -130,6 +130,13 @@ func _capture() -> void:
 func _validate_mobile_ui_contract(main_scene: Node) -> bool:
 	var stage := main_scene.get("table_stage_3d") as Node
 	var seat_huds := main_scene.get("table_3d_seat_huds") as Dictionary
+	var viewport_size := Vector2(get_root().size)
+	var root_ui := main_scene.get("root_ui") as Control
+	var ui_reference_size := root_ui.size if root_ui != null else viewport_size
+	var ui_to_viewport := Vector2(
+		viewport_size.x / maxf(1.0, ui_reference_size.x),
+		viewport_size.y / maxf(1.0, ui_reference_size.y)
+	)
 	if stage == null or not stage.has_method("get_seat_play_screen_rect"):
 		push_error("多比例截图缺少 3D 牌桌投影数据")
 		return false
@@ -162,10 +169,12 @@ func _validate_mobile_ui_contract(main_scene: Node) -> bool:
 		if seat_hud == null:
 			push_error("缺少座位 %d 名牌" % seat)
 			return false
+		var hud_rect := _scale_rect(seat_hud.get_global_rect(), ui_to_viewport)
 		var tile_rects: Array = stage.call("get_seat_play_screen_rects", seat) \
 			if stage.has_method("get_seat_play_screen_rects") else [stage.call("get_seat_play_screen_rect", seat)]
 		for tile_rect_value in tile_rects:
-			if seat_hud.get_global_rect().intersects(tile_rect_value as Rect2):
+			var tile_rect := _scale_rect(tile_rect_value as Rect2, ui_to_viewport)
+			if hud_rect.intersects(tile_rect):
 				push_error("屏幕比例回归失败：座位 %d 名牌遮挡麻将牌" % seat)
 				return false
 		var hud_contract := seat_hud.get_visual_contract()
@@ -175,21 +184,20 @@ func _validate_mobile_ui_contract(main_scene: Node) -> bool:
 		if str(hud_contract.get("body_font_path", "")) != "res://res/fonts/app_cjk.ttc":
 			push_error("座位 %d 正文字体未显式打包" % seat)
 			return false
-		var play_rect := stage.call("get_seat_play_screen_rect", seat) as Rect2
+		var play_rect := _scale_rect(stage.call("get_seat_play_screen_rect", seat) as Rect2, ui_to_viewport)
 		if play_rect.size.x > 1.0:
-			var hud_center := seat_hud.get_global_rect().get_center()
+			var hud_center := hud_rect.get_center()
 			var play_center := play_rect.get_center()
 			if seat in [0, 1] and hud_center.x >= play_center.x:
-				push_error("座位 %d 名牌未停靠在牌区左外侧" % seat)
+				push_error("座位 %d 名牌未停靠在牌区左外侧 hud=%s play=%s" % [seat, hud_rect, play_rect])
 				return false
 			if seat in [2, 3] and hud_center.x <= play_center.x:
-				push_error("座位 %d 名牌未停靠在牌区右外侧" % seat)
+				push_error("座位 %d 名牌未停靠在牌区右外侧 hud=%s play=%s" % [seat, hud_rect, play_rect])
 				return false
-	var viewport_size := Vector2(get_root().size)
-	var self_rect := (seat_huds.get(0) as Control).get_global_rect()
-	var left_rect := (seat_huds.get(1) as Control).get_global_rect()
-	var right_rect := (seat_huds.get(3) as Control).get_global_rect()
-	var self_play_rect := stage.call("get_seat_play_screen_rect", 0) as Rect2
+	var self_rect := _scale_rect((seat_huds.get(0) as Control).get_global_rect(), ui_to_viewport)
+	var left_rect := _scale_rect((seat_huds.get(1) as Control).get_global_rect(), ui_to_viewport)
+	var right_rect := _scale_rect((seat_huds.get(3) as Control).get_global_rect(), ui_to_viewport)
+	var self_play_rect := _scale_rect(stage.call("get_seat_play_screen_rect", 0) as Rect2, ui_to_viewport)
 	var self_clear_left_or_above := self_play_rect.size.y <= 1.0 \
 		or self_rect.end.x <= self_play_rect.position.x - 4.0 \
 		or self_rect.end.y <= self_play_rect.position.y - 4.0
@@ -197,10 +205,14 @@ func _validate_mobile_ui_contract(main_scene: Node) -> bool:
 		push_error("本家名牌未固定在手牌左上方，仍存在遮牌风险 hud=%s play=%s viewport=%s" % [self_rect, self_play_rect, viewport_size])
 		return false
 	if left_rect.position.x > viewport_size.x * 0.04 or left_rect.position.y > viewport_size.y * 0.22:
-		push_error("左家名牌未按图2固定在左上外沿")
+		push_error("左家名牌未按图2固定在左上外沿 hud=%s viewport=%s" % [left_rect, viewport_size])
 		return false
 	if right_rect.end.x < viewport_size.x * 0.96 or right_rect.position.y > viewport_size.y * 0.22:
-		push_error("右家名牌未按图2固定在右上外沿")
+		push_error("右家名牌未按图2固定在右上外沿 hud=%s viewport=%s" % [right_rect, viewport_size])
 		return false
 	print("MOBILE_UI_CONTRACT_OK viewport=%s" % get_root().size)
 	return true
+
+
+func _scale_rect(rect: Rect2, factor: Vector2) -> Rect2:
+	return Rect2(rect.position * factor, rect.size * factor)

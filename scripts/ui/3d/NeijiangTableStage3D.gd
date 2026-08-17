@@ -238,6 +238,36 @@ func render_snapshot(
 	last_contract = _build_contract(snapshot, all_hands, players, desired)
 
 
+func get_ai_helper_visual_contract() -> Dictionary:
+	var recommended_tile_ids: Array[int] = []
+	var danger_tile_ids: Array[int] = []
+	var visible_recommended_markers := 0
+	var visible_danger_markers := 0
+	for key_value in last_desired_entries.keys():
+		var key := str(key_value)
+		if not key.begins_with("hand_0_"):
+			continue
+		var entry: Dictionary = last_desired_entries.get(key_value, {})
+		var tile: Dictionary = entry.get("tile", {})
+		var tile_id := int(tile.get("id", -1))
+		var tile_node := tile_nodes.get(key_value) as NeijiangTile3D
+		var marker_visible := tile_node != null and tile_node.state_marker != null and tile_node.state_marker.visible
+		if bool(entry.get("recommended", false)):
+			recommended_tile_ids.append(tile_id)
+			if marker_visible:
+				visible_recommended_markers += 1
+		if bool(entry.get("danger", false)):
+			danger_tile_ids.append(tile_id)
+			if marker_visible:
+				visible_danger_markers += 1
+	return {
+		"recommended_tile_ids": recommended_tile_ids,
+		"danger_tile_ids": danger_tile_ids,
+		"visible_recommended_markers": visible_recommended_markers,
+		"visible_danger_markers": visible_danger_markers,
+	}
+
+
 func pick_tile(screen_position: Vector2) -> int:
 	var tile_id := find_tile_at_screen(screen_position)
 	if tile_id >= 0:
@@ -313,13 +343,19 @@ func _setup_world() -> void:
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color("202A43")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	# A restrained warm-grey ambient keeps the splash-matched felt natural under
+	# A restrained warm-grey ambient keeps the emerald felt natural under
 	# Metal's filmic tonemapper. Mahjong tiles receive their own layer-2 fill
 	# below, so this table calibration does not cost glyph readability.
-	environment.ambient_light_color = Color("A9B79C")
-	environment.ambient_light_energy = 0.22
+	environment.ambient_light_color = Color("B4B29E")
+	environment.ambient_light_energy = 0.20
 	environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# A very small finishing grade keeps the private-club emerald rich without
+	# changing tile glyph colours or clipping the champagne-gold highlights.
+	environment.adjustment_enabled = true
+	environment.adjustment_brightness = 1.0
+	environment.adjustment_contrast = 1.03
+	environment.adjustment_saturation = 1.04
 	# Small-radius SSAO grounds adjacent tiles without turning the ivory faces
 	# grey on Forward+. Compatibility/OpenGL ES has no SSAO implementation, so
 	# Android deliberately skips these unsupported RenderingDevice settings.
@@ -352,12 +388,12 @@ func _setup_world() -> void:
 
 	var key_light := DirectionalLight3D.new()
 	key_light.name = "UpperLeftWarmKey"
-	# A warm-neutral furniture key preserves the reddish walnut grain and keeps
-	# the forest-green felt from drifting toward cyan. Tile faces still receive
-	# the dedicated layer-2 fill light, so this table calibration does not cost
-	# glyph readability.
+	# A warm-neutral furniture key gives the champagne-gold cords a controlled
+	# highlight and keeps the forest-green felt from drifting toward cyan. Tiles
+	# receive the dedicated layer-2 fill light, so this table calibration does not
+	# cost glyph readability.
 	key_light.light_color = Color("FFF0E3")
-	key_light.light_energy = 0.79
+	key_light.light_energy = 0.86
 	# DirectionalLight3D shines along local -Z. The -170-degree yaw points the
 	# ground component toward the player's right/down screen quadrant, matching
 	# the supplied commercial reference instead of the former right/up shadow.
@@ -367,8 +403,8 @@ func _setup_world() -> void:
 	# the visible play area gives every tile edge more texels; explicit opacity and
 	# blur keep the single contact shadow short and soft across render profiles.
 	key_light.directional_shadow_max_distance = 22.0
-	key_light.shadow_opacity = 0.64
-	key_light.shadow_blur = 1.90
+	key_light.shadow_opacity = 0.58
+	key_light.shadow_blur = 2.15
 	key_light.shadow_bias = 0.035
 	key_light.shadow_normal_bias = 0.82
 	add_child(key_light)
@@ -402,9 +438,9 @@ func _setup_table() -> void:
 	table.scale = Vector3(1.0, 1.0, 1.60)
 	table.position.z = -2.30
 	add_child(table)
-	# The GLB owns the short-nap felt, leather, walnut, seam and aged-copper
-	# PBR materials.  Runtime flat-colour overrides are intentionally forbidden:
-	# they erase roughness/normal detail and caused the previous plastic table.
+	# The GLB owns the short-nap felt, tailored rail, ebonized frame and continuous
+	# champagne-gold piping. Runtime flat-colour overrides are intentionally
+	# forbidden: they erase roughness/normal detail and caused the previous plastic table.
 	_preserve_imported_pbr_materials(table)
 
 
@@ -1468,11 +1504,13 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"winning_source_feedback": "compact_sky_blue_flat_face_arrow_without_seat_label",
 		"winning_source_text": false,
 		"tile_back_color": NeijiangTile3D.NORMAL_TILE_BACK_COLOR.to_html(false),
-		"season_theme": "deep_emerald_refined_table",
+		"season_theme": "private_club_deep_emerald_champagne_gold",
 		"table_asset": "neijiang_table_v2_pbr",
 		"table_material_pipeline": "blender_pbr_preserved_without_flat_overrides",
-		"table_surface_finish": "emerald_teal_visible_microfibre_short_nap_felt_with_basecolor_normal_and_roughness_variation",
-		"table_divider_finish": "subsurface_low_contrast_outer_boundary_with_fragmented_center_corners",
+		"table_surface_finish": "deep_emerald_even_short_nap_felt_with_subtle_center_lift_and_mobile_safe_microfibre",
+		"table_frame_finish": "ebonized_furniture_base_with_tailored_dark_emerald_padded_rail",
+		"table_trim_finish": "continuous_outer_and_inner_champagne_gold_inlay",
+		"table_divider_finish": "two_continuous_low_contrast_emerald_felt_insets_without_corner_motifs",
 		"concealed_gang_presentation": "outer_faces_middle_jade_backs",
 		"light_count": 4,
 		"shadow_casting_light_count": 1,

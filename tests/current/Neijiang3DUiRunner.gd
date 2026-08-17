@@ -64,12 +64,38 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 		"human_last_draw_tile_id": 14,
 		"recent_discard_tile_id": 103,
 	}
-	stage.render_snapshot(snapshot, all_hands, false, -1, {})
+	stage.render_snapshot(snapshot, all_hands, false, -1, {
+		"recommended_tile_id": 1,
+		"danger_tile_ids": [2],
+	})
 	var contract: Dictionary = stage.get_visual_contract()
 	if int(contract.get("wall_count", -1)) != 19:
 		failures.append("3D stage did not preserve the 72-tile snapshot wall count")
 	if str(contract.get("table_asset", "")) != "neijiang_table_v2_pbr":
 		failures.append("3D stage did not load the Neijiang-authored PBR table")
+	if str(contract.get("table_trim_finish", "")) != "continuous_outer_and_inner_champagne_gold_inlay":
+		failures.append("3D table lost the reference-matched continuous double champagne-gold inlay")
+	if str(contract.get("table_divider_finish", "")) != "two_continuous_low_contrast_emerald_felt_insets_without_corner_motifs":
+		failures.append("3D table restored obsolete centre-corner lines instead of the two calm felt insets")
+	var manufactured_table := stage.get_node_or_null("ManufacturedClubTable")
+	if manufactured_table == null:
+		failures.append("3D stage did not instantiate the production manufactured table")
+	else:
+		for required_mesh_name: String in [
+			"OuterChampagneGoldPiping",
+			"InnerChampagneGoldPiping",
+			"PlayfieldInsetOuter",
+			"PlayfieldInsetInner",
+		]:
+			if manufactured_table.find_child(required_mesh_name, true, false) == null:
+				failures.append("Production table GLB is stale or missing %s" % required_mesh_name)
+	var helper_visuals := stage.get_ai_helper_visual_contract()
+	if helper_visuals.get("recommended_tile_ids", []) != [1] \
+		or int(helper_visuals.get("visible_recommended_markers", 0)) != 1:
+		failures.append("AI helper recommendation did not reach a visible 3D self-hand marker: %s" % [helper_visuals])
+	if helper_visuals.get("danger_tile_ids", []) != [2] \
+		or int(helper_visuals.get("visible_danger_markers", 0)) != 1:
+		failures.append("AI helper danger data did not reach a visible 3D self-hand marker: %s" % [helper_visuals])
 	var bao_entry: Dictionary = stage.get_motion_entry_contract("hand_0_2")
 	if not bool(bao_entry.get("bao_gang_declared", false)):
 		failures.append("declared bao-gang hand tile lost its persistent 3D marker")
@@ -314,6 +340,43 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 		if legacy_panel != null and legacy_panel.visible:
 			failures.append("legacy seat panel resurfaced during a 3D snapshot refresh")
 			break
+	# The AI helper is shared gameplay UI.  Exercise the real utility event path,
+	# then prove the 3D legacy-hiding guard no longer removes its advice panel.
+	var game_manager := main_scene.get("game_manager") as GameManager
+	main_scene.set("ai_helper_enabled", false)
+	game_manager.set_human_trainer_hint_enabled(false)
+	var utility_bar := main_scene.get("table_3d_utility_bar") as NeijiangUtilityBar
+	utility_bar.utility_selected.emit("helper")
+	await process_frame
+	if not bool(main_scene.get("ai_helper_enabled")) \
+		or not bool(game_manager.game_state.get("human_trainer_hint_enabled")):
+		failures.append("3D utility helper action did not enable the GameState trainer hint")
+	var helper_tile := {"id": 99101, "suit": "tiao", "rank": 1}
+	var helper_snapshot := {
+		"players": [{"seat": 0, "hand_tiles": [helper_tile], "has_won": false}],
+		"rules": {"use_ding_que_phase": false},
+		"human_can_discard": true,
+	}
+	var helper_hint := {
+		"recommended": {"tile_name": "1条", "tile": helper_tile, "live_ukeire": 6, "risk": 8},
+		"recommended_tile_id": 99101,
+		"danger_tile_ids": [],
+		"options": [],
+	}
+	main_scene.call("_update_discard_helper_panel", helper_snapshot, helper_hint, true)
+	main_scene.call("_enforce_neijiang_3d_legacy_visibility")
+	var helper_panel := main_scene.get("discard_helper_panel") as Control
+	var helper_summary := main_scene.get("discard_helper_summary") as Label
+	if helper_panel == null or not helper_panel.visible or helper_summary == null or helper_summary.text != "打 1条":
+		failures.append("3D mode still hides or loses the AI advice panel")
+	elif helper_panel.get_global_rect().intersects(self_play_rect, true):
+		failures.append("3D AI advice panel overlaps the projected self hand: helper=%s hand=%s" % [helper_panel.get_global_rect(), self_play_rect])
+	utility_bar.utility_selected.emit("helper")
+	await process_frame
+	if bool(main_scene.get("ai_helper_enabled")) \
+		or bool(game_manager.game_state.get("human_trainer_hint_enabled")) \
+		or (helper_panel != null and helper_panel.visible):
+		failures.append("3D utility helper action did not fully disable helper state and panel")
 	main_scene.call("_apply_neijiang_3d_fallback")
 	var background := main_scene.get_node_or_null("UILayer/RootUI/Background") as Control
 	var safe_area := main_scene.get_node_or_null("UILayer/RootUI/SafeArea") as Control

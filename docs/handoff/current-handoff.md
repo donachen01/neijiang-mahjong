@@ -1,5 +1,16 @@
 # 当前 Handoff - 内江麻将工程
 
+## 2026-08-17 / 1.0.72 深翡翠私人牌室桌面与 AI 辅助恢复
+
+- 当前分支：`codex/neijiang-sichuan-3d-ui-port`；当前源码版本：`1.0.72`。
+- 生产桌面已升级为均匀深翡翠短绒、乌木化深框、深墨绿软包和连续内外双香槟金镶线；旧灰雾与云斑的真实原因是 GLB 旁提取贴图未随 Blender 材质目录同步，生成器现已固定同步并强制导入。
+- Android/iPhone 比例真实游戏捕获通过满屏、四席铭牌避让、工具抽屉展开/收起和单金环中心合同。
+- 3D 模式 AI 辅助已恢复文字建议面板、推荐标记和危险标记；真实工具事件、GameState 开关和关闭清理均由 `Neijiang3DUiRunner` 覆盖。
+- 7 项 Godot 回归、.NET Release 和 AI.Core.Smoke 全部通过。
+- Android：`build/android/NeijiangMahjong-1.0.72-release.apk`，SHA-256 `fedd632e27559f3d88cb0a0985a93987fe658a30c5e9368c5113ee25d74f9551`，versionCode 72，zipalign 和 v2/v3 签名通过；最终包桌模哈希与本地最新导入一致。
+- iOS：`/Volumes/AI/NeijiangMahjongRuntime/NeijiangMahjong-1.0.72-development.ipa`，SHA-256 `1c6fccd31b49848789a8fd9fbc032cbe7998bbc5636bc4b23c7007d93c00d0ff`；NativeAOT/Xcode Release/深度签名通过，已局域网安装到 iPhone 15 并回读版本 1.0.72。第一次远程启动仅因手机锁屏被系统拒绝，解锁后需要补一次启动确认。
+- 完整证据：`docs/testing/neijiang-v1.0.72-premium-table-and-ai-helper-report.md`。
+
 ## 2026-08-14 / 1.0.70 中心颜色区与模型边界统一
 
 - 当前分支：`codex/neijiang-sichuan-3d-ui-port`；当前源码版本：`1.0.70`。

@@ -548,7 +548,6 @@ func _apply_neijiang_3d_fallback() -> void:
 		floating_right_button_bar,
 		floating_left_button_bar,
 		self_hu_tile_host,
-		discard_helper_panel,
 	]:
 		if legacy_control != null:
 			legacy_control.visible = true
@@ -609,7 +608,6 @@ func _set_neijiang_3d_ui_enabled(enabled: bool) -> void:
 		floating_right_button_bar,
 		floating_left_button_bar,
 		self_hu_tile_host,
-		discard_helper_panel,
 	]:
 		if legacy_control != null:
 			legacy_control.visible = not enabled
@@ -653,6 +651,12 @@ func _update_neijiang_3d_ui(snapshot: Dictionary) -> void:
 			seat_hud.render(_player_by_seat(players, seat), active_seat, dealer_seat)
 	if table_3d_utility_bar != null:
 		table_3d_utility_bar.render(snapshot, ai_helper_enabled, opponent_hands_enabled)
+	# AI advice is gameplay information, not a legacy skin component.  Keep the
+	# same event-driven helper panel in both UI kits so mobile users see the C#
+	# recommendation text as well as the coloured 3D tile marker.
+	var self_player := _player_by_seat(players, 0)
+	var can_discard := bool(snapshot.get("human_can_discard", false)) and not bool(self_player.get("has_won", false))
+	_update_discard_helper_panel(snapshot, trainer_hint, can_discard)
 	_queue_neijiang_3d_layout()
 
 
@@ -678,7 +682,6 @@ func _enforce_neijiang_3d_legacy_visibility() -> void:
 		floating_right_button_bar,
 		floating_left_button_bar,
 		self_hu_tile_host,
-		discard_helper_panel,
 	]:
 		if legacy_control != null:
 			legacy_control.visible = false
@@ -3050,7 +3053,6 @@ func _write_neijiang_3d_runtime_probe() -> void:
 		floating_right_button_bar,
 		floating_left_button_bar,
 		self_hu_tile_host,
-		discard_helper_panel,
 	]:
 		var control := legacy_control as Control
 		if control != null and control.visible:
@@ -3074,6 +3076,10 @@ func _write_neijiang_3d_runtime_probe() -> void:
 	var hud_layout_probe := _build_neijiang_3d_hud_layout_probe()
 	var stage_visual_contract: Dictionary = table_stage_3d.call("get_visual_contract") \
 		if stage_valid and table_stage_3d.has_method("get_visual_contract") else {}
+	var ai_helper_visual_contract: Dictionary = table_stage_3d.call("get_ai_helper_visual_contract") \
+		if stage_valid and table_stage_3d.has_method("get_ai_helper_visual_contract") else {}
+	var trainer_hint: Dictionary = last_snapshot.get("trainer_hint", {}) if ai_helper_enabled else {}
+	var ai_helper_button: Button = table_3d_utility_bar.get_button("helper") if table_3d_utility_bar != null else null
 	var probe := {
 		"app_version": str(ProjectSettings.get_setting("application/config/version", "")),
 		"platform": OS.get_name(),
@@ -3104,6 +3110,14 @@ func _write_neijiang_3d_runtime_probe() -> void:
 		"center_light_rig": stage_visual_contract.get("center_light_rig", []),
 		"table_surface_finish": str(stage_visual_contract.get("table_surface_finish", "")),
 		"camera_aspect_policy": str(stage_visual_contract.get("camera_aspect_policy", "")),
+		"ai_helper_enabled": ai_helper_enabled,
+		"game_state_human_trainer_hint_enabled": bool(game_manager.game_state.get("human_trainer_hint_enabled")) \
+			if game_manager != null and game_manager.game_state != null else false,
+		"ai_helper_recommended_tile_id": int(trainer_hint.get("recommended_tile_id", -1)),
+		"ai_helper_3d_visuals": ai_helper_visual_contract,
+		"ai_helper_panel_visible": discard_helper_panel != null and discard_helper_panel.visible,
+		"ai_helper_panel_summary": discard_helper_summary.text if discard_helper_summary != null else "",
+		"ai_helper_button_text": ai_helper_button.text if ai_helper_button != null else "",
 		"legacy_visible_controls": legacy_visible,
 		"viewport_size": [get_viewport_rect().size.x, get_viewport_rect().size.y],
 	}
@@ -4019,18 +4033,28 @@ func _position_discard_helper_panel() -> void:
 	var panel_height: float = discard_helper_panel.custom_minimum_size.y
 	var action_rect := action_panel.get_global_rect() if action_panel != null and action_panel.visible else Rect2(Vector2.ZERO, Vector2.ZERO)
 	var hand_rect := self_hand_host.get_global_rect()
+	if table_3d_enabled and table_stage_3d != null and table_stage_3d.has_method("get_seat_play_screen_rect"):
+		var projected_hand_rect := table_stage_3d.call("get_seat_play_screen_rect", 0) as Rect2
+		if projected_hand_rect.size.x > 1.0 and projected_hand_rect.size.y > 1.0:
+			hand_rect = projected_hand_rect
 	var root_rect := root_ui.get_global_rect()
 	var board_rect := board_area.get_global_rect() if board_area != null else root_rect
+	if table_3d_enabled:
+		board_rect = root_rect
+	panel_width = minf(panel_width, maxf(320.0, root_rect.size.x - 36.0))
 	var min_x := root_rect.position.x + 18.0
 	var max_x := maxf(min_x, root_rect.end.x - panel_width - 18.0)
 	var x := clampf(board_rect.get_center().x - panel_width * 0.5, min_x, max_x)
-	var y := maxf(18.0, hand_rect.position.y - panel_height - 20.0)
+	# Leave room for the panel's 12 px drop shadow as well as the physical hand
+	# projection.  A 16 px geometric gap still looked like overlap on phone once
+	# the shadow was composited over the upper tile edges.
+	var helper_hand_gap := 42.0 if table_3d_enabled else 20.0
+	var y := maxf(18.0, hand_rect.position.y - panel_height - helper_hand_gap)
 	if action_rect.size.x > 1.0:
 		if Rect2(Vector2(x, y), Vector2(panel_width, panel_height)).intersects(action_rect, true):
 			y = maxf(18.0, minf(y, action_rect.position.y - panel_height - 18.0))
-	if self_hand_host != null:
-		var hand_top := self_hand_host.get_global_rect().position.y
-		y = minf(y, maxf(18.0, hand_top - panel_height - 16.0))
+	var hand_top := hand_rect.position.y
+	y = minf(y, maxf(18.0, hand_top - panel_height - helper_hand_gap))
 	discard_helper_panel.position = Vector2(x, y)
 	discard_helper_panel.size = Vector2(panel_width, panel_height)
 

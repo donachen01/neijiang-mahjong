@@ -11,6 +11,7 @@ interaction remain in Godot.  Textures are capped at 2048 for mobile runtime.
 from __future__ import annotations
 
 import math
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -23,15 +24,20 @@ ART_ROOT = PROJECT_ROOT / "res" / "art"
 OUTPUT_GLB = ART_ROOT / "3d" / "neijiang_table_v2.glb"
 TEXTURE_DIR = ART_ROOT / "materials" / "table_v2"
 
-TABLE_CENTER = np.array([0x24, 0x7C, 0x73], dtype=np.float32) / 255.0
-TABLE_BASE = np.array([0x1D, 0x6A, 0x60], dtype=np.float32) / 255.0
-TABLE_EDGE = np.array([0x16, 0x58, 0x50], dtype=np.float32) / 255.0
-LEATHER_RAIL = np.array([0x1A, 0x3A, 0x2E], dtype=np.float32) / 255.0
-WALNUT_WARM = np.array([0x5E, 0x38, 0x28], dtype=np.float32) / 255.0
-# A near-neighbour of the felt, not a black painted outline.  Together with the
-# sub-surface geometry below this reads as a woven recess only when light catches
-# it, which keeps the table calm behind the tiles.
-PLAYFIELD_GROOVE = np.array([0x24, 0x61, 0x36], dtype=np.float32) / 255.0
+# Production visual contract: restrained private-club furniture, not a bright
+# arcade skin.  The reference is built from one emerald family, an ebonized
+# frame, a tailored dark-green rail and two continuous champagne-gold cords.
+TABLE_CENTER = np.array([0x1C, 0x73, 0x50], dtype=np.float32) / 255.0
+TABLE_BASE = np.array([0x10, 0x56, 0x3D], dtype=np.float32) / 255.0
+TABLE_EDGE = np.array([0x09, 0x2F, 0x26], dtype=np.float32) / 255.0
+LEATHER_RAIL = np.array([0x08, 0x3A, 0x2D], dtype=np.float32) / 255.0
+EBONIZED_FRAME = np.array([0x17, 0x24, 0x1F], dtype=np.float32) / 255.0
+CHAMPAGNE_GOLD = np.array([0xC6, 0xA7, 0x5A], dtype=np.float32) / 255.0
+CHAMPAGNE_HIGHLIGHT = np.array([0xE4, 0xCB, 0x7D], dtype=np.float32) / 255.0
+# A near-neighbour of the felt, never a painted outline.  It is intentionally
+# only a little lighter than the cloth so the double inset reads through grazing
+# light without competing with tiles or the centre instrument.
+PLAYFIELD_GROOVE = np.array([0x3A, 0x82, 0x6B], dtype=np.float32) / 255.0
 
 
 def srgb_to_linear(value: np.ndarray) -> np.ndarray:
@@ -133,18 +139,24 @@ def generate_felt_maps(size: int = 2048) -> tuple[bpy.types.Image, bpy.types.Ima
     # mipmapping without becoming large stains or directional ribbing.
     clean_felt_color = TABLE_BASE * 0.82 + TABLE_CENTER * 0.18
     base = np.broadcast_to(clean_felt_color[None, None, :], (size, size, 3)).copy()
+    # The photographic reference has a gentle centre lift and a richer edge,
+    # caused by short-nap direction and the table lighting rather than a visible
+    # vignette.  Keep the range narrow enough that discarded tiles retain the
+    # same contrast anywhere on the playfield.
+    base *= (0.992 + centre[:, :, None] * 0.016)
+    base *= (1.0 - edge[:, :, None] * 0.010)
     colour_nap = (
-        np.clip(mid_nap, -1.5, 1.5) * 0.012
-        + (fine - 0.5) * 0.028
-        + (fibre - 0.5) * 0.017
+        (fine - 0.5) * 0.006
+        + (fibre - 0.5) * 0.004
     )
     base *= 1.0 + colour_nap[:, :, None]
-    # Preserve an emerald-teal cloth under the warm Metal/Filmic key light.
-    base *= np.array([0.82, 1.03, 1.06], dtype=np.float32)[None, None, :]
+    # Preserve a true emerald cloth under the warm key light; the previous blue
+    # multiplier pushed the table toward cyan/grey on iPhone displays.
+    base *= np.array([0.92, 1.04, 0.94], dtype=np.float32)[None, None, :]
     # Sparse light-facing fibre tips give the surface a soft textile sparkle,
     # not plastic clearcoat. The mask is deterministic and sub-pixel dense.
     fibre_tips = np.clip((fine - 0.76) / 0.24, 0.0, 1.0) ** 3
-    base += fibre_tips[:, :, None] * np.array([0.010, 0.018, 0.017], dtype=np.float32)
+    base += fibre_tips[:, :, None] * np.array([0.004, 0.008, 0.007], dtype=np.float32)
 
     # Keep the legacy audit mask deterministic, but do not tint the production
     # base colour with it. The runtime table is clean short-nap felt throughout.
@@ -159,25 +171,24 @@ def generate_felt_maps(size: int = 2048) -> tuple[bpy.types.Image, bpy.types.Ima
 
     # The mid layer supplies readable short nap while the dense layer keeps the
     # close-up fibre response. Neither layer writes into BaseColor.
-    height = (
-        mid_nap * 0.052
-        + sum(field * 0.048 for field in fibre_fields)
-        + (fine - 0.5) * 0.046
-    )
+    # Do not put the band-limited mid layer into the normal map. Although it is
+    # high-frequency at source resolution, mobile mip filtering can fold it into
+    # broad cloudy normals over this very large UV island. Fine fibres and the
+    # 360-cell noise keep the textile response without visible water-stain blobs.
+    height = sum(field * 0.010 for field in fibre_fields) + (fine - 0.5) * 0.012
     grad_y, grad_x = np.gradient(height)
-    normal = np.dstack((-grad_x * 2.15, -grad_y * 2.15, np.ones_like(height)))
+    normal = np.dstack((-grad_x * 1.20, -grad_y * 1.20, np.ones_like(height)))
     normal /= np.linalg.norm(normal, axis=2, keepdims=True)
     normal_rgba = np.ones((size, size, 4), dtype=np.float32)
     normal_rgba[:, :, :3] = normal * 0.5 + 0.5
     felt_normal = save_non_color_image("FeltNormal2048", TEXTURE_DIR / "felt_normal.png", normal_rgba)
 
     roughness = np.clip(
-        0.82
-        + np.clip(mid_nap, -1.5, 1.5) * 0.018
-        + (fine - 0.5) * 0.040
-        + (fibre - 0.5) * 0.028,
-        0.76,
-        0.88,
+        0.84
+        + (fine - 0.5) * 0.022
+        + (fibre - 0.5) * 0.016,
+        0.80,
+        0.89,
     )
     orm = np.ones((size, size, 4), dtype=np.float32)
     orm[:, :, 0] = 0.97  # AO stays uniform; geometry provides the edge depth.
@@ -263,13 +274,35 @@ def pbr_material(name: str, base: bpy.types.Image, normal: bpy.types.Image, orm:
     return mat
 
 
-def simple_material(name: str, color: np.ndarray, roughness: float, metallic: float) -> bpy.types.Material:
+def simple_material(
+    name: str,
+    color: np.ndarray,
+    roughness: float,
+    metallic: float,
+    coat_weight: float = 0.0,
+) -> bpy.types.Material:
+    """Create an exporter-friendly explicit Principled material graph.
+
+    Blender 5.2 no longer guarantees that toggling ``use_nodes`` leaves a
+    default Principled node behind.  Building the graph explicitly keeps the
+    production generator valid across Blender 4.x/5.x and avoids the console
+    failure encountered during the earlier design study.
+    """
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
-    shader = next(node for node in mat.node_tree.nodes if node.type == "BSDF_PRINCIPLED")
+    tree = mat.node_tree
+    if tree is None:
+        raise RuntimeError(f"Material node tree unavailable: {name}")
+    tree.nodes.clear()
+    output = tree.nodes.new("ShaderNodeOutputMaterial")
+    shader = tree.nodes.new("ShaderNodeBsdfPrincipled")
     shader.inputs["Base Color"].default_value = (*srgb_to_linear(color), 1.0)
     shader.inputs["Roughness"].default_value = roughness
     shader.inputs["Metallic"].default_value = metallic
+    coat = shader.inputs.get("Coat Weight") or shader.inputs.get("Clearcoat")
+    if coat is not None:
+        coat.default_value = coat_weight
+    tree.links.new(shader.outputs["BSDF"], output.inputs["Surface"])
     return mat
 
 
@@ -390,64 +423,105 @@ def rounded_rectangle_ring(
 
 def build_table() -> list[bpy.types.Object]:
     felt_maps = generate_felt_maps()
-    leather_maps = generate_surface_maps("leather", LEATHER_RAIL, 1024, 6101, 0.72, 0.0)
-    walnut_maps = generate_surface_maps("walnut", WALNUT_WARM, 1024, 6201, 0.58, 0.0)
-    felt = pbr_material("DeepEmeraldShortNapFelt", *felt_maps, normal_strength=0.58)
-    leather = pbr_material("InkGreenLeather", *leather_maps)
-    walnut = pbr_material("WarmWalnutFrame", *walnut_maps, normal_strength=0.38)
-    groove = simple_material("PlayfieldRecessedGroove", PLAYFIELD_GROOVE, 0.94, 0.0)
+    leather_maps = generate_surface_maps("leather", LEATHER_RAIL, 1024, 6101, 0.56, 0.0)
+    frame_maps = generate_surface_maps("frame", EBONIZED_FRAME, 1024, 6201, 0.43, 0.0)
+    felt = pbr_material("DeepEmeraldShortNapFelt", *felt_maps, normal_strength=0.14)
+    leather = pbr_material("TailoredDarkEmeraldRail", *leather_maps, normal_strength=0.32)
+    frame = pbr_material("EbonizedFurnitureFrame", *frame_maps, normal_strength=0.24)
+    groove = simple_material("SubtleEmeraldFeltInset", PLAYFIELD_GROOVE, 0.78, 0.0)
+    gold = simple_material("SatinChampagneGold", CHAMPAGNE_GOLD, 0.28, 0.86, coat_weight=0.025)
+    gold_high = simple_material(
+        "ChampagneGoldHighlight", CHAMPAGNE_HIGHLIGHT, 0.25, 0.88, coat_weight=0.02
+    )
 
     objects = [
-        rounded_box("TableWalnutBase", (14.8, 9.6, 0.56), (0.0, 0.0, -0.31), 0.30, 10, walnut),
-        rounded_box("TableFelt", (13.38, 8.18, 0.31), (0.0, 0.0, 0.00), 0.22, 10, felt),
-        # One continuous raised walnut tray replaces the four overlapping
-        # bands. Its rounded outer and inner contours produce furniture-like
-        # corners and a clean uninterrupted silhouette in the oblique camera.
+        rounded_box("TableEbonizedBase", (14.94, 9.74, 0.58), (0.0, 0.0, -0.31), 0.34, 12, frame),
+        # The cloth continues underneath the padded rail.  The previous 13.46
+        # x 8.26 top exposed the ebonized base between cloth and rail, creating
+        # a heavy black moat in the real gameplay camera.  This overlap leaves
+        # only the rail's natural contact shadow, matching the tailored table
+        # reference without changing the playable coordinate system.
+        rounded_box("TableFelt", (13.76, 8.56, 0.31), (0.0, 0.0, 0.00), 0.25, 12, felt),
+        # The apron and padded rail are independent manufactured parts.  Their
+        # shared curvature makes the table read as upholstered furniture while
+        # preserving the exact existing playfield/牌墙 coordinate system.
         rounded_rectangle_ring(
-            "WalnutApronRing",
-            (14.70, 9.50),
-            (13.76, 8.56),
-            0.34,
-            (0.0, 0.0, 0.05),
-            0.40,
-            0.24,
-            12,
-            0.14,
-            walnut,
+            "DarkFurnitureApron",
+            (14.82, 9.62),
+            (13.72, 8.52),
+            0.36,
+            (0.0, 0.0, 0.055),
+            0.43,
+            0.25,
+            16,
+            0.13,
+            frame,
         ),
-        # The target uses a restrained dark gasket between wood and cloth, not
-        # a stack of bright metal trims and decorative stitches.
         rounded_rectangle_ring(
-            "LeatherGasketRing",
-            (13.76, 8.56),
-            (13.42, 8.22),
-            0.22,
-            (0.0, 0.0, 0.10),
-            0.26,
-            0.18,
-            12,
-            0.055,
+            "TailoredDarkEmeraldRail",
+            (14.67, 9.47),
+            (13.78, 8.58),
+            0.31,
+            (0.0, 0.0, 0.115),
+            0.39,
+            0.245,
+            16,
+            0.12,
             leather,
         ),
+        # Both cords are continuous rings.  They are deliberately thin enough
+        # to feel inlaid, but thick enough to survive mobile TAA/FSR filtering.
+        rounded_rectangle_ring(
+            "OuterChampagneGoldPiping",
+            (14.76, 9.56),
+            (14.68, 9.48),
+            0.055,
+            (0.0, 0.0, 0.255),
+            0.405,
+            0.385,
+            16,
+            0.018,
+            gold,
+        ),
+        rounded_rectangle_ring(
+            "InnerChampagneGoldPiping",
+            (13.86, 8.66),
+            (13.79, 8.59),
+            0.050,
+            (0.0, 0.0, 0.264),
+            0.265,
+            0.245,
+            16,
+            0.016,
+            gold_high,
+        ),
+        # Two calm tonal insets match the reference.  No centre-corner motifs,
+        # black partition lines or decorative L-shapes remain on the cloth.
+        rounded_rectangle_ring(
+            "PlayfieldInsetOuter",
+            (12.62, 7.16),
+            (12.575, 7.115),
+            0.008,
+            (0.0, 0.0, 0.158),
+            0.23,
+            0.215,
+            16,
+            0.004,
+            groove,
+        ),
+        rounded_rectangle_ring(
+            "PlayfieldInsetInner",
+            (12.42, 6.96),
+            (12.395, 6.935),
+            0.006,
+            (0.0, 0.0, 0.157),
+            0.20,
+            0.19,
+            16,
+            0.003,
+            groove,
+        ),
     ]
-    # Hairline recesses sit below the felt top (Y=0.155 after import). The outer
-    # boundary remains continuous, while the former full centre rectangle is
-    # reduced to eight short corner impressions so it no longer reads as a CAD
-    # guide or an empty panel painted over the cloth.
-    objects.extend([
-        rounded_box("PlayfieldGrooveTop", (11.72, 0.012, 0.003), (0.0, -3.02, 0.1525), 0.002, 2, groove),
-        rounded_box("PlayfieldGrooveBottom", (11.72, 0.012, 0.003), (0.0, 3.02, 0.1525), 0.002, 2, groove),
-        rounded_box("PlayfieldGrooveLeft", (0.012, 5.90, 0.003), (-5.84, 0.0, 0.1525), 0.002, 2, groove),
-        rounded_box("PlayfieldGrooveRight", (0.012, 5.90, 0.003), (5.84, 0.0, 0.1525), 0.002, 2, groove),
-        rounded_box("CenterCornerNWTop", (0.80, 0.012, 0.003), (-3.30, -1.72, 0.1525), 0.002, 2, groove),
-        rounded_box("CenterCornerNWLeft", (0.012, 0.55, 0.003), (-3.70, -1.445, 0.1525), 0.002, 2, groove),
-        rounded_box("CenterCornerNETop", (0.80, 0.012, 0.003), (3.30, -1.72, 0.1525), 0.002, 2, groove),
-        rounded_box("CenterCornerNERight", (0.012, 0.55, 0.003), (3.70, -1.445, 0.1525), 0.002, 2, groove),
-        rounded_box("CenterCornerSWBottom", (0.80, 0.012, 0.003), (-3.30, 1.72, 0.1525), 0.002, 2, groove),
-        rounded_box("CenterCornerSWLeft", (0.012, 0.55, 0.003), (-3.70, 1.445, 0.1525), 0.002, 2, groove),
-        rounded_box("CenterCornerSEBottom", (0.80, 0.012, 0.003), (3.30, 1.72, 0.1525), 0.002, 2, groove),
-        rounded_box("CenterCornerSERight", (0.012, 0.55, 0.003), (3.70, 1.445, 0.1525), 0.002, 2, groove),
-    ])
     return objects
 
 
@@ -472,6 +546,16 @@ def export_glb(objects: list[bpy.types.Object]) -> None:
         ["python3", str(PROJECT_ROOT / "tools" / "3d" / "canonicalize_glb_images.py"), str(OUTPUT_GLB)],
         check=True,
     )
+    # Godot's GLB importer is configured with embedded_image_handling=1.  It
+    # materialises the packed images beside the GLB and subsequently reads
+    # those files, rather than the authored copies under materials/table_v2.
+    # Keep that import-facing set in lockstep with every Blender regeneration;
+    # otherwise an updated mesh silently renders with stale PBR maps.
+    for family in ("felt", "frame", "leather"):
+        for channel in ("basecolor", "normal", "orm"):
+            source = TEXTURE_DIR / f"{family}_{channel}.png"
+            target = OUTPUT_GLB.with_name(f"{OUTPUT_GLB.stem}_{family}_{channel}.png")
+            shutil.copyfile(source, target)
 
 
 if __name__ == "__main__":
