@@ -1,0 +1,32 @@
+{
+  "version": "1.0.72",
+  "started_at": "2026-08-17T10:55:49.055404+08:00",
+  "success": true,
+  "removed_failed_intermediates": [
+    "/Users/chendong/Documents/内江麻将工程_20260502_103823_v2/build/android/NeijiangMahjong-1.0.72-release-base.apk",
+    "/Users/chendong/Documents/内江麻将工程_20260502_103823_v2/build/android/NeijiangMahjong-1.0.72-release-pruned.apk",
+    "/Users/chendong/Documents/内江麻将工程_20260502_103823_v2/build/android/NeijiangMahjong-1.0.72-release-aligned.apk"
+  ],
+  "android": {
+    "apk": "/Users/chendong/Documents/内江麻将工程_20260502_103823_v2/build/android/NeijiangMahjong-1.0.72-release.apk",
+    "bytes": 166708424,
+    "sha256": "fedd632e27559f3d88cb0a0985a93987fe658a30c5e9368c5113ee25d74f9551"
+  },
+  "ios": {
+    "app": "/private/tmp/neijiang_mahjong_mobile_release/1.0.72/DerivedData/Build/Products/Release-iphoneos/NeijiangMahjongIOS.app",
+    "ipa": "/Volumes/AI/NeijiangMahjongRuntime/NeijiangMahjong-1.0.72-development.ipa",
+    "ipa_bytes": 111426633,
+    "ipa_sha256": "1c6fccd31b49848789a8fd9fbc032cbe7998bbc5636bc4b23c7007d93c00d0ff",
+    "bundle_id": "com.chendong.neijiangmahjong.iosdev",
+    "version": "1.0.72",
+    "team_id": "A5BDW7465Q",
+    "device": "dona‘s iPhone (iPhone 15)",
+    "installed_version": "1.0.72 / 1.0.72",
+    "installed_over_lan": true,
+    "initial_launch_blocked_by_lock_screen": true,
+    "launch_retry_succeeded": true,
+    "verified_process": "NeijiangMahjongIOS.app/NeijiangMahjongIOS",
+    "verified_pid": 31246
+  },
+  "completed_at": "2026-08-17T11:17:42+08:00"
+}
