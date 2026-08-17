@@ -92,8 +92,9 @@ Android 3D 界面中曾失效的 AI 辅助也已恢复：左上工具条仍沿�
 - Bundle ID：`com.chendong.neijiangmahjong.iosdev`。
 - 签名：Apple Development，Team `A5BDW7465Q`。
 - 已通过 `.coredevice.local` 局域网覆盖安装到 `dona‘s iPhone`（iPhone 15）；设备回读版本为 `1.0.72 / 1.0.72`。
-- 远程启动第一次被 iOS 锁屏策略拒绝，明确错误为 `Unable to launch ... because the device was not unlocked`；解锁后需要再执行一次启动确认。
+- 锁屏时的首次远程启动被 iOS 策略正常拒绝；手机解锁后重试成功，`devicectl` 返回 `Launched application with com.chendong.neijiangmahjong.iosdev bundle identifier`。
+- 设备进程列表确认 `NeijiangMahjongIOS.app/NeijiangMahjongIOS` 仍在运行（PID 31246）。
 
 ## 验证边界
 
-当前最强证据达到：Blender 模型与 PBR 纹理重建、Godot 强制导入、真实游戏场景和双移动比例捕获、AI 辅助显示合同、7 项 Godot 回归、.NET/AI smoke、Android 最终包资源/版本/对齐/签名、iOS NativeAOT/Xcode Release/深度签名，以及 iPhone 局域网安装和版本回读。远程启动仍需设备解锁后补齐；Android 当前没有连接 ADB 真机，因此 Android 设备上的启动与完整牌局仍由用户安装后实际试玩确认。
+当前最强证据达到：Blender 模型与 PBR 纹理重建、Godot 强制导入、真实游戏场景和双移动比例捕获、AI 辅助显示合同、7 项 Godot 回归、.NET/AI smoke、Android 最终包资源/版本/对齐/签名、iOS NativeAOT/Xcode Release/深度签名，以及 iPhone 局域网安装、版本回读、真机启动和进程存活确认。Android 当前没有连接 ADB 真机，因此 Android 设备上的启动与完整牌局仍由用户安装后实际试玩确认；iOS 本轮已验证到启动层，完整长牌局同样以用户真机试玩为最终验收。
