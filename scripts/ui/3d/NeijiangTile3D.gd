@@ -553,9 +553,10 @@ func _ivory_body_material(bright_front: bool = false) -> StandardMaterial3D:
 	result.rim_enabled = true
 	result.rim = 0.035
 	result.rim_tint = 0.10
-	# Compatibility/OpenGL ES does not implement subsurface scattering.  Do not
-	# ask its shader compiler for an unsupported feature on Android startup.
-	if RenderingServer.get_current_rendering_method() != "gl_compatibility":
+	# Subsurface scattering belongs to Forward+ only. Both Compatibility and the
+	# iOS/Android Mobile renderer reject the feature, so keep the same ivory PBR
+	# response there without requesting an unsupported shader variant.
+	if RenderingServer.get_current_rendering_method() == "forward_plus":
 		result.subsurf_scatter_enabled = true
 		result.subsurf_scatter_strength = 0.06
 	result.emission_enabled = false

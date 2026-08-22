@@ -555,6 +555,11 @@ func _test_ai_manager_sync_hell_challenge_preserves_pressure_diagnostics():
 		return "expected compact native selected discard not to feed human peng, got %s" % [native]
 	if Array(native.get("reasons", [])).is_empty():
 		return "expected compact native direct reasons to survive mapping, got %s" % [native]
+	var performance: Dictionary = native.get("performance", {})
+	if float(performance.get("TotalMs", 0.0)) <= 0.0:
+		return "expected compact native direct performance TotalMs, got %s" % [native]
+	if float(native.get("elapsedMsExact", 0.0)) <= 0.0:
+		return "expected compact native exact elapsed time, got %s" % [native]
 	return true
 
 

@@ -355,6 +355,7 @@ func set_ai_preset(preset_name: String) -> bool:
 		if bool(player.get("is_ai", false)):
 			player["ai_level"] = int(ai_level)
 	_apply_ai_runtime_tuning()
+	_invalidate_ai_decisions_after_tuning_change()
 	debug_last_message = "AI 参数预设已切换为 %s。" % preset_name
 	_emit_state_changed()
 	return true
@@ -493,6 +494,7 @@ func set_ai_tuning_value(key: String, value: int) -> bool:
 		_:
 			return false
 	_apply_ai_runtime_tuning()
+	_invalidate_ai_decisions_after_tuning_change()
 	debug_last_message = "AI 调参已更新：%s = %d" % [key, int(ai_manual_tuning_overrides.get(key, value))]
 	_emit_state_changed()
 	return true
@@ -527,6 +529,7 @@ func set_ai_auto_learning_enabled(enabled: bool) -> bool:
 	if not AI_LEARNING_RECORDING_ENABLED:
 		ai_tuning_config.auto_learning_enabled = false
 		_apply_ai_runtime_tuning()
+		_invalidate_ai_decisions_after_tuning_change()
 		debug_last_message = "实际使用包已关闭 AI 自动学习记录。"
 		_emit_state_changed()
 		return false
@@ -534,6 +537,7 @@ func set_ai_auto_learning_enabled(enabled: bool) -> bool:
 	ai_tuning_config.apply_preset(str(ai_tuning_config.preset_name))
 	ai_tuning_config.auto_learning_enabled = enabled
 	_apply_ai_runtime_tuning()
+	_invalidate_ai_decisions_after_tuning_change()
 	debug_last_message = "AI 自动学习调参已%s。" % ("开启" if enabled else "关闭")
 	_emit_state_changed()
 	return true
@@ -544,6 +548,7 @@ func set_ai_endgame_absolute_defense_enabled(enabled: bool) -> bool:
 		return false
 	ai_tuning_config.endgame_absolute_defense = enabled
 	_apply_ai_runtime_tuning()
+	_invalidate_ai_decisions_after_tuning_change()
 	debug_last_message = "AI 尾盘绝对防炮已%s。" % ("开启" if enabled else "关闭")
 	_emit_state_changed()
 	return true
@@ -555,6 +560,7 @@ func apply_bone_ash_recommended_tuning() -> bool:
 	ai_manual_tuning_overrides.clear()
 	ai_tuning_config.apply_preset("bone_ash")
 	_apply_ai_runtime_tuning()
+	_invalidate_ai_decisions_after_tuning_change()
 	debug_last_message = "AI 已恢复骨灰推荐参数。"
 	_emit_state_changed()
 	return true
@@ -566,6 +572,7 @@ func reset_ai_tuning_overrides() -> bool:
 	ai_manual_tuning_overrides.clear()
 	ai_tuning_config.apply_preset(str(ai_tuning_config.preset_name))
 	_apply_ai_runtime_tuning()
+	_invalidate_ai_decisions_after_tuning_change()
 	debug_last_message = "AI 手动调参已恢复为预设 + 学习参数。"
 	_emit_state_changed()
 	return true
@@ -616,6 +623,7 @@ func set_ai_level(level: int) -> bool:
 		if bool(player.get("is_ai", false)):
 			player["ai_level"] = int(ai_level)
 	_apply_ai_runtime_tuning()
+	_invalidate_ai_decisions_after_tuning_change()
 	debug_last_message = "AI 难度已切换为 %s。" % AI_LEVEL_LABELS[int(ai_level)]
 	_emit_state_changed()
 	return true
@@ -3381,6 +3389,16 @@ func _clear_pending_ai_async_state() -> void:
 	_clear_pending_ai_reaction_request()
 	pending_ai_turn_decision.clear()
 	pending_ai_reaction_decision.clear()
+
+
+func _invalidate_ai_decisions_after_tuning_change() -> void:
+	# A tuning change must never allow a decision computed with the old policy
+	# to execute after the UI switches difficulty.  Keep legal reaction
+	# candidates intact; only invalidate the AI's cached/background decision.
+	pending_ai_turn_decision.clear()
+	pending_ai_reaction_decision.clear()
+	_clear_pending_ai_turn_request()
+	_clear_pending_ai_reaction_request()
 
 
 func _has_native_csharp_runtime() -> bool:

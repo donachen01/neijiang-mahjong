@@ -538,7 +538,16 @@ func _build_performance_summary(samples_value) -> Dictionary:
 	var samples: Array = Array(samples_value).duplicate()
 	samples.sort()
 	if samples.is_empty():
-		return {"samples": 0, "p50_ms": 0.0, "p95_ms": 0.0, "max_ms": 0.0, "avg_ms": 0.0}
+		return {
+			"samples": 0,
+			"available": false,
+			"p50_ms": 0.0,
+			"p95_ms": 0.0,
+			"max_ms": 0.0,
+			"avg_ms": 0.0,
+			"warning": true,
+			"warning_codes": ["PERF_CHOOSE_ACTION_NO_SAMPLES"],
+		}
 	var total := 0.0
 	for value in samples:
 		total += float(value)
@@ -551,6 +560,7 @@ func _build_performance_summary(samples_value) -> Dictionary:
 		warning_codes.append("PERF_CHOOSE_ACTION_MAX_SPIKE_WARNING")
 	return {
 		"samples": samples.size(),
+		"available": true,
 		"p50_ms": float(samples[int(floor(float(samples.size() - 1) * 0.50))]),
 		"p95_ms": p95_ms,
 		"max_ms": max_ms,
@@ -563,7 +573,7 @@ func _build_performance_summary(samples_value) -> Dictionary:
 func _build_paired_policy_summary(stats: Dictionary) -> Dictionary:
 	var deltas: Array = stats.get("paired_candidate_deltas", [])
 	if deltas.is_empty():
-		return {"enabled": false, "samples": 0}
+		return {"enabled": false, "samples": 0, "valid": false, "warning_codes": ["AB_NO_ROTATED_SAMPLES"]}
 	var total := 0.0
 	for value in deltas:
 		total += float(value)
@@ -573,8 +583,18 @@ func _build_paired_policy_summary(stats: Dictionary) -> Dictionary:
 		variance += pow(float(value) - mean, 2.0)
 	var stddev := sqrt(variance / float(maxi(1, deltas.size() - 1)))
 	var margin := 1.96 * stddev / sqrt(float(deltas.size()))
+	var ai_metrics: Dictionary = stats.get("ai_metrics_total", {})
+	var candidate_decisions := int(ai_metrics.get("discard_policy_candidate", 0))
+	var baseline_decisions := int(ai_metrics.get("discard_policy_baseline_v1", 0))
+	var warning_codes: Array[String] = []
+	if candidate_decisions <= 0:
+		warning_codes.append("AB_CANDIDATE_DECISIONS_MISSING")
+	if baseline_decisions <= 0:
+		warning_codes.append("AB_BASELINE_DECISIONS_MISSING")
 	return {
 		"enabled": true,
+		"valid": warning_codes.is_empty(),
+		"warning_codes": warning_codes,
 		"baseline_profile": "baseline_v1",
 		"candidate_profile": "candidate",
 		"samples": deltas.size(),
@@ -584,6 +604,8 @@ func _build_paired_policy_summary(stats: Dictionary) -> Dictionary:
 		"candidate_delta_ci95_upper": mean + margin,
 		"candidate_deal_in_count": int(stats.get("paired_candidate_deal_in_count", 0)),
 		"candidate_deal_in_loss_abs": int(stats.get("paired_candidate_deal_in_loss_abs", 0)),
+		"candidate_decisions": candidate_decisions,
+		"baseline_decisions": baseline_decisions,
 		"seat_rotation": "round_index_mod_4",
 	}
 
@@ -621,6 +643,8 @@ func _print_summary(stats: Dictionary) -> void:
 	print("choose_action_p50_ms=", "%.3f" % float(performance.get("p50_ms", 0.0)))
 	print("choose_action_p95_ms=", "%.3f" % float(performance.get("p95_ms", 0.0)))
 	print("choose_action_max_ms=", "%.3f" % float(performance.get("max_ms", 0.0)))
+	if not bool(performance.get("available", false)):
+		print("choose_action_performance_warning=", ",".join(Array(performance.get("warning_codes", [])).map(func(value): return str(value))))
 	var paired: Dictionary = stats.get("paired_policy_metrics", {})
 	if bool(paired.get("enabled", false)):
 		print("paired_candidate_mean_delta=", "%.3f" % float(paired.get("candidate_mean_delta", 0.0)))

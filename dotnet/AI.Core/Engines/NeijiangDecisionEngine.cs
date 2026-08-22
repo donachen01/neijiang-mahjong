@@ -23,6 +23,7 @@ public sealed class NeijiangDecisionEngine
         .Select(_ => new NeijiangAiContextCache())
         .ToArray();
     private readonly NeijiangDealInPolicyEvaluator _dealInPolicy = new();
+    private readonly NeijiangExperiencedStrategyEngine _experienced = new();
 
     private sealed record NeijiangBigHandRouteAdjustment(double Score, IReadOnlyList<string> Reasons)
     {
@@ -120,6 +121,18 @@ public sealed class NeijiangDecisionEngine
             limitedLookaheadMs += Stopwatch.GetElapsedTime(moduleStarted).TotalMilliseconds;
             var dangerEval = _danger.EvaluateDetail(tileType, state, belief);
             var danger = dangerEval.Risk;
+            var experiencedAdjustment = _experienced.EvaluateDiscard(
+                currentShanten,
+                effectiveShanten,
+                effectiveLiveUkeire,
+                waitCount,
+                qualityScore,
+                danger,
+                state.WallCount,
+                routeLoss.Length,
+                routePlan.PrimaryRoute,
+                routePlanAfter.PrimaryRoute,
+                waitShapeSummary);
             var fastTingPriority = EvaluateFastTingPriorityAdjustment(currentShanten, effectiveShanten, effectiveLiveUkeire, waitCount, roundStage, danger);
             var wallDrawPosterior = EstimateWallDrawPosterior(effectiveImprovingTiles, belief);
             var tenpaiProbability = EstimateTenpaiProbability(effectiveShanten, effectiveLiveUkeire);
@@ -166,6 +179,7 @@ public sealed class NeijiangDecisionEngine
                 + readyCentralPreservation.Score
                 + setPreservation.Score
                 + strategicAdjustment.Score
+                + experiencedAdjustment.Score
                 + dealInPolicy.AdjustmentScore / 100.0;
             var defenseAdjustment = posteriorAdjustment * ResolveDefenseAdjustmentWeight(effectiveShanten, waitCount, roundStage, maxReadyPosterior);
             var expectedValue = expectedScore.Net + shapeValue - defenseAdjustment;
@@ -191,6 +205,7 @@ public sealed class NeijiangDecisionEngine
                 .Concat(readyCentralPreservation.Reasons)
                 .Concat(setPreservation.Reasons)
                 .Concat(strategicAdjustment.Reasons)
+                .Concat(experiencedAdjustment.Reasons)
                 .Concat(new[] { dealInPolicy.ReasonCode })
                 .ToArray();
             candidateScores[tileType] = score;
@@ -589,7 +604,9 @@ public sealed class NeijiangDecisionEngine
         var totalTiles = hand18.Sum() + state.Melds18[state.SeatIndex].Count;
         var maxSuitCount = suitCounts.Count > 0 ? suitCounts.Values.Max() : 0;
         var offSuitCount = Math.Max(0, totalTiles - maxSuitCount);
-        if (suitCounts.Count == 1 && suitCounts.Count > 0 && totalTiles >= 11 && state.WallCount >= 8)
+        // 已经全单色时，清一色是当前真实番型而不是“仍在追的路线”；尾盘不能因为
+        // 牌墙变短就把它从净期望中抹掉。只有尚有异门牌的潜在清色才要求足够牌墙。
+        if (suitCounts.Count == 1 && totalTiles >= 11)
             routes.Add("清一色");
         else if (state.WallCount >= 8 && totalTiles >= 11 && maxSuitCount >= 10 && offSuitCount <= 3)
             routes.Add("清一色");

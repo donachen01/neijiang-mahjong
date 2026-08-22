@@ -3,22 +3,24 @@ extends Control
 
 signal action_selected(action: String)
 
-const ACTION_TEXTURES := {
-	"hu": preload("res://res/art/ui/table_v2/action_hu.png"),
-	"gang": preload("res://res/art/ui/table_v2/action_gang.png"),
-	"peng": preload("res://res/art/ui/table_v2/action_peng.png"),
-	"pass": preload("res://res/art/ui/table_v2/action_pass.png"),
-}
+const TABLE_SKIN_CATALOG := preload("res://scripts/ui/table/NeijiangTableSkinCatalog.gd")
 const MAX_ACTIONS := 6
-const BUTTON_LARGE := Vector2(148.0, 148.0)
-const BUTTON_COMPACT := Vector2(122.0, 122.0)
-const BUTTON_DENSE := Vector2(108.0, 108.0)
+# 与四川麻将最新操作章保持一致：双按钮时给出明显更大的 iPhone 触控面，
+# 多操作冲突时再逐级收紧，但仍高于旧版的 108px 密集按钮。
+const PRIMARY_FOCUSED_SIZE := Vector2(368.0, 368.0)
+const SECONDARY_FOCUSED_SIZE := Vector2(312.0, 312.0)
+const PRIMARY_COMPACT_SIZE := Vector2(264.0, 264.0)
+const SECONDARY_COMPACT_SIZE := Vector2(216.0, 216.0)
+const BUTTON_DENSE := Vector2(170.0, 170.0)
+const BUTTON_MAX_DENSE := Vector2(148.0, 148.0)
 const BODY_FONT := preload("res://res/fonts/app_cjk.ttc")
 
 var status_label: Label
 var action_row: HBoxContainer
 var action_buttons: Dictionary = {}
 var reduced_motion := false
+var active_skin_id := TABLE_SKIN_CATALOG.DEFAULT_SKIN_ID
+var active_skin: Dictionary = TABLE_SKIN_CATALOG.get_skin(TABLE_SKIN_CATALOG.DEFAULT_SKIN_ID)
 
 
 func _ready() -> void:
@@ -65,6 +67,20 @@ func set_reduced_motion(enabled: bool) -> void:
 	reduced_motion = enabled
 
 
+func set_table_skin(skin_id: String) -> void:
+	if not TABLE_SKIN_CATALOG.has_skin(skin_id):
+		return
+	active_skin_id = skin_id
+	active_skin = TABLE_SKIN_CATALOG.get_skin(skin_id)
+	for action_id_value in action_buttons.keys():
+		var action_id := str(action_id_value)
+		var button := action_buttons.get(action_id) as Button
+		if button == null:
+			continue
+		_apply_button_style(button, action_id)
+	_apply_panel_skin()
+
+
 func get_button(action: String) -> Button:
 	return action_buttons.get(action) as Button
 
@@ -85,7 +101,12 @@ func get_visual_contract() -> Dictionary:
 		"supports_bao_jiao": true,
 		"supports_separate_an_gang": true,
 		"focus_navigation": true,
-		"touch_target_minimum": BUTTON_DENSE,
+		"touch_target_minimum": BUTTON_MAX_DENSE,
+		"focused_primary_touch_target": PRIMARY_FOCUSED_SIZE,
+		"focused_secondary_touch_target": SECONDARY_FOCUSED_SIZE,
+		"material_family": "skin_matched_single_ring_action_badges",
+		"skin_binding": "active_table_skin_palette",
+		"text_hierarchy": "oversized_engraved_action_word",
 		"font_path": BODY_FONT.resource_path,
 	}
 
@@ -138,11 +159,6 @@ func _ensure_button(action_id: String) -> Button:
 	button.text = action_id
 	button.add_theme_font_size_override("font_size", 34)
 	button.add_theme_font_override("font", BODY_FONT)
-	button.add_theme_color_override("font_color", Color.WHITE)
-	button.add_theme_color_override("font_hover_color", Color.WHITE)
-	button.add_theme_color_override("font_pressed_color", Color("FFF0B2"))
-	button.add_theme_color_override("font_outline_color", Color("3B170B"))
-	button.add_theme_constant_override("outline_size", 5)
 	_apply_button_style(button, action_id)
 	button.pressed.connect(_on_button_pressed.bind(action_id))
 	action_row.add_child(button)
@@ -160,21 +176,23 @@ func _on_button_pressed(action_id: String) -> void:
 
 
 func _apply_density(visible_count: int) -> void:
-	var target_size := BUTTON_LARGE
-	var font_size := 34
-	if visible_count >= 5:
-		target_size = Vector2(116.0, 116.0)
-		font_size = 29
-	elif visible_count == 4:
-		target_size = BUTTON_COMPACT
-		font_size = 30
+	var focused := visible_count > 0 and visible_count <= 2
+	var target_size := SECONDARY_FOCUSED_SIZE if focused else SECONDARY_COMPACT_SIZE
+	var font_size := 92 if focused else 80
+	if visible_count == 5:
+		target_size = BUTTON_DENSE
+		font_size = 62
+	elif visible_count >= 6:
+		target_size = BUTTON_MAX_DENSE
+		font_size = 54
 	for button_value in action_buttons.values():
 		var button := button_value as Button
 		if button == null or not button.visible:
 			continue
-		button.custom_minimum_size = target_size
-		button.add_theme_font_size_override("font_size", font_size)
-		button.pivot_offset = target_size * 0.5
+		var is_hu := str(button.name) == "Action_hu"
+		button.custom_minimum_size = PRIMARY_FOCUSED_SIZE if focused and is_hu else (PRIMARY_COMPACT_SIZE if not focused and is_hu and visible_count <= 4 else target_size)
+		button.add_theme_font_size_override("font_size", (104 if focused else 92) if is_hu and visible_count <= 4 else font_size)
+		button.pivot_offset = button.custom_minimum_size * 0.5
 
 
 func _apply_focus_navigation(visible_ids: Array[String]) -> void:
@@ -193,37 +211,82 @@ func _apply_focus_navigation(visible_ids: Array[String]) -> void:
 
 
 func _apply_button_style(button: Button, action_id: String) -> void:
-	var visual_id := _visual_role(action_id)
-	var texture := ACTION_TEXTURES.get(visual_id) as Texture2D
-	var normal := StyleBoxTexture.new()
-	normal.texture = texture
-	normal.set_texture_margin_all(20)
-	var hover := normal.duplicate() as StyleBoxTexture
-	hover.modulate_color = Color("FFF1C0")
-	var pressed := normal.duplicate() as StyleBoxTexture
-	pressed.modulate_color = Color("D9B76B")
-	var focus := normal.duplicate() as StyleBoxTexture
-	focus.modulate_color = Color("FFF7D2")
+	var colors := _resolve_action_colors(action_id)
+	var normal := _make_action_seal_style(colors, false)
+	var hover := _make_action_seal_style(colors, false)
+	hover.bg_color = Color(colors["center"]).lightened(0.10)
+	var pressed := _make_action_seal_style(colors, true)
+	var focus := _make_action_seal_style(colors, false)
+	focus.border_color = Color(colors["light"]).lightened(0.12)
+	focus.set_border_width_all(10)
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", pressed)
 	button.add_theme_stylebox_override("focus", focus)
+	button.add_theme_color_override("font_color", Color(colors["text"]))
+	button.add_theme_color_override("font_hover_color", Color(colors["text"]).lightened(0.10))
+	button.add_theme_color_override("font_pressed_color", Color(colors["text"]).darkened(0.08))
+	button.add_theme_color_override("font_disabled_color", Color(colors["text"], 0.42))
+	button.add_theme_color_override("font_outline_color", Color(colors["outline"]))
+	button.add_theme_constant_override("outline_size", 6)
+	button.add_theme_color_override("font_shadow_color", Color(0.0, 0.02, 0.015, 0.64))
+	button.add_theme_constant_override("shadow_offset_x", 2)
+	button.add_theme_constant_override("shadow_offset_y", 3)
 
 
-func _visual_role(action_id: String) -> String:
+func _resolve_action_colors(action_id: String) -> Dictionary:
+	var cloth := Color(active_skin.get("albedo_tint", Color("4E6F61")))
+	var light := Color(active_skin.get("light_color", Color("F8E2C2")))
+	var center := cloth.darkened(0.12)
+	var edge := cloth.darkened(0.48)
 	if action_id in ["hu", "self_hu"]:
-		return "hu"
-	if action_id in ["gang", "an_gang", "add_gang", "bao_jiao"]:
-		return "gang"
-	if action_id == "peng":
-		return "peng"
-	return "pass"
+		center = cloth.lerp(Color("B96A1B"), 0.58).lightened(0.08)
+		edge = Color("6A3108")
+	elif action_id == "pass":
+		center = cloth.darkened(0.34)
+		edge = cloth.darkened(0.62)
+	elif action_id in ["gang", "an_gang", "add_gang", "bao_jiao"]:
+		center = cloth.lerp(Color("6B5134"), 0.30).darkened(0.04)
+		edge = cloth.darkened(0.52)
+	return {
+		"center": center,
+		"edge": edge,
+		"light": light,
+		"text": light.lerp(Color("FFF7DF"), 0.56),
+		"outline": edge.darkened(0.42),
+	}
+
+
+func _make_action_seal_style(colors: Dictionary, pressed: bool) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(colors["center"]).darkened(0.10) if pressed else Color(colors["center"])
+	style.border_color = Color(colors["light"]).lerp(Color(colors["edge"]), 0.30)
+	style.set_border_width_all(8)
+	style.set_corner_radius_all(999)
+	style.content_margin_left = 12
+	style.content_margin_right = 12
+	style.content_margin_top = 14 if pressed else 10
+	style.content_margin_bottom = 6 if pressed else 10
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.42)
+	style.shadow_size = 10
+	style.shadow_offset = Vector2(0.0, 6.0)
+	style.anti_aliasing = true
+	style.anti_aliasing_size = 1.5
+	return style
+
+
+func _apply_panel_skin() -> void:
+	var panel := get_node_or_null("ActionBarSurface") as PanelContainer
+	if panel != null:
+		panel.add_theme_stylebox_override("panel", _panel_style())
 
 
 func _panel_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.12, 0.10, 0.84)
-	style.border_color = Color(0.72, 0.50, 0.24, 0.82)
+	var cloth := Color(active_skin.get("albedo_tint", Color("4E6F61")))
+	var light := Color(active_skin.get("light_color", Color("F8E2C2")))
+	style.bg_color = Color(cloth.darkened(0.72), 0.78)
+	style.border_color = Color(light, 0.72)
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(24)
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.38)

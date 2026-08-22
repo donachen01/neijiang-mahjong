@@ -27,17 +27,20 @@ TEXTURE_DIR = ART_ROOT / "materials" / "table_v2"
 # Production visual contract: restrained private-club furniture, not a bright
 # arcade skin.  The reference is built from one emerald family, an ebonized
 # frame, a tailored dark-green rail and two continuous champagne-gold cords.
-TABLE_CENTER = np.array([0x1C, 0x73, 0x50], dtype=np.float32) / 255.0
-TABLE_BASE = np.array([0x10, 0x56, 0x3D], dtype=np.float32) / 255.0
-TABLE_EDGE = np.array([0x09, 0x2F, 0x26], dtype=np.float32) / 255.0
-LEATHER_RAIL = np.array([0x08, 0x3A, 0x2D], dtype=np.float32) / 255.0
-EBONIZED_FRAME = np.array([0x17, 0x24, 0x1F], dtype=np.float32) / 255.0
-CHAMPAGNE_GOLD = np.array([0xC6, 0xA7, 0x5A], dtype=np.float32) / 255.0
-CHAMPAGNE_HIGHLIGHT = np.array([0xE4, 0xCB, 0x7D], dtype=np.float32) / 255.0
+TABLE_CENTER = np.array([0x4A, 0x9C, 0x78], dtype=np.float32) / 255.0
+TABLE_BASE = np.array([0x34, 0x7D, 0x60], dtype=np.float32) / 255.0
+TABLE_EDGE = np.array([0x07, 0x31, 0x27], dtype=np.float32) / 255.0
+LEATHER_RAIL = np.array([0x03, 0x30, 0x27], dtype=np.float32) / 255.0
+EBONIZED_FRAME = np.array([0x07, 0x13, 0x10], dtype=np.float32) / 255.0
+CHAMPAGNE_GOLD = np.array([0xB8, 0x96, 0x50], dtype=np.float32) / 255.0
+CHAMPAGNE_HIGHLIGHT = np.array([0xE9, 0xCF, 0x86], dtype=np.float32) / 255.0
+CHAMPAGNE_SHADOW = np.array([0x4B, 0x35, 0x16], dtype=np.float32) / 255.0
 # A near-neighbour of the felt, never a painted outline.  It is intentionally
 # only a little lighter than the cloth so the double inset reads through grazing
 # light without competing with tiles or the centre instrument.
-PLAYFIELD_GROOVE = np.array([0x3A, 0x82, 0x6B], dtype=np.float32) / 255.0
+PLAYFIELD_GROOVE = np.array([0x1B, 0x57, 0x44], dtype=np.float32) / 255.0
+PLAYFIELD_GROOVE_HIGHLIGHT = np.array([0x3C, 0x80, 0x64], dtype=np.float32) / 255.0
+INNER_CONTACT_SHADOW = np.array([0x08, 0x2F, 0x26], dtype=np.float32) / 255.0
 
 
 def srgb_to_linear(value: np.ndarray) -> np.ndarray:
@@ -99,96 +102,164 @@ def smooth_noise(size: int, seed: int, cells: int) -> np.ndarray:
     return pixels.reshape(size, size, 4)[:, :, 0]
 
 
+def periodic_blur(field: np.ndarray, radii: tuple[int, ...]) -> np.ndarray:
+    """Blur a tileable scalar field without introducing seams at the borders."""
+    result = field.astype(np.float32, copy=True)
+    for radius in radii:
+        result = (
+            result * 4.0
+            + np.roll(result, radius, axis=0)
+            + np.roll(result, -radius, axis=0)
+            + np.roll(result, radius, axis=1)
+            + np.roll(result, -radius, axis=1)
+        ) / 8.0
+    return result
+
+
+def normalize_field(field: np.ndarray) -> np.ndarray:
+    lower = float(np.percentile(field, 1.0))
+    upper = float(np.percentile(field, 99.0))
+    return np.clip((field - lower) / max(1.0e-6, upper - lower), 0.0, 1.0)
+
+
 def generate_felt_maps(size: int = 2048) -> tuple[bpy.types.Image, bpy.types.Image, bpy.types.Image]:
     y, x = np.mgrid[0:size, 0:size].astype(np.float32)
     u = x / float(size - 1)
     v = y / float(size - 1)
-    edge_distance = np.maximum(np.abs(u - 0.5) / 0.5, np.abs(v - 0.5) / 0.5)
-    edge = np.clip((edge_distance - 0.70) / 0.30, 0.0, 1.0)
-    centre = np.clip(1.0 - np.sqrt(((u - 0.5) / 0.72) ** 2 + ((v - 0.5) / 0.72) ** 2), 0.0, 1.0)
+    rng = np.random.default_rng(5305)
 
-    medium = smooth_noise(size, 5302, 96)
-    fine = smooth_noise(size, 5303, 360)
-    phase_noise = smooth_noise(size, 5304, 180)
+    # Target-reference cloth: a restrained woven foundation under a directional
+    # short nap.  The previous pass relied too heavily on isotropic colour noise;
+    # after mobile mipmapping it read as fine sand rather than soft cloth.  These
+    # higher-frequency, phase-warped fibres carry the detail through normals and
+    # roughness, while the base colour remains calm.
+    warp_a = normalize_field(periodic_blur(rng.standard_normal((size, size)), (2, 4, 8, 16))) - 0.5
+    warp_b = normalize_field(periodic_blur(rng.standard_normal((size, size)), (3, 6, 12, 24))) - 0.5
+    phase_a = math.tau * (u * 296.0 + v * 37.0 + warp_a * 0.18)
+    phase_b = math.tau * (-u * 43.0 + v * 317.0 + warp_b * 0.16)
+    thread_a = np.clip(np.sin(phase_a) * 0.5 + 0.5, 0.0, 1.0) ** 9
+    thread_b = np.clip(np.sin(phase_b) * 0.5 + 0.5, 0.0, 1.0) ** 9
+    intersections = np.sqrt(thread_a * thread_b)
 
-    # Equal-weight fibres from four unrelated directions remove the previous
-    # vertical ribbing while retaining a fine, even short-nap response.
-    fibre_fields = (
-        np.sin((u * 760.0 + v * 250.0 + phase_noise * 0.34) * math.tau),
-        np.sin((-u * 310.0 + v * 830.0 + fine * 0.28) * math.tau),
-        np.sin((u * 610.0 - v * 690.0 + phase_noise * 0.30) * math.tau),
-        np.sin((u * 520.0 + v * 540.0 + medium * 0.18) * math.tau),
+    # The target cloth is read as a continuous premium baize surface first and
+    # as individual fibres only on close inspection.  A robustly normalised raw
+    # field supplies sub-pixel pin-fuzz; the lightly filtered fields below keep
+    # it organic without creating the 3-8 screen-pixel cloudy blobs seen in the
+    # previous mobile capture.
+    pin_fuzz = normalize_field(rng.standard_normal((size, size)).astype(np.float32))
+    micro = normalize_field(periodic_blur(rng.standard_normal((size, size)), (1,)))
+    pixel_grain = normalize_field(periodic_blur(rng.standard_normal((size, size)), (1, 2)))
+    # Short directional fibre bundles.  Rolling instead of convolving preserves
+    # exact tileability, and the shallow diagonal follows the reference's
+    # brushed nap without turning into visible parallel stripes.
+    fibre_source = rng.standard_normal((size, size)).astype(np.float32)
+    fibre_streaks = np.zeros_like(fibre_source)
+    fibre_weight = 0.0
+    for offset in range(-5, 6):
+        weight = math.exp(-((float(offset) / 3.1) ** 2))
+        fibre_streaks += np.roll(
+            np.roll(fibre_source, offset, axis=1),
+            int(round(offset * 0.28)),
+            axis=0,
+        ) * weight
+        fibre_weight += weight
+    fibre_streaks = normalize_field(fibre_streaks / fibre_weight)
+    # Three overlapping, non-directional pile scales create dense short velvet
+    # without exposing a woven grid.  ``dense_fuzz`` provides the 1-2 screen-px
+    # sparkle that was still missing after mobile mipmapping; the two broader
+    # fields keep it soft rather than reading as sand or compression noise.
+    dense_fuzz = normalize_field(periodic_blur(rng.standard_normal((size, size)), (1, 2)))
+    soft_fuzz = normalize_field(periodic_blur(rng.standard_normal((size, size)), (2, 3, 5)))
+    visible_grain = normalize_field(periodic_blur(rng.standard_normal((size, size)), (5, 8, 12)))
+    velvet_cloud = normalize_field(periodic_blur(rng.standard_normal((size, size)), (18, 32, 54)))
+    nap = normalize_field(
+        thread_a * 0.018
+        + thread_b * 0.012
+        + intersections * 0.008
+        + fibre_streaks * 0.225
+        + pin_fuzz * 0.255
+        + dense_fuzz * 0.285
+        + soft_fuzz * 0.150
+        + visible_grain * 0.025
+        + micro * 0.022
     )
-    fibre = sum(fibre_fields) * 0.125 + 0.5
+    fibre_tips = np.clip(
+        (pin_fuzz * 0.38 + dense_fuzz * 0.36 + soft_fuzz * 0.18 + nap * 0.08 - 0.61) / 0.39,
+        0.0,
+        1.0,
+    ) ** 1.75
 
-    # A deterministic isotropic band-limited layer remains visible through
-    # mobile mipmaps without introducing the broad height islands that read as
-    # water stains. Frequencies stay strictly inside the approved 180-320 band.
-    mid_rng = np.random.default_rng(5310)
-    mid_nap = np.zeros((size, size), dtype=np.float32)
-    for _ in range(48):
-        angle = mid_rng.uniform(0.0, math.tau)
-        cycles = mid_rng.uniform(180.0, 320.0)
-        phase = mid_rng.uniform(0.0, math.tau)
-        projected = u * math.cos(angle) + v * math.sin(angle)
-        mid_nap += np.sin(projected * cycles * math.tau + phase)
-    mid_nap /= math.sqrt(24.0)
-
-    # Real short-nap cloth is never a perfectly uniform painted plane. Keep the
-    # variation fine and isotropic so it reads as dense fibres after mobile
-    # mipmapping without becoming large stains or directional ribbing.
-    clean_felt_color = TABLE_BASE * 0.82 + TABLE_CENTER * 0.18
+    # Colour stays calm and even; the tactile response is carried mainly by the
+    # normal/roughness maps. This avoids the old cloud-shaped stains while
+    # retaining the target's restrained 1-pixel emerald grain in mobile shots.
+    clean_felt_color = TABLE_BASE * 0.35 + TABLE_CENTER * 0.65
     base = np.broadcast_to(clean_felt_color[None, None, :], (size, size, 3)).copy()
-    # The photographic reference has a gentle centre lift and a richer edge,
-    # caused by short-nap direction and the table lighting rather than a visible
-    # vignette.  Keep the range narrow enough that discarded tiles retain the
-    # same contrast anywhere on the playfield.
-    base *= (0.992 + centre[:, :, None] * 0.016)
-    base *= (1.0 - edge[:, :, None] * 0.010)
+    # Felt is recognised by a dense field of tiny, soft highlights carried by
+    # short fibres—not by a visible textile grid.  Fine and broad random pile
+    # fields overlap here so mobile minification keeps the target's micro-fuzz
+    # while adjacent pixels still blend into a plush continuous surface.
     colour_nap = (
-        (fine - 0.5) * 0.006
-        + (fibre - 0.5) * 0.004
+        (pin_fuzz - 0.5) * 0.052
+        + (pixel_grain - 0.5) * 0.026
+        + (fibre_streaks - 0.5) * 0.017
+        + (dense_fuzz - 0.5) * 0.038
+        + (soft_fuzz - 0.5) * 0.012
+        + (visible_grain - 0.5) * 0.002
+        + (velvet_cloud - 0.5) * 0.001
+        + (nap - 0.5) * 0.003
+        + (micro - 0.5) * 0.018
     )
     base *= 1.0 + colour_nap[:, :, None]
-    # Preserve a true emerald cloth under the warm key light; the previous blue
-    # multiplier pushed the table toward cyan/grey on iPhone displays.
-    base *= np.array([0.92, 1.04, 0.94], dtype=np.float32)[None, None, :]
-    # Sparse light-facing fibre tips give the surface a soft textile sparkle,
-    # not plastic clearcoat. The mask is deterministic and sub-pixel dense.
-    fibre_tips = np.clip((fine - 0.76) / 0.24, 0.0, 1.0) ** 3
-    base += fibre_tips[:, :, None] * np.array([0.004, 0.008, 0.007], dtype=np.float32)
+    # The target emerald retains a muted blue component under warm light; this
+    # prevents the cloth from drifting into yellow casino green on mobile.
+    base *= np.array([1.035, 1.005, 1.040], dtype=np.float32)[None, None, :]
+    base += fibre_tips[:, :, None] * np.array([0.007, 0.013, 0.009], dtype=np.float32)
 
-    # Keep the legacy audit mask deterministic, but do not tint the production
-    # base colour with it. The runtime table is clean short-nap felt throughout.
+    # Retain the deterministic audit mask asset but keep it out of the visible
+    # production colour. The actual table decoration remains the two inset
+    # rings authored as geometry below.
+    edge_distance = np.maximum(np.abs(u - 0.5) / 0.5, np.abs(v - 0.5) / 0.5)
     perimeter = np.clip((edge_distance - 0.82) / 0.10, 0.0, 1.0)
-    wave_a = np.sin((u * 13.0 + np.sin(v * 8.0 * math.pi) * 0.18) * math.pi * 2.0)
-    wave_b = np.sin((v * 11.0 + np.sin(u * 7.0 * math.pi) * 0.16) * math.pi * 2.0)
-    brocade = ((wave_a * wave_b) * 0.5 + 0.5) * perimeter
+    brocade = intersections * perimeter
     mask_rgba = np.ones((size, size, 4), dtype=np.float32)
     mask_rgba[:, :, :3] = brocade[:, :, None]
     save_non_color_image("FeltBrocadeMask2048", TEXTURE_DIR / "brocade_mask.png", mask_rgba)
     felt_base = save_rgba_image("FeltBaseColor2048", TEXTURE_DIR / "felt_basecolor.png", base)
 
-    # The mid layer supplies readable short nap while the dense layer keeps the
-    # close-up fibre response. Neither layer writes into BaseColor.
-    # Do not put the band-limited mid layer into the normal map. Although it is
-    # high-frequency at source resolution, mobile mip filtering can fold it into
-    # broad cloudy normals over this very large UV island. Fine fibres and the
-    # 360-cell noise keep the textile response without visible water-stain blobs.
-    height = sum(field * 0.010 for field in fibre_fields) + (fine - 0.5) * 0.012
+    # The weave ridges and irregular nap are deliberately wider than one source
+    # texel. After the UV repeat and mobile mipmaps they remain a fine textile
+    # response instead of disappearing or shimmering.
+    height = (
+        (thread_a - float(thread_a.mean())) * 0.0008
+        + (thread_b - float(thread_b.mean())) * 0.0006
+        + (intersections - float(intersections.mean())) * 0.0004
+        + (fibre_streaks - 0.5) * 0.0045
+        + (pin_fuzz - 0.5) * 0.013
+        + (dense_fuzz - 0.5) * 0.010
+        + (soft_fuzz - 0.5) * 0.004
+        + (pixel_grain - 0.5) * 0.005
+        + (visible_grain - 0.5) * 0.0015
+        + (micro - 0.5) * 0.005
+    )
     grad_y, grad_x = np.gradient(height)
-    normal = np.dstack((-grad_x * 1.20, -grad_y * 1.20, np.ones_like(height)))
+    normal = np.dstack((-grad_x * 2.65, -grad_y * 2.65, np.ones_like(height)))
     normal /= np.linalg.norm(normal, axis=2, keepdims=True)
     normal_rgba = np.ones((size, size, 4), dtype=np.float32)
     normal_rgba[:, :, :3] = normal * 0.5 + 0.5
     felt_normal = save_non_color_image("FeltNormal2048", TEXTURE_DIR / "felt_normal.png", normal_rgba)
 
     roughness = np.clip(
-        0.84
-        + (fine - 0.5) * 0.022
-        + (fibre - 0.5) * 0.016,
-        0.80,
-        0.89,
+        0.885
+        + (pin_fuzz - 0.5) * 0.026
+        + (pixel_grain - 0.5) * 0.012
+        + (dense_fuzz - 0.5) * 0.022
+        + (visible_grain - 0.5) * 0.005
+        + (soft_fuzz - 0.5) * 0.010
+        + (fibre_streaks - 0.5) * 0.014
+        + (micro - 0.5) * 0.010
+        - fibre_tips * 0.030,
+        0.805,
+        0.940,
     )
     orm = np.ones((size, size, 4), dtype=np.float32)
     orm[:, :, 0] = 0.97  # AO stays uniform; geometry provides the edge depth.
@@ -244,7 +315,15 @@ def generate_surface_maps(prefix: str, color: np.ndarray, size: int, seed: int, 
     return base, normal, orm
 
 
-def pbr_material(name: str, base: bpy.types.Image, normal: bpy.types.Image, orm: bpy.types.Image, normal_strength: float = 0.54) -> bpy.types.Material:
+def pbr_material(
+    name: str,
+    base: bpy.types.Image,
+    normal: bpy.types.Image,
+    orm: bpy.types.Image,
+    normal_strength: float = 0.54,
+    anisotropy: float = 0.0,
+    sheen_weight: float = 0.0,
+) -> bpy.types.Material:
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
@@ -270,6 +349,15 @@ def pbr_material(name: str, base: bpy.types.Image, normal: bpy.types.Image, orm:
     links.new(orm_node.outputs["Color"], separate.inputs["Color"])
     links.new(separate.outputs["Green"], shader.inputs["Roughness"])
     links.new(separate.outputs["Blue"], shader.inputs["Metallic"])
+    anisotropic_input = shader.inputs.get("Anisotropic IOR Level") or shader.inputs.get("Anisotropic")
+    if anisotropic_input is not None:
+        anisotropic_input.default_value = anisotropy
+    sheen_input = shader.inputs.get("Sheen Weight") or shader.inputs.get("Sheen")
+    if sheen_input is not None:
+        sheen_input.default_value = sheen_weight
+    sheen_roughness = shader.inputs.get("Sheen Roughness")
+    if sheen_roughness is not None:
+        sheen_roughness.default_value = 0.72
     links.new(shader.outputs["BSDF"], output.inputs["Surface"])
     return mat
 
@@ -323,6 +411,26 @@ def rounded_box(name: str, size, location, bevel: float, segments: int, material
         polygon.use_smooth = True
     obj.data.materials.append(material)
     return obj
+
+
+def apply_planar_repeat_uv(obj: bpy.types.Object, size: tuple[float, float], repeat: tuple[float, float]) -> None:
+    """Give the tabletop predictable real-world texel density.
+
+    Blender's default cube atlas stretched one texture over the entire 14 m
+    playfield, while an overly dense repeat made mobile mipmaps erase the nap.
+    A 1.6-by-1.0 planar repeat preserves square real-world texel scale.  The
+    previous 3.4 repeat pushed the woven normal into coarse mip levels and left
+    only sand-like colour noise at the gameplay camera.
+    """
+    mesh = obj.data
+    uv_layer = mesh.uv_layers.active or mesh.uv_layers.new(name="FeltUV")
+    for polygon in mesh.polygons:
+        for loop_index in polygon.loop_indices:
+            coordinate = mesh.vertices[mesh.loops[loop_index].vertex_index].co
+            uv_layer.data[loop_index].uv = (
+                (coordinate.x / size[0] + 0.5) * repeat[0],
+                (coordinate.y / size[1] + 0.5) * repeat[1],
+            )
 
 
 def rounded_rectangle_ring(
@@ -425,75 +533,158 @@ def build_table() -> list[bpy.types.Object]:
     felt_maps = generate_felt_maps()
     leather_maps = generate_surface_maps("leather", LEATHER_RAIL, 1024, 6101, 0.56, 0.0)
     frame_maps = generate_surface_maps("frame", EBONIZED_FRAME, 1024, 6201, 0.43, 0.0)
-    felt = pbr_material("DeepEmeraldShortNapFelt", *felt_maps, normal_strength=0.14)
-    leather = pbr_material("TailoredDarkEmeraldRail", *leather_maps, normal_strength=0.32)
-    frame = pbr_material("EbonizedFurnitureFrame", *frame_maps, normal_strength=0.24)
-    groove = simple_material("SubtleEmeraldFeltInset", PLAYFIELD_GROOVE, 0.78, 0.0)
-    gold = simple_material("SatinChampagneGold", CHAMPAGNE_GOLD, 0.28, 0.86, coat_weight=0.025)
+    felt = pbr_material(
+        "DeepEmeraldDirectionalVelvetFelt",
+        *felt_maps,
+        normal_strength=0.58,
+        anisotropy=0.17,
+        sheen_weight=0.16,
+    )
+    leather = pbr_material("TailoredDarkEmeraldRail", *leather_maps, normal_strength=0.38)
+    frame = pbr_material("EbonizedFurnitureFrame", *frame_maps, normal_strength=0.28)
+    groove = simple_material("PressedEmeraldFeltGroove", PLAYFIELD_GROOVE, 0.90, 0.0)
+    groove_high = simple_material(
+        "PressedEmeraldFeltEdgeHighlight", PLAYFIELD_GROOVE_HIGHLIGHT, 0.86, 0.0
+    )
+    inner_shadow = simple_material("SoftInnerContactShadow", INNER_CONTACT_SHADOW, 0.94, 0.0)
+    gold_shadow = simple_material(
+        "RecessedChampagneGoldShadow", CHAMPAGNE_SHADOW, 0.31, 0.82, coat_weight=0.01
+    )
+    gold = simple_material("SatinChampagneGold", CHAMPAGNE_GOLD, 0.21, 0.86, coat_weight=0.045)
     gold_high = simple_material(
-        "ChampagneGoldHighlight", CHAMPAGNE_HIGHLIGHT, 0.25, 0.88, coat_weight=0.02
+        "ChampagneGoldHighlight", CHAMPAGNE_HIGHLIGHT, 0.17, 0.82, coat_weight=0.055
     )
 
+    felt_surface = rounded_box(
+        "TableFelt", (13.76, 8.56, 0.31), (0.0, 0.0, 0.00), 0.25, 12, felt
+    )
+    apply_planar_repeat_uv(felt_surface, (13.76, 8.56), (1.6, 1.0))
+
     objects = [
-        rounded_box("TableEbonizedBase", (14.94, 9.74, 0.58), (0.0, 0.0, -0.31), 0.34, 12, frame),
+        rounded_box("TableEbonizedBase", (15.18, 9.98, 0.82), (0.0, 0.0, -0.44), 0.40, 12, frame),
         # The cloth continues underneath the padded rail.  The previous 13.46
         # x 8.26 top exposed the ebonized base between cloth and rail, creating
         # a heavy black moat in the real gameplay camera.  This overlap leaves
         # only the rail's natural contact shadow, matching the tailored table
         # reference without changing the playable coordinate system.
-        rounded_box("TableFelt", (13.76, 8.56, 0.31), (0.0, 0.0, 0.00), 0.25, 12, felt),
+        felt_surface,
         # The apron and padded rail are independent manufactured parts.  Their
         # shared curvature makes the table read as upholstered furniture while
         # preserving the exact existing playfield/牌墙 coordinate system.
         rounded_rectangle_ring(
             "DarkFurnitureApron",
-            (14.82, 9.62),
-            (13.72, 8.52),
-            0.36,
-            (0.0, 0.0, 0.055),
-            0.43,
-            0.25,
+            (15.08, 9.88),
+            (13.62, 8.42),
+            0.56,
+            (0.0, 0.0, 0.005),
+            0.49,
+            0.235,
             16,
-            0.13,
+            0.16,
             frame,
         ),
         rounded_rectangle_ring(
             "TailoredDarkEmeraldRail",
-            (14.67, 9.47),
-            (13.78, 8.58),
-            0.31,
-            (0.0, 0.0, 0.115),
-            0.39,
+            (14.88, 9.68),
+            (13.72, 8.52),
+            0.44,
+            (0.0, 0.0, 0.145),
+            0.45,
             0.245,
             16,
-            0.12,
+            0.155,
             leather,
         ),
-        # Both cords are continuous rings.  They are deliberately thin enough
-        # to feel inlaid, but thick enough to survive mobile TAA/FSR filtering.
+        # Each champagne cord is a three-dimensional inlay: a darker recessed
+        # bed supplies the contact line, the rounded satin body catches the key
+        # light, and a hairline highlight gives the continuous jewellery-like
+        # response of the supplied furniture reference. The playable opening
+        # and all tile coordinates remain unchanged.
+        rounded_rectangle_ring(
+            "OuterChampagneGoldRecess",
+            (14.86, 9.66),
+            (14.68, 9.48),
+            0.072,
+            (0.0, 0.0, 0.292),
+            0.445,
+            0.390,
+            16,
+            0.021,
+            gold_shadow,
+        ),
         rounded_rectangle_ring(
             "OuterChampagneGoldPiping",
-            (14.76, 9.56),
-            (14.68, 9.48),
-            0.055,
-            (0.0, 0.0, 0.255),
-            0.405,
-            0.385,
+            (14.82, 9.62),
+            (14.70, 9.50),
+            0.076,
+            (0.0, 0.0, 0.326),
+            0.430,
+            0.392,
             16,
-            0.018,
+            0.027,
             gold,
         ),
         rounded_rectangle_ring(
-            "InnerChampagneGoldPiping",
-            (13.86, 8.66),
-            (13.79, 8.59),
-            0.050,
-            (0.0, 0.0, 0.264),
-            0.265,
-            0.245,
+            "OuterChampagneGoldGlint",
+            (14.790, 9.590),
+            (14.752, 9.552),
+            0.026,
+            (0.0, 0.0, 0.370),
+            0.418,
+            0.405,
             16,
-            0.016,
+            0.009,
             gold_high,
+        ),
+        rounded_rectangle_ring(
+            "InnerChampagneGoldRecess",
+            (13.93, 8.73),
+            (13.77, 8.57),
+            0.070,
+            (0.0, 0.0, 0.296),
+            0.288,
+            0.238,
+            16,
+            0.021,
+            gold_shadow,
+        ),
+        rounded_rectangle_ring(
+            "InnerChampagneGoldPiping",
+            (13.90, 8.70),
+            (13.79, 8.59),
+            0.074,
+            (0.0, 0.0, 0.330),
+            0.277,
+            0.242,
+            16,
+            0.025,
+            gold,
+        ),
+        rounded_rectangle_ring(
+            "InnerChampagneGoldGlint",
+            (13.870, 8.670),
+            (13.835, 8.635),
+            0.024,
+            (0.0, 0.0, 0.373),
+            0.267,
+            0.255,
+            16,
+            0.008,
+            gold_high,
+        ),
+        # The narrow dark contact band makes the cloth visibly recessed into
+        # the upholstered rail without adding a painted outline to the felt.
+        rounded_rectangle_ring(
+            "FeltInnerContactShadow",
+            (13.62, 8.42),
+            (13.46, 8.26),
+            0.020,
+            (0.0, 0.0, 0.161),
+            0.235,
+            0.210,
+            16,
+            0.008,
+            inner_shadow,
         ),
         # Two calm tonal insets match the reference.  No centre-corner motifs,
         # black partition lines or decorative L-shapes remain on the cloth.
@@ -519,7 +710,7 @@ def build_table() -> list[bpy.types.Object]:
             0.19,
             16,
             0.003,
-            groove,
+            groove_high,
         ),
     ]
     return objects

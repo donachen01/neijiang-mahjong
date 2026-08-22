@@ -11,6 +11,7 @@ func _run() -> void:
 	var failures: Array[String] = []
 	_run_test("startup_keeps_raw_ai_analysis_opt_in", _test_startup_keeps_raw_ai_analysis_opt_in, failures)
 	_run_test("legacy_ai_level_cheating_maps_to_hell_preset", _test_legacy_ai_level_cheating_maps_to_hell_preset, failures)
+	_run_test("ai_tuning_change_invalidates_stale_decisions", _test_ai_tuning_change_invalidates_stale_decisions, failures)
 	_run_test("hell_challenge_mode_executes_oracle_without_recording", _test_hell_challenge_mode_executes_oracle_without_recording, failures)
 	_run_test("hell_challenge_sync_delivery_counts_as_direct_analysis", _test_hell_challenge_sync_delivery_counts_as_direct_analysis, failures)
 	_run_test("hell_challenge_oracle_replaces_deal_in_discard", _test_hell_challenge_oracle_replaces_deal_in_discard, failures)
@@ -135,6 +136,23 @@ func _test_legacy_ai_level_cheating_maps_to_hell_preset():
 		return "expected legacy advanced level to keep ai_level ADVANCED, got %s" % [advanced_snapshot.get("ai_level_index", -1)]
 	if bool(advanced_config.get("hell_execute_oracle_action", true)):
 		return "expected bone_ash mapping to disable hell oracle, got %s" % [advanced_config]
+	return true
+
+
+func _test_ai_tuning_change_invalidates_stale_decisions():
+	var game_state = _build_game_state()
+	game_state.pending_ai_turn_decision = {"action": "discard", "tile_id": 104}
+	game_state.pending_ai_reaction_decision = {"action": "peng", "tile_id": 5}
+	game_state.pending_ai_turn_request_id = 101
+	game_state.pending_ai_turn_request_meta = {"seat": 1}
+	game_state.pending_ai_reaction_request_id = 202
+	game_state.pending_ai_reaction_request_meta = {"seat": 1}
+	if not bool(game_state.set_ai_preset("bone_ash")):
+		return "expected preset switch to succeed"
+	if not game_state.pending_ai_turn_decision.is_empty() or not game_state.pending_ai_reaction_decision.is_empty():
+		return "expected cached decisions to clear after preset switch"
+	if game_state.pending_ai_turn_request_id != 0 or game_state.pending_ai_reaction_request_id != 0:
+		return "expected stale async request ids to clear after preset switch"
 	return true
 
 

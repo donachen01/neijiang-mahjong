@@ -1154,8 +1154,15 @@ func _compact_csharp_result(csharp_result: Dictionary) -> Dictionary:
 		"searchSimulations": int(csharp_result.get("searchSimulations", 0)),
 		"routePlan": csharp_result.get("routePlan", {}).duplicate(true),
 		"elapsedMs": int(csharp_result.get("elapsedMs", -1)),
+		"elapsedMsExact": float(csharp_result.get("elapsedMsExact", csharp_result.get("elapsedMs", 0.0))),
+		# 压缩快照也必须保留性能合同；压测与调参面板依赖该字段，不能把未采样误报为 0ms。
+		"performance": csharp_result.get("performance", {}).duplicate(true),
 		"beliefMetrics": csharp_result.get("beliefMetrics", {}).duplicate(true),
 		"cache": csharp_result.get("cache", {}).duplicate(true),
+		# 基线 A/B 只需这个归属字段，不保留完整上下文以免诊断快照膨胀。
+		"aiContext": {
+			"policyProfile": str(csharp_result.get("aiContext", {}).get("policyProfile", "candidate")),
+		},
 		"mobileSpeedMode": bool(csharp_result.get("mobileSpeedMode", false)),
 		"backendMode": str(csharp_result.get("backendMode", "")),
 		"category": str(csharp_result.get("category", "")),

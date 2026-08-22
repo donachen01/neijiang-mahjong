@@ -17,6 +17,21 @@ func _capture() -> void:
 	get_root().add_child(main_scene)
 	await process_frame
 	await process_frame
+	var requested_skin_id := ""
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--table-skin="):
+			requested_skin_id = argument.trim_prefix("--table-skin=")
+	if not requested_skin_id.is_empty():
+		var requested_stage := main_scene.get("table_stage_3d") as Node
+		if requested_stage == null or not bool(requested_stage.call("apply_table_skin", requested_skin_id)):
+			push_error("无法应用桌布皮肤：%s" % requested_skin_id)
+			quit(1)
+			return
+		main_scene.set("table_3d_skin_id", requested_skin_id)
+		var requested_action_bar := main_scene.get("table_3d_action_bar") as NeijiangActionBar
+		if requested_action_bar != null:
+			requested_action_bar.set_table_skin(requested_skin_id)
+		await process_frame
 	var game_state := get_root().get_node_or_null("GameState")
 	if game_state != null and bool(game_state.get("opening_roll_pending_completion")):
 		game_state.call("complete_opening_roll")
@@ -55,6 +70,16 @@ func _capture() -> void:
 			main_scene.call("_queue_neijiang_3d_layout")
 			await process_frame
 			await process_frame
+	if OS.get_cmdline_user_args().has("--show-skin-panel"):
+		var skin_panel := main_scene.get("table_3d_skin_panel") as Control
+		if skin_panel == null:
+			push_error("桌布皮肤面板未就绪")
+			quit(1)
+			return
+		skin_panel.call("open", requested_skin_id)
+		main_scene.call("_queue_neijiang_3d_layout")
+		await process_frame
+		await process_frame
 	if OS.get_cmdline_user_args().has("--click-utilities"):
 		var utility_bar := main_scene.get("table_3d_utility_bar") as NeijiangUtilityBar
 		if utility_bar != null and utility_bar.toggle_button != null:

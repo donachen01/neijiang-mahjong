@@ -283,6 +283,7 @@ public partial class NeijiangCSharpRuntime : Node
     {
         try
         {
+            var stopwatch = Stopwatch.StartNew();
             var payload = ParseHellChallengePayloadJson(payloadJson);
             var payloadError = ValidateHellChallengePayload(payload);
             if (!string.IsNullOrEmpty(payloadError))
@@ -297,7 +298,8 @@ public partial class NeijiangCSharpRuntime : Node
                 payload.CurrentScores);
             if (result.Candidates.Count <= 0 && result.Action.TileType < 0)
                 return BuildHellChallengeNoCandidateJson(payload, result);
-            return BuildHellChallengeResultJson(result);
+            stopwatch.Stop();
+            return BuildHellChallengeResultJson(result, stopwatch.Elapsed.TotalMilliseconds);
         }
         catch (Exception ex)
         {
@@ -627,7 +629,7 @@ public partial class NeijiangCSharpRuntime : Node
         return sb.ToString();
     }
 
-    private static string BuildHellChallengeResultJson(NeijiangHellOracleResult result)
+    private static string BuildHellChallengeResultJson(NeijiangHellOracleResult result, double elapsedMs)
     {
         var sb = new StringBuilder(4096);
         sb.Append("{\"ok\":true");
@@ -648,7 +650,14 @@ public partial class NeijiangCSharpRuntime : Node
         AppendJsonStringArray(sb, result.Reasons);
         sb.Append('}');
         sb.Append(",\"beliefSummary\":{\"compact\":true,\"ready_posteriors\":[],\"hold_summary\":{\"top_holders\":[]},\"wall_summary\":{\"top_tiles\":[]},\"wait_summary\":{\"top_waiters\":[]},\"unknown_summary\":{\"top_tiles\":[]}}");
-        sb.Append(",\"elapsedMs\":0,\"mobileSpeedMode\":true,\"compactResult\":true");
+        sb.Append(",\"elapsedMs\":").Append((long)Math.Round(elapsedMs));
+        sb.Append(",\"elapsedMsExact\":").Append(JsonDouble(elapsedMs));
+        // 与普通 C# 出牌保持相同的性能合同，供 AI 面板与压测脚本采集。
+        sb.Append(",\"performance\":{\"TotalMs\":").Append(JsonDouble(elapsedMs))
+            .Append(",\"MaxModuleMs\":").Append(JsonDouble(elapsedMs))
+            .Append(",\"Warning\":").Append(JsonBool(elapsedMs >= 100.0))
+            .Append(",\"WarningCodes\":[],\"Modules\":[]}");
+        sb.Append(",\"mobileSpeedMode\":true,\"compactResult\":true");
         sb.Append(",\"backendMode\":\"hell_challenge_direct\"");
         sb.Append(",\"category\":\"").Append(EscapeJsonString(result.Category)).Append('"');
         sb.Append(",\"severity\":\"").Append(EscapeJsonString(result.Severity)).Append('"');

@@ -239,6 +239,7 @@ public sealed class NeijiangReactionDecisionEngine
         var currentMeldCount = state.GetMeldCount(state.SeatIndex);
         var sevenPairsLikely = IsSevenPairsLikely(state.Hand18, currentMeldCount);
         var sevenPairsTenpai = IsSevenPairsTenpai(state.Hand18, currentMeldCount);
+        var breaksCompositeRun = BreaksCompositeRun(state.Hand18, reactionTileType);
         var structureBoost = EstimatePengStructureBoost(
             reactionTileType,
             currentFollowUp,
@@ -257,6 +258,10 @@ public sealed class NeijiangReactionDecisionEngine
         var discardRisk = followUp.BestDiscardTile >= 0 ? _danger.EvaluateDetail(followUp.BestDiscardTile, state, belief) : new NeijiangDangerEvaluation();
         var waitWallPosterior = EstimateWallPosterior(followUp.ImprovingTiles, belief);
         var waitBlockPosterior = EstimateBlockPosterior(followUp.ImprovingTiles, belief);
+        var compositeProtectionApplies = breaksCompositeRun
+            && (currentFollowUp.Shanten <= 0
+                || (followUp.Shanten >= currentFollowUp.Shanten
+                    && followUp.LiveUkeire <= currentFollowUp.LiveUkeire + 3));
         var score = 96
             - followUp.Shanten * 108
             + followUp.LiveUkeire * 10
@@ -300,6 +305,10 @@ public sealed class NeijiangReactionDecisionEngine
             score -= 1080;
         if (ShouldPassWideNoSpeedPeng(currentFollowUp, followUp, roundStage, maxReadyPosterior))
             score -= 1180;
+        // 教程中的 34567 一类复合搭子不是普通的两张搭子：碰走中间对子会同时
+        // 破坏多种后续组合。只有确实提速或活口明显扩大时，才允许用副露交换它。
+        if (compositeProtectionApplies)
+            score -= currentFollowUp.Shanten <= 0 ? 1700 : 520;
         if (reDiscardsClaimedTile)
             score -= 640;
         if (reDiscardsClaimedTile && state.Hand18[reactionTileType] >= 3)
@@ -346,6 +355,10 @@ public sealed class NeijiangReactionDecisionEngine
             reasons.Add("早期碰后虽成叫但听口过窄，放弃低价值碰牌");
         if (ShouldPassWideNoSpeedPeng(currentFollowUp, followUp, roundStage, maxReadyPosterior))
             reasons.Add("当前不碰也有宽进张，碰牌不降向听，优先保留门前弹性");
+        if (compositeProtectionApplies)
+            reasons.Add(currentFollowUp.Shanten <= 0
+                ? "复合搭子保护：当前已可成叫，非胡不碰以保留多面听口"
+                : "复合搭子保护：碰走连张中枢未提速，优先过牌保留多面转身");
 
         return new NeijiangReactionDecisionResult
         {
@@ -917,6 +930,20 @@ public sealed class NeijiangReactionDecisionEngine
     {
         var rank = tileType % 9 + 1;
         return rank is 1 or 2 or 8 or 9;
+    }
+
+    private static bool BreaksCompositeRun(int[] hand18, int tileType)
+    {
+        if (tileType is < 0 or >= 18 || hand18[tileType] < 2)
+            return false;
+        var suitStart = (tileType / 9) * 9;
+        var rank = tileType % 9;
+        var left = rank;
+        var right = rank;
+        while (left > 0 && hand18[suitStart + left - 1] > 0) left--;
+        while (right < 8 && hand18[suitStart + right + 1] > 0) right++;
+        // 至少四连且被碰的对子在这条连张内部，才视为复合搭子；避免把普通边搭误判。
+        return right - left + 1 >= 4 && rank > left && rank < right;
     }
 
     private static double EstimateWallPosterior(IReadOnlyList<int> improvingTiles, NeijiangBeliefSnapshot belief)

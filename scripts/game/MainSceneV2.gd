@@ -10,6 +10,8 @@ const CIRCULAR_ACTION_BUTTON_OVERLAY_SCRIPT := preload("res://scripts/ui/Circula
 const SEAT_HUD_3D_SCRIPT := preload("res://scripts/ui/table/NeijiangSeatHUD.gd")
 const ACTION_BAR_3D_SCRIPT := preload("res://scripts/ui/table/NeijiangActionBar.gd")
 const UTILITY_BAR_3D_SCRIPT := preload("res://scripts/ui/table/NeijiangUtilityBar.gd")
+const TABLE_SKIN_PANEL_SCRIPT := preload("res://scripts/ui/table/NeijiangTableSkinPanel.gd")
+const TABLE_SKIN_CATALOG := preload("res://scripts/ui/table/NeijiangTableSkinCatalog.gd")
 const SETTLEMENT_SHELL_3D_TEXTURE := preload("res://res/art/ui/table_v2/settlement_panel_9slice.png")
 const AUDIO_SFX_DIR := "res://res/audio/sfx"
 const AUDIO_TTS_DIR := "res://res/audio/tts"
@@ -70,6 +72,7 @@ const UI_PREFS_SECTION := "main_scene_v2"
 const UI_PREFS_KEY_AI_HELPER := "ai_helper_enabled"
 const UI_PREFS_KEY_OPPONENT_HANDS := "opponent_hands_enabled"
 const UI_PREFS_KEY_3D_TABLE := "neijiang_3d_table_enabled"
+const UI_PREFS_KEY_TABLE_SKIN := "neijiang_table_skin_id"
 const EMULATED_MOUSE_SUPPRESSION_MSEC := 480
 const EMULATED_MOUSE_POSITION_TOLERANCE := 34.0
 const TILE_VISUAL_BASE_SIZE := Vector2(92.0, 140.0)
@@ -259,7 +262,9 @@ var table_3d_ui_root: Control
 var table_3d_seat_huds: Dictionary = {}
 var table_3d_action_bar: NeijiangActionBar
 var table_3d_utility_bar: NeijiangUtilityBar
+var table_3d_skin_panel: NeijiangTableSkinPanel
 var table_3d_restore_button: Button
+var table_3d_skin_id := NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
 var table_3d_runtime_probe_signature := ""
 var table_3d_fallback_reason := ""
 var pending_emulated_mouse_press := false
@@ -463,6 +468,8 @@ func _setup_neijiang_3d_ui() -> void:
 		_apply_neijiang_3d_fallback()
 		return
 	table_stage_3d.call("set_reduced_motion", bool(ProjectSettings.get_setting("accessibility/reduced_motion", false)))
+	if table_stage_3d.has_method("apply_table_skin"):
+		table_stage_3d.call("apply_table_skin", table_3d_skin_id)
 	if not table_stage_3d.is_connected("tile_pressed", _on_hand_tile_pressed):
 		table_stage_3d.connect("tile_pressed", _on_hand_tile_pressed)
 	if table_3d_ui_root != null:
@@ -486,6 +493,7 @@ func _setup_neijiang_3d_ui() -> void:
 	table_3d_action_bar.name = "NeijiangActionBar"
 	table_3d_action_bar.z_index = 30
 	table_3d_action_bar.set_reduced_motion(bool(ProjectSettings.get_setting("accessibility/reduced_motion", false)))
+	table_3d_action_bar.set_table_skin(table_3d_skin_id)
 	table_3d_action_bar.action_selected.connect(_on_neijiang_3d_action_selected)
 	table_3d_ui_root.add_child(table_3d_action_bar)
 
@@ -494,6 +502,11 @@ func _setup_neijiang_3d_ui() -> void:
 	table_3d_utility_bar.z_index = 40
 	table_3d_utility_bar.utility_selected.connect(_on_neijiang_3d_utility_selected)
 	table_3d_ui_root.add_child(table_3d_utility_bar)
+	table_3d_skin_panel = TABLE_SKIN_PANEL_SCRIPT.new() as NeijiangTableSkinPanel
+	table_3d_skin_panel.name = "NeijiangTableSkinPanel"
+	table_3d_skin_panel.skin_selected.connect(_on_neijiang_table_skin_selected)
+	table_3d_skin_panel.closed.connect(_on_neijiang_table_skin_panel_closed)
+	table_3d_ui_root.add_child(table_3d_skin_panel)
 	table_3d_restore_button = Button.new()
 	table_3d_restore_button.name = "RestoreNeijiang3DButton"
 	table_3d_restore_button.text = "切换 3D 牌桌"
@@ -763,6 +776,8 @@ func _on_neijiang_3d_utility_selected(action: String) -> void:
 			_on_top_ai_helper_button_pressed()
 		"opponents":
 			_on_top_opponent_hand_button_pressed()
+		"skin":
+			_open_neijiang_table_skin_panel()
 		"settlement":
 			_on_top_settlement_info_pressed()
 		"next_round":
@@ -831,6 +846,36 @@ func _apply_neijiang_3d_layout() -> void:
 				viewport_size.y * 0.68 - table_3d_action_bar.size.y * action_scale
 			)
 		)
+	if table_3d_skin_panel != null:
+		table_3d_skin_panel.size = viewport_size
+		table_3d_skin_panel.set_safe_margins(safe_margins)
+
+
+func _open_neijiang_table_skin_panel() -> void:
+	if table_3d_skin_panel == null:
+		return
+	if table_3d_utility_bar != null:
+		table_3d_utility_bar.set_collapsed(true)
+	table_3d_skin_panel.open(table_3d_skin_id)
+	_queue_neijiang_3d_layout()
+
+
+func _on_neijiang_table_skin_selected(skin_id: String) -> void:
+	if not TABLE_SKIN_CATALOG.has_skin(skin_id):
+		return
+	if table_stage_3d == null or not table_stage_3d.has_method("apply_table_skin"):
+		return
+	if not bool(table_stage_3d.call("apply_table_skin", skin_id)):
+		return
+	table_3d_skin_id = skin_id
+	if table_3d_action_bar != null and table_3d_action_bar.has_method("set_table_skin"):
+		table_3d_action_bar.call("set_table_skin", table_3d_skin_id)
+	_save_ui_preferences()
+
+
+func _on_neijiang_table_skin_panel_closed() -> void:
+	if table_3d_utility_bar != null and table_3d_utility_bar.visible:
+		table_3d_utility_bar.get_button("toggle").grab_focus()
 
 
 func _compute_neijiang_3d_hud_positions(
@@ -1035,6 +1080,8 @@ func _consume_neijiang_emulated_mouse_press(global_pos: Vector2) -> bool:
 
 
 func _is_neijiang_3d_ui_point_blocked(global_pos: Vector2) -> bool:
+	if table_3d_skin_panel != null and table_3d_skin_panel.visible:
+		return true
 	if table_3d_action_bar != null and table_3d_action_bar.visible and table_3d_action_bar.get_global_rect().has_point(global_pos):
 		return true
 	if table_3d_utility_bar != null and table_3d_utility_bar.visible and table_3d_utility_bar.get_global_rect().has_point(global_pos):
@@ -1049,6 +1096,8 @@ func _is_neijiang_3d_ui_point_blocked(global_pos: Vector2) -> bool:
 
 
 func _input(event: InputEvent) -> void:
+	if table_3d_enabled and table_3d_skin_panel != null and table_3d_skin_panel.visible:
+		return
 	if table_3d_enabled and _handle_neijiang_3d_utility_pointer(event):
 		get_viewport().set_input_as_handled()
 		return
@@ -7964,7 +8013,8 @@ func _on_top_bar_button_pressed() -> void:
 	if current_index == -1:
 		current_index = 1
 	var next_preset: String = str(AI_PRESET_ORDER[(current_index + 1) % AI_PRESET_ORDER.size()])
-	game_manager.set_ai_preset(next_preset)
+	if game_manager.set_ai_preset(next_preset):
+		_refresh_ai_progress_after_tuning_change()
 
 
 func _on_top_ai_helper_button_pressed() -> void:
@@ -8077,6 +8127,16 @@ func _load_ui_preferences() -> void:
 	ai_helper_enabled = bool(config.get_value(UI_PREFS_SECTION, UI_PREFS_KEY_AI_HELPER, false))
 	opponent_hands_enabled = bool(config.get_value(UI_PREFS_SECTION, UI_PREFS_KEY_OPPONENT_HANDS, false))
 	table_3d_enabled = bool(config.get_value(UI_PREFS_SECTION, UI_PREFS_KEY_3D_TABLE, true))
+	var saved_skin_id := str(config.get_value(
+		UI_PREFS_SECTION,
+		UI_PREFS_KEY_TABLE_SKIN,
+		NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
+	))
+	# Migrate the earlier dense jacquard default to the restrained velvet skin.
+	# Users can still choose the jacquard skin explicitly from the skin panel.
+	if saved_skin_id == "black_gold_jacquard":
+		saved_skin_id = NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
+	table_3d_skin_id = saved_skin_id if TABLE_SKIN_CATALOG.has_skin(saved_skin_id) else NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
 
 
 func _save_ui_preferences() -> void:
@@ -8084,6 +8144,7 @@ func _save_ui_preferences() -> void:
 	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_AI_HELPER, ai_helper_enabled)
 	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_OPPONENT_HANDS, opponent_hands_enabled)
 	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_3D_TABLE, table_3d_enabled)
+	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_TABLE_SKIN, table_3d_skin_id)
 	config.save(UI_PREFS_PATH)
 
 
@@ -8126,36 +8187,51 @@ func _on_ai_tuning_drag_handle_gui_input(event: InputEvent) -> void:
 
 
 func _on_ai_tuning_preset_pressed(preset_name: String) -> void:
-	game_manager.set_ai_preset(preset_name)
+	if game_manager.set_ai_preset(preset_name):
+		_refresh_ai_progress_after_tuning_change()
+
+
+func _refresh_ai_progress_after_tuning_change() -> void:
+	# Difficulty/tuning buttons are user actions, so immediately re-enter the
+	# same snapshot-driven scheduler used by normal state changes.  This avoids
+	# leaving an AI turn waiting on a timer that was created for the old policy.
+	var snapshot: Dictionary = game_manager.get_fresh_snapshot()
+	_update_top_bar(snapshot)
+	_on_snapshot_changed(snapshot)
 
 
 func _on_ai_tuning_adjust_pressed(key: String, delta: int) -> void:
 	var snapshot := game_manager.get_snapshot()
 	var tuning: Dictionary = snapshot.get("ai_tuning_config", {})
 	var current_value := int(tuning.get(key, 0))
-	game_manager.set_ai_tuning_value(key, current_value + delta)
+	if game_manager.set_ai_tuning_value(key, current_value + delta):
+		_refresh_ai_progress_after_tuning_change()
 
 
 func _on_ai_tuning_reset_pressed() -> void:
-	game_manager.reset_ai_tuning_overrides()
+	if game_manager.reset_ai_tuning_overrides():
+		_refresh_ai_progress_after_tuning_change()
 
 
 func _on_ai_tuning_auto_learning_pressed() -> void:
 	var snapshot := game_manager.get_snapshot()
 	var tuning: Dictionary = snapshot.get("ai_tuning_config", {})
 	var current_enabled := bool(tuning.get("auto_learning_enabled", true))
-	game_manager.set_ai_auto_learning_enabled(not current_enabled)
+	if game_manager.set_ai_auto_learning_enabled(not current_enabled):
+		_refresh_ai_progress_after_tuning_change()
 
 
 func _on_ai_tuning_endgame_defense_pressed() -> void:
 	var snapshot := game_manager.get_snapshot()
 	var tuning: Dictionary = snapshot.get("ai_tuning_config", {})
 	var current_enabled := bool(tuning.get("endgame_absolute_defense", true))
-	game_manager.set_ai_endgame_absolute_defense_enabled(not current_enabled)
+	if game_manager.set_ai_endgame_absolute_defense_enabled(not current_enabled):
+		_refresh_ai_progress_after_tuning_change()
 
 
 func _on_ai_tuning_bone_recommended_pressed() -> void:
-	game_manager.apply_bone_ash_recommended_tuning()
+	if game_manager.apply_bone_ash_recommended_tuning():
+		_refresh_ai_progress_after_tuning_change()
 
 
 func _on_draw_transition_timer_timeout() -> void:

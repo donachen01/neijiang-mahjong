@@ -8,6 +8,7 @@ const TABLE_SCENE := preload("res://res/art/3d/neijiang_table_v2.glb")
 const CENTER_COMPASS_SCENE := preload("res://res/art/3d/neijiang_center_compass_v2.glb")
 const FALLBACK_TABLE_SCENE := preload("res://res/art/3d/neijiang_table.glb")
 const CENTER_NUMBER_FONT := preload("res://res/fonts/app_cjk.ttc")
+const TABLE_SKIN_CATALOG := preload("res://scripts/ui/table/NeijiangTableSkinCatalog.gd")
 
 # Keep the original compact self-hand rhythm while preserving a real physical
 # seam. At the normal 1.94 scale each tile is 0.8148 world units wide, so 0.80
@@ -134,6 +135,15 @@ var discard_slots_by_seat: Array[Dictionary] = [{}, {}, {}, {}]
 var active_motion_tweens: Array[Tween] = []
 var last_desired_entries: Dictionary = {}
 var startup_status := "created"
+var active_table_skin_id := NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
+var table_felt_materials: Array[StandardMaterial3D] = []
+var table_skin_texture_cache: Dictionary = {}
+var table_felt_rake_light: DirectionalLight3D
+var table_felt_overhead_light: SpotLight3D
+var table_felt_bounce_light: DirectionalLight3D
+var table_felt_rake_base_energy := 0.0
+var table_felt_overhead_base_energy := 0.0
+var table_felt_bounce_base_energy := 0.0
 
 
 func _enter_tree() -> void:
@@ -336,7 +346,84 @@ func get_camera() -> Camera3D:
 	return camera
 
 
+func apply_table_skin(skin_id: String) -> bool:
+	if not TABLE_SKIN_CATALOG.has_skin(skin_id):
+		return false
+	active_table_skin_id = skin_id
+	var skin: Dictionary = TABLE_SKIN_CATALOG.get_skin(skin_id)
+	var albedo := _load_table_skin_texture(skin_id, "albedo_2k.jpg")
+	var normal := _load_table_skin_texture(skin_id, "normal_2k.png")
+	var roughness_map := _load_table_skin_texture(skin_id, "roughness_2k.png")
+	if albedo == null or normal == null or roughness_map == null:
+		push_error("Table skin texture set is incomplete: %s" % skin_id)
+		return false
+	for felt_material in table_felt_materials:
+		if felt_material == null:
+			continue
+		felt_material.albedo_color = skin.get("albedo_tint", Color.WHITE)
+		felt_material.albedo_texture = albedo
+		felt_material.normal_enabled = true
+		felt_material.normal_texture = normal
+		felt_material.normal_scale = float(skin.get("normal_scale", 0.30))
+		felt_material.roughness = float(skin.get("roughness", 0.92))
+		felt_material.roughness_texture = roughness_map
+		felt_material.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		felt_material.metallic = 0.0
+		felt_material.uv1_scale = skin.get("uv_scale", Vector3(2.8, 2.8, 1.0))
+		felt_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+		felt_material.anisotropy_enabled = true
+		felt_material.anisotropy = float(skin.get("anisotropy", 0.12))
+		felt_material.rim_enabled = false
+	_apply_table_skin_lighting(skin)
+	return true
+
+
+func get_table_skin_id() -> String:
+	return active_table_skin_id
+
+
+func get_table_skin_contract() -> Dictionary:
+	var ids: Array[String] = []
+	for skin in TABLE_SKIN_CATALOG.all_skins():
+		ids.append(str(skin.get("id", "")))
+	return {
+		"active_skin_id": active_table_skin_id,
+		"skin_ids": ids,
+		"skin_count": ids.size(),
+		"felt_material_count": table_felt_materials.size(),
+		"material_target": "TableFelt",
+		"uses_displacement": false,
+		"gameplay_geometry_unchanged": true,
+		"table_transform_unchanged": true,
+	}
+
+
+func _load_table_skin_texture(skin_id: String, filename: String) -> Texture2D:
+	var cache_key := "%s/%s" % [skin_id, filename]
+	if table_skin_texture_cache.has(cache_key):
+		return table_skin_texture_cache[cache_key] as Texture2D
+	var texture := ResourceLoader.load(TABLE_SKIN_CATALOG.texture_path(skin_id, filename)) as Texture2D
+	if texture != null:
+		table_skin_texture_cache[cache_key] = texture
+	return texture
+
+
+func _apply_table_skin_lighting(skin: Dictionary) -> void:
+	var light_color: Color = skin.get("light_color", Color("F6E8CF"))
+	if table_felt_rake_light != null:
+		table_felt_rake_light.light_color = light_color
+		table_felt_rake_light.light_energy = table_felt_rake_base_energy * float(skin.get("rake_energy", 1.0))
+	if table_felt_overhead_light != null:
+		table_felt_overhead_light.light_color = light_color.lerp(Color.WHITE, 0.16)
+		table_felt_overhead_light.light_energy = table_felt_overhead_base_energy * float(skin.get("overhead_energy", 1.0))
+	if table_felt_bounce_light != null:
+		table_felt_bounce_light.light_color = light_color.lerp(Color("A9D5CB"), 0.38)
+		table_felt_bounce_light.light_energy = table_felt_bounce_base_energy * float(skin.get("bounce_energy", 1.0))
+
+
 func _setup_world() -> void:
+	var rendering_method := RenderingServer.get_current_rendering_method()
+	var compatibility_renderer := rendering_method == "gl_compatibility"
 	var world_environment := WorldEnvironment.new()
 	world_environment.name = "ClubWorldEnvironment"
 	var environment := Environment.new()
@@ -346,24 +433,25 @@ func _setup_world() -> void:
 	# A restrained warm-grey ambient keeps the emerald felt natural under
 	# Metal's filmic tonemapper. Mahjong tiles receive their own layer-2 fill
 	# below, so this table calibration does not cost glyph readability.
-	environment.ambient_light_color = Color("B4B29E")
-	environment.ambient_light_energy = 0.20
+	environment.ambient_light_color = Color("AEB8A7")
+	environment.ambient_light_energy = 0.045
 	environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	# A very small finishing grade keeps the private-club emerald rich without
 	# changing tile glyph colours or clipping the champagne-gold highlights.
 	environment.adjustment_enabled = true
-	environment.adjustment_brightness = 1.0
-	environment.adjustment_contrast = 1.03
-	environment.adjustment_saturation = 1.04
+	environment.adjustment_brightness = 1.055
+	environment.adjustment_contrast = 1.035
+	environment.adjustment_saturation = 0.985
 	# Small-radius SSAO grounds adjacent tiles without turning the ivory faces
-	# grey on Forward+. Compatibility/OpenGL ES has no SSAO implementation, so
-	# Android deliberately skips these unsupported RenderingDevice settings.
-	if RenderingServer.get_current_rendering_method() != "gl_compatibility":
+	# grey. Godot's Mobile renderer does not expose SSAO, while Forward+ and the
+	# Compatibility path accept the setting; avoid unsupported-property warnings
+	# on the actual iOS/Android Mobile profile.
+	if rendering_method != "mobile":
 		environment.ssao_enabled = true
-		environment.ssao_radius = 0.58
-		environment.ssao_intensity = 0.84
-		environment.ssao_power = 1.35
+		environment.ssao_radius = 0.66
+		environment.ssao_intensity = 0.94
+		environment.ssao_power = 1.42
 		environment.ssao_detail = 0.45
 		environment.ssao_horizon = 0.06
 		environment.ssao_sharpness = 0.82
@@ -393,7 +481,7 @@ func _setup_world() -> void:
 	# receive the dedicated layer-2 fill light, so this table calibration does not
 	# cost glyph readability.
 	key_light.light_color = Color("FFF0E3")
-	key_light.light_energy = 0.86
+	key_light.light_energy = 0.28
 	# DirectionalLight3D shines along local -Z. The -170-degree yaw points the
 	# ground component toward the player's right/down screen quadrant, matching
 	# the supplied commercial reference instead of the former right/up shadow.
@@ -403,8 +491,8 @@ func _setup_world() -> void:
 	# the visible play area gives every tile edge more texels; explicit opacity and
 	# blur keep the single contact shadow short and soft across render profiles.
 	key_light.directional_shadow_max_distance = 22.0
-	key_light.shadow_opacity = 0.58
-	key_light.shadow_blur = 2.15
+	key_light.shadow_opacity = 0.52
+	key_light.shadow_blur = 2.45
 	key_light.shadow_bias = 0.035
 	key_light.shadow_normal_bias = 0.82
 	add_child(key_light)
@@ -415,7 +503,7 @@ func _setup_world() -> void:
 	# 只照麻将牌的暖中性补光：去掉旧冷蓝补光在象牙材质上形成的灰雾，
 	# 同时不改变绿毡、木框、玩家名牌或其他场景物件的色温。
 	fill_light.light_color = Color("F4DEBC")
-	fill_light.light_energy = 1.55
+	fill_light.light_energy = 5.0 if compatibility_renderer else 7.0
 	fill_light.omni_range = 18.0
 	# Layer 2 is reserved for Mahjong tiles. A camera-side fill preserves glyph
 	# readability on upright faces without washing out the green table or filling
@@ -423,6 +511,58 @@ func _setup_world() -> void:
 	fill_light.light_cull_mask = 1 << 1
 	fill_light.shadow_enabled = false
 	add_child(fill_light)
+
+	# A restrained directional source establishes the dark emerald floor.  It is
+	# deliberately subordinate to the broad upper-left velvet softbox below: an
+	# evenly lit normal map reads as printed grain, while a large off-axis source
+	# lets the same short pile transition from luminous nap to deep emerald.
+	# Layer 4 is assigned only to imported table meshes in _setup_table().
+	var table_softbox := DirectionalLight3D.new()
+	table_softbox.name = "TableFeltBaseRake"
+	table_softbox.rotation_degrees = Vector3(-61.0, -32.0, -8.0)
+	table_softbox.light_color = Color("FFE7C8")
+	# Compatibility/OpenGL maps the same broad source noticeably hotter than the
+	# Metal renderers, so it receives a calibrated lower energy instead of a
+	# washed-out mint tabletop.
+	# The previous 0.94 Metal energy lifted the entire cloth into pale mint and
+	# flattened the pile.  A lower grazing source lets the albedo stay deep while
+	# the wider normal/roughness tufts still catch soft local highlights.
+	table_softbox.light_energy = 0.48 if compatibility_renderer else 0.88
+	table_felt_rake_light = table_softbox
+	table_felt_rake_base_energy = table_softbox.light_energy
+	table_softbox.light_cull_mask = 1 << 3
+	table_softbox.shadow_enabled = false
+	add_child(table_softbox)
+
+	# A physically broad, table-only overhead source creates the reference's
+	# centre-bright/edge-dark falloff.  Keeping this radial illumination in the
+	# scene (rather than baking it into albedo) lets every short fibre respond to
+	# the same softbox and preserves a natural matte transition on all devices.
+	var table_velvet_key := SpotLight3D.new()
+	table_velvet_key.name = "TableFeltCenteredOverheadSoftbox"
+	table_velvet_key.position = Vector3(0.0, 10.8, -2.30)
+	table_velvet_key.light_color = Color("F4E7CD")
+	table_velvet_key.light_energy = 4.80 if compatibility_renderer else 7.80
+	table_felt_overhead_light = table_velvet_key
+	table_felt_overhead_base_energy = table_velvet_key.light_energy
+	table_velvet_key.spot_range = 18.5
+	table_velvet_key.spot_angle = 55.0
+	table_velvet_key.spot_attenuation = 0.58
+	table_velvet_key.light_cull_mask = 1 << 3
+	table_velvet_key.shadow_enabled = false
+	add_child(table_velvet_key)
+	table_velvet_key.look_at(Vector3(0.0, 0.0, -2.30), Vector3.FORWARD)
+
+	var table_bounce := DirectionalLight3D.new()
+	table_bounce.name = "TableFeltCoolBounce"
+	table_bounce.rotation_degrees = Vector3(-72.0, 142.0, 12.0)
+	table_bounce.light_color = Color("B8DACD")
+	table_bounce.light_energy = 0.012
+	table_felt_bounce_light = table_bounce
+	table_felt_bounce_base_energy = table_bounce.light_energy
+	table_bounce.light_cull_mask = 1 << 3
+	table_bounce.shadow_enabled = false
+	add_child(table_bounce)
 
 
 func _setup_table() -> void:
@@ -442,6 +582,40 @@ func _setup_table() -> void:
 	# champagne-gold piping. Runtime flat-colour overrides are intentionally
 	# forbidden: they erase roughness/normal detail and caused the previous plastic table.
 	_preserve_imported_pbr_materials(table)
+	_configure_imported_table_meshes(table)
+	apply_table_skin(active_table_skin_id)
+
+
+func _configure_imported_table_meshes(node: Node) -> void:
+	if node is MeshInstance3D:
+		var table_mesh := node as MeshInstance3D
+		# Preserve the default visual layer for the shared directional key and add
+		# a private layer for the two furniture lights above. Runtime interaction,
+		# picking and the table's transform are intentionally untouched.
+		table_mesh.layers |= 1 << 3
+		# Keep Blender's complete PBR texture stack, but restore the directional
+		# fibre response that glTF import cannot represent consistently across the
+		# Metal and OpenGL mobile paths.  Anisotropic filtering protects the fine
+		# weave at the oblique gameplay camera; material anisotropy supplies the
+		# soft nap highlight that separates velvet from coloured sand.  The tiny
+		# rim is deliberately subordinate to the baked pile; a stronger rim made
+		# the complete tabletop glow like flat paper.
+		if table_mesh.name == "TableFelt":
+			for surface_index in range(table_mesh.get_surface_override_material_count()):
+				var imported_material := table_mesh.get_active_material(surface_index)
+				if imported_material is StandardMaterial3D:
+					var felt_material := imported_material.duplicate() as StandardMaterial3D
+					felt_material.resource_local_to_scene = true
+					felt_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+					felt_material.anisotropy_enabled = true
+					felt_material.anisotropy = 0.17
+					# No broad rim term: velvet volume comes from authored short-pile
+					# albedo/normal/roughness detail, not a flat camera-facing glow.
+					felt_material.rim_enabled = false
+					table_mesh.set_surface_override_material(surface_index, felt_material)
+					table_felt_materials.append(felt_material)
+	for child in node.get_children():
+		_configure_imported_table_meshes(child)
 
 
 func _setup_center_compass() -> void:
@@ -1507,12 +1681,14 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"season_theme": "private_club_deep_emerald_champagne_gold",
 		"table_asset": "neijiang_table_v2_pbr",
 		"table_material_pipeline": "blender_pbr_preserved_without_flat_overrides",
-		"table_surface_finish": "deep_emerald_even_short_nap_felt_with_subtle_center_lift_and_mobile_safe_microfibre",
-		"table_frame_finish": "ebonized_furniture_base_with_tailored_dark_emerald_padded_rail",
+		"table_surface_finish": "deep_emerald_dense_short_nap_felt_with_soft_center_lift_rich_edge_and_mobile_safe_microfibre",
+		"table_frame_finish": "thick_ebonized_furniture_base_with_deep_tailored_dark_emerald_padded_rail",
 		"table_trim_finish": "continuous_outer_and_inner_champagne_gold_inlay",
+		"table_trim_construction": "recessed_shadow_bed_rounded_satin_body_and_continuous_highlight_glint",
 		"table_divider_finish": "two_continuous_low_contrast_emerald_felt_insets_without_corner_motifs",
+		"table_lighting_finish": "broad_uniform_warm_raking_furniture_softbox_with_restrained_opposing_cool_bounce",
 		"concealed_gang_presentation": "outer_faces_middle_jade_backs",
-		"light_count": 4,
+		"light_count": 6,
 		"shadow_casting_light_count": 1,
 		"directional_shadow_max_distance": 22.0,
 		"directional_shadow_opacity": 0.64,

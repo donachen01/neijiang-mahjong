@@ -173,7 +173,13 @@ zip -q -d "$PRUNED_APK" \
   'assets/.godot/imported/tile_face_f_rounded_variants*' \
   'assets/.godot/imported/tile_back_options*' \
   'assets/.godot/imported/table_3d_luxury_scheme*' \
-  'assets/.godot/imported/table_scheme_b_v3*' 2>/dev/null || true
+  'assets/.godot/imported/table_scheme_b_v3*' \
+  'assets/.godot/imported/sichuan_mahjong_splash*' \
+  'assets/.godot/imported/neijiang_mahjong_splash.backup_20260501*' \
+  'assets/res/art/splash/sichuan_mahjong_splash.png.import' \
+  'assets/res/art/splash/neijiang_mahjong_splash.backup_20260501.png.import' \
+  'assets/res/art/splash/sichuan_mahjong_splash.png' \
+  'assets/res/art/splash/neijiang_mahjong_splash.backup_20260501.png' 2>/dev/null || true
 zip -q -d "$PRUNED_APK" 'assets/*/current_ai_*' 'assets/*/hell_training/*' 'assets/*/hell_marked_cases/*' 'assets/*/hell_replay/*' 'assets/*/*seedlive*' 'assets/*/*seed250514*' 2>/dev/null || true
 CURRENT_GODOT_LIB_SHA256="$(unzip -p "$PRUNED_APK" 'lib/arm64-v8a/libgodot_android.so' | shasum -a 256 | awk '{print $1}')"
 if [[ "$CURRENT_GODOT_LIB_SHA256" != "$MONO_ANDROID_LIB_SHA256" ]]; then

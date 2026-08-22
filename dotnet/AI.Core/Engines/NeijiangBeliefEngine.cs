@@ -151,6 +151,7 @@ public sealed class NeijiangBeliefEngine
 
             var perTile = new Dictionary<int, double>();
             var holdWeights = new Dictionary<int, double>();
+            var retentionWeights = new Dictionary<int, double>();
             var waitWeights = new Dictionary<int, double>();
             var noHuEvidence = new Dictionary<int, double>();
             for (var tileType = 0; tileType < 18; tileType++)
@@ -163,6 +164,7 @@ public sealed class NeijiangBeliefEngine
                 {
                     perTile[tileType] = 0.03;
                     holdWeights[tileType] = range.HoldProbability18[tileType];
+                    retentionWeights[tileType] = range.RetentionLikelihood18[tileType];
                     waitWeights[tileType] = range.WaitProbability18[tileType];
                     continue;
                 }
@@ -195,11 +197,13 @@ public sealed class NeijiangBeliefEngine
 
                 perTile[tileType] = Math.Clamp(posterior, 0.03, 0.98);
                 holdWeights[tileType] = range.HoldProbability18[tileType];
+                retentionWeights[tileType] = range.RetentionLikelihood18[tileType];
                 waitWeights[tileType] = range.WaitProbability18[tileType];
             }
 
             snapshot.SeatTileDanger[seat] = perTile;
             snapshot.SeatTileHoldProbability[seat] = holdWeights;
+            snapshot.SeatTileRetentionLikelihood[seat] = retentionWeights;
             snapshot.SeatTileWaitProbability[seat] = waitWeights;
             snapshot.SeatTileNoHuEvidence[seat] = noHuEvidence;
             seatWeightsByTile[seat] = holdWeights;

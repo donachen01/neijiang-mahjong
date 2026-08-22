@@ -113,7 +113,7 @@ func _build_ui() -> void:
 	panel.anchor_bottom = 0.0
 	panel.offset_left = TOGGLE_SIZE.x + BUTTON_GAP
 	panel.offset_top = 0.0
-	panel.offset_right = TOGGLE_SIZE.x + BUTTON_GAP + 8.0 * BUTTON_SIZE.x + 7.0 * BUTTON_GAP + 16.0
+	panel.offset_right = TOGGLE_SIZE.x + BUTTON_GAP + 9.0 * BUTTON_SIZE.x + 8.0 * BUTTON_GAP + 16.0
 	panel.offset_bottom = BUTTON_SIZE.y + 20.0
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_theme_stylebox_override("panel", _panel_style())
@@ -132,6 +132,7 @@ func _build_ui() -> void:
 		{"id": "tuning", "label": "调参"},
 		{"id": "helper", "label": "辅助"},
 		{"id": "opponents", "label": "明牌"},
+		{"id": "skin", "label": "桌布\n皮肤"},
 		{"id": "settlement", "label": "结算"},
 		{"id": "next_round", "label": "下一局"},
 		{"id": "view", "label": "旧版UI"},
@@ -215,7 +216,7 @@ func _difficulty_label(snapshot: Dictionary) -> String:
 
 func _apply_focus_navigation() -> void:
 	var ordered: Array[Button] = []
-	for action in ["difficulty", "tuning", "helper", "opponents", "settlement", "next_round", "view", "exit"]:
+	for action in ["difficulty", "tuning", "helper", "opponents", "skin", "settlement", "next_round", "view", "exit"]:
 		var button := buttons.get(action) as Button
 		if button != null:
 			ordered.append(button)

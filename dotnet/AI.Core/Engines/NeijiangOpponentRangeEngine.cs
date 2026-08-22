@@ -37,6 +37,7 @@ public sealed class NeijiangOpponentRangeEngine
         }
 
         var hold = new double[18];
+        var retention = new double[18];
         var wait = new double[18];
         for (var tileType = 0; tileType < 18; tileType++)
         {
@@ -48,6 +49,7 @@ public sealed class NeijiangOpponentRangeEngine
             if (evidence.SeatExactSafeTiles[seat].Contains(tileType))
             {
                 hold[tileType] = 0.01;
+                retention[tileType] = 0.03;
                 wait[tileType] = Math.Clamp(readyProbability * 0.05 * (1.0 - noHu), 0.0, 0.12);
                 continue;
             }
@@ -66,7 +68,16 @@ public sealed class NeijiangOpponentRangeEngine
             posterior *= 1.0 - noHu * 0.42;
             posterior *= 1.0 - noPeng * 0.22;
             posterior *= 1.0 - noGang * 0.14;
-            hold[tileType] = Math.Clamp((posterior * 0.48 + readyProbability * 0.24 + suitDemand[suit] * 0.20) * (1.0 - noPeng * 0.24) * (1.0 - noGang * 0.16), 0.01, 0.99);
+            retention[tileType] = EstimateRetentionLikelihood(
+                state, evidence, seat, tileType, suitDemand[suit], readyProbability,
+                sequenceAffinity, noHu, noPeng, noGang);
+            // 四川教程的“未见牌”经验不能直接当成墙牌：对手若本就会保留这张
+            // 中张/关键搭子，它更应分配给对手手牌；已显露为安全或反证很强的牌则反向。
+            var retentionMultiplier = 0.50 + retention[tileType] * 0.85;
+            hold[tileType] = Math.Clamp((posterior * 0.48 + readyProbability * 0.24 + suitDemand[suit] * 0.20)
+                * retentionMultiplier
+                * (1.0 - noPeng * 0.24)
+                * (1.0 - noGang * 0.16), 0.01, 0.99);
             wait[tileType] = Math.Clamp(readyProbability * (posterior * 0.44 + suitDemand[suit] * 0.24 + sequenceAffinity * 0.20) * (1.0 - noHu * 0.76), 0.0, 0.98);
         }
 
@@ -76,10 +87,45 @@ public sealed class NeijiangOpponentRangeEngine
             Seat = seat,
             ReadyProbability = readyProbability,
             HoldProbability18 = hold,
+            RetentionLikelihood18 = retention,
             WaitProbability18 = wait,
             WallPosterior18 = wallPosterior,
             SuitDemand2 = suitDemand
         };
+    }
+
+    private static double EstimateRetentionLikelihood(
+        NeijiangStateView state,
+        NeijiangEvidenceSnapshot evidence,
+        int seat,
+        int tileType,
+        double suitDemand,
+        double readyProbability,
+        double sequenceAffinity,
+        double noHu,
+        double noPeng,
+        double noGang)
+    {
+        if (evidence.SeatExactSafeTiles[seat].Contains(tileType))
+            return 0.03;
+
+        var rank = tileType % 9 + 1;
+        var centerValue = rank is >= 3 and <= 7 ? 0.90 : rank is 2 or 8 ? 0.55 : 0.22;
+        var sameTileDiscards = state.Discards18[seat].Count(tile => tile == tileType);
+        var nearbyDiscards = state.Discards18[seat].Count(tile => tile / 9 == tileType / 9
+            && Math.Abs((tile % 9) - (tileType % 9)) is >= 1 and <= 2);
+        var retention = 0.14
+            + centerValue * 0.16
+            + suitDemand * 0.25
+            + sequenceAffinity * 0.22
+            + readyProbability * 0.09
+            + (state.IsCalled[seat] || state.IsReady[seat] ? 0.06 : 0.0)
+            - sameTileDiscards * 0.34
+            - nearbyDiscards * 0.045
+            - noHu * 0.18
+            - noPeng * 0.10
+            - noGang * 0.06;
+        return Math.Clamp(retention, 0.03, 0.96);
     }
 
     private static double EstimatePressure(NeijiangStateView state, int seat, int discardCount, int meldGroupCount)

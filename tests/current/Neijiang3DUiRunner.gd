@@ -4,6 +4,8 @@ const TABLE_STAGE_SCRIPT := preload("res://scripts/ui/3d/NeijiangTableStage3D.gd
 const ACTION_BAR_SCRIPT := preload("res://scripts/ui/table/NeijiangActionBar.gd")
 const SEAT_HUD_SCRIPT := preload("res://scripts/ui/table/NeijiangSeatHUD.gd")
 const UTILITY_BAR_SCRIPT := preload("res://scripts/ui/table/NeijiangUtilityBar.gd")
+const TABLE_SKIN_CATALOG := preload("res://scripts/ui/table/NeijiangTableSkinCatalog.gd")
+const TABLE_SKIN_PANEL_SCRIPT := preload("res://scripts/ui/table/NeijiangTableSkinPanel.gd")
 const TILE_SCRIPT := preload("res://scripts/ui/3d/NeijiangTile3D.gd")
 const MAIN_SCENE := preload("res://scenes/table/MainSceneV2.tscn")
 
@@ -19,6 +21,7 @@ func _run() -> void:
 	await _verify_action_bar_contract(failures)
 	await _verify_seat_hud_contract(failures)
 	await _verify_utility_bar_contract(failures)
+	await _verify_table_skin_contract(failures)
 	_verify_tile_manufacturing_contract(failures)
 	await _verify_main_scene_adapter(failures)
 	if failures.is_empty():
@@ -78,9 +81,11 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 	if str(contract.get("table_divider_finish", "")) != "two_continuous_low_contrast_emerald_felt_insets_without_corner_motifs":
 		failures.append("3D table restored obsolete centre-corner lines instead of the two calm felt insets")
 	var manufactured_table := stage.get_node_or_null("ManufacturedClubTable")
+	var manufactured_table_transform := Transform3D.IDENTITY
 	if manufactured_table == null:
 		failures.append("3D stage did not instantiate the production manufactured table")
 	else:
+		manufactured_table_transform = (manufactured_table as Node3D).transform
 		for required_mesh_name: String in [
 			"OuterChampagneGoldPiping",
 			"InnerChampagneGoldPiping",
@@ -89,6 +94,20 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 		]:
 			if manufactured_table.find_child(required_mesh_name, true, false) == null:
 				failures.append("Production table GLB is stale or missing %s" % required_mesh_name)
+	var skin_contract := stage.get_table_skin_contract()
+	if int(skin_contract.get("skin_count", 0)) != 6:
+		failures.append("3D stage did not expose all six table skins")
+	if int(skin_contract.get("felt_material_count", 0)) < 1:
+		failures.append("3D stage did not bind the imported TableFelt material for runtime skins")
+	for skin in TABLE_SKIN_CATALOG.all_skins():
+		var skin_id := str(skin.get("id", ""))
+		if not stage.apply_table_skin(skin_id):
+			failures.append("3D stage failed to apply table skin: %s" % skin_id)
+			continue
+		if stage.get_table_skin_id() != skin_id:
+			failures.append("3D stage did not retain active skin id: %s" % skin_id)
+		if manufactured_table != null and (manufactured_table as Node3D).transform != manufactured_table_transform:
+			failures.append("Applying skin %s changed gameplay table geometry/transform" % skin_id)
 	var helper_visuals := stage.get_ai_helper_visual_contract()
 	if helper_visuals.get("recommended_tile_ids", []) != [1] \
 		or int(helper_visuals.get("visible_recommended_markers", 0)) != 1:
@@ -143,8 +162,22 @@ func _verify_action_bar_contract(failures: Array[String]) -> void:
 		failures.append("Neijiang action bar contract does not support all six action slots")
 	if str(contract.get("font_path", "")) != "res://res/fonts/app_cjk.ttc":
 		failures.append("Neijiang action bar does not bind the packaged CJK font")
+	if str(contract.get("skin_binding", "")) != "active_table_skin_palette":
+		failures.append("Neijiang action bar does not declare active table skin binding")
+	if (contract.get("focused_primary_touch_target", Vector2.ZERO) as Vector2).x < 360.0:
+		failures.append("Neijiang action bar primary focused touch target is not enlarged for iPhone")
 	if bao_button != null and bao_button.get_theme_font("font").resource_path != "res://res/fonts/app_cjk.ttc":
 		failures.append("Neijiang action button theme does not actually use the packaged CJK font")
+	var default_hu_style := action_bar.get_button("hu").get_theme_stylebox("normal") as StyleBoxFlat
+	var default_hu_color := default_hu_style.bg_color if default_hu_style != null else Color.TRANSPARENT
+	action_bar.set_table_skin("champagne_satin")
+	var hu_button := action_bar.get_button("hu")
+	if hu_button == null or hu_button.get_theme_stylebox("normal") == null:
+		failures.append("Neijiang action bar did not restyle buttons after a skin change")
+	else:
+		var changed_style := hu_button.get_theme_stylebox("normal") as StyleBoxFlat
+		if changed_style == null or changed_style.bg_color == default_hu_color:
+			failures.append("Neijiang action bar palette did not actually change with the selected skin")
 	action_bar.queue_free()
 	await process_frame
 
@@ -203,13 +236,13 @@ func _verify_utility_bar_contract(failures: Array[String]) -> void:
 		failures.append("牌桌工具抽屉无法展开")
 	var emitted_actions: Array[String] = []
 	utility_bar.utility_selected.connect(func(action: String) -> void: emitted_actions.append(action))
-	for action in ["difficulty", "tuning", "helper", "opponents", "settlement", "next_round", "view", "exit"]:
+	for action in ["difficulty", "tuning", "helper", "opponents", "skin", "settlement", "next_round", "view", "exit"]:
 		var action_button := utility_bar.get_button(action)
 		if action_button == null:
 			failures.append("折叠工具抽屉丢失原有动作: %s" % action)
 			continue
 		action_button.pressed.emit()
-	if emitted_actions != ["difficulty", "tuning", "helper", "opponents", "settlement", "next_round", "view", "exit"]:
+	if emitted_actions != ["difficulty", "tuning", "helper", "opponents", "skin", "settlement", "next_round", "view", "exit"]:
 		failures.append("折叠工具抽屉改变了原有 utility_selected 事件顺序或 action ID")
 	utility_bar.set_collapsed(true)
 	if not utility_bar.activate_at_global_position(utility_bar.toggle_button.get_global_rect().get_center(), false) \
@@ -219,6 +252,57 @@ func _verify_utility_bar_contract(failures: Array[String]) -> void:
 		or not utility_bar.is_collapsed():
 		failures.append("折叠键的实际命中坐标无法收起工具抽屉")
 	utility_bar.queue_free()
+	await process_frame
+
+
+func _verify_table_skin_contract(failures: Array[String]) -> void:
+	var skins: Array[Dictionary] = TABLE_SKIN_CATALOG.all_skins()
+	if skins.size() != 6:
+		failures.append("桌布皮肤目录必须精确包含 6 套材质，实际 %d" % skins.size())
+	var ids: Dictionary = {}
+	for skin in skins:
+		var skin_id := str(skin.get("id", ""))
+		if skin_id.is_empty() or ids.has(skin_id):
+			failures.append("桌布皮肤 ID 为空或重复: %s" % skin_id)
+			continue
+		ids[skin_id] = true
+		for filename in ["albedo_2k.jpg", "normal_2k.png", "roughness_2k.png", "preview.jpg"]:
+			var resource_path := TABLE_SKIN_CATALOG.texture_path(skin_id, filename)
+			if not ResourceLoader.exists(resource_path):
+				failures.append("桌布皮肤缺少发布资源: %s" % resource_path)
+			elif ResourceLoader.load(resource_path) as Texture2D == null:
+				failures.append("桌布皮肤资源无法作为 Texture2D 加载: %s" % resource_path)
+
+	var panel := TABLE_SKIN_PANEL_SCRIPT.new() as NeijiangTableSkinPanel
+	get_root().add_child(panel)
+	await process_frame
+	panel.size = Vector2(2532.0, 1170.0)
+	panel.set_safe_margins(Vector4(132.0, 18.0, 132.0, 18.0))
+	panel.open(TABLE_SKIN_CATALOG.DEFAULT_SKIN_ID)
+	await process_frame
+	var panel_contract := panel.get_visual_contract()
+	if int(panel_contract.get("skin_count", 0)) != 6:
+		failures.append("换肤面板没有显示六套真实材质")
+	if not bool(panel_contract.get("safe_area_aware", false)) or not bool(panel_contract.get("modal", false)):
+		failures.append("换肤面板丢失手机安全区或模态输入合同")
+	if (panel_contract.get("touch_target", Vector2.ZERO) as Vector2).x < 88.0:
+		failures.append("换肤卡片的触控区域过小")
+	var emitted_skin_ids: Array[String] = []
+	panel.skin_selected.connect(func(skin_id: String) -> void: emitted_skin_ids.append(skin_id))
+	for skin in skins:
+		var skin_id := str(skin.get("id", ""))
+		var skin_button := panel.skin_buttons.get(skin_id) as Button
+		if skin_button == null or skin_button.icon == null:
+			failures.append("换肤面板缺少真实预览卡: %s" % skin_id)
+			continue
+		skin_button.pressed.emit()
+	var expected_ids: Array[String] = []
+	for skin in skins:
+		expected_ids.append(str(skin.get("id", "")))
+	if emitted_skin_ids != expected_ids:
+		failures.append("换肤面板的 skin_selected 事件与六套目录不一致")
+	panel.close()
+	panel.queue_free()
 	await process_frame
 
 
@@ -346,6 +430,36 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 	main_scene.set("ai_helper_enabled", false)
 	game_manager.set_human_trainer_hint_enabled(false)
 	var utility_bar := main_scene.get("table_3d_utility_bar") as NeijiangUtilityBar
+	# Exercise the complete production skin path instead of only testing the
+	# isolated catalog/panel: utility action -> modal -> signal -> 3D material ->
+	# persisted scene state. Restore the user's original choice afterwards.
+	var original_skin_id := str(main_scene.get("table_3d_skin_id"))
+	var alternate_skin_id := "emerald_linen" \
+		if original_skin_id != "emerald_linen" else NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
+	var skin_panel := main_scene.get("table_3d_skin_panel") as NeijiangTableSkinPanel
+	utility_bar.utility_selected.emit("skin")
+	await process_frame
+	if skin_panel == null or not skin_panel.visible:
+		failures.append("3D utility skin action did not open the modal skin chooser")
+	else:
+		var panel_contract := skin_panel.get_visual_contract()
+		if not bool(panel_contract.get("modal", false)) or not bool(panel_contract.get("safe_area_aware", false)):
+			failures.append("Production skin chooser lost its modal or safe-area contract")
+		skin_panel.skin_selected.emit(alternate_skin_id)
+		await process_frame
+		if str(main_scene.get("table_3d_skin_id")) != alternate_skin_id:
+			failures.append("Production skin selection did not update MainScene state")
+		if installed_stage == null or str(installed_stage.call("get_table_skin_id")) != alternate_skin_id:
+			failures.append("Production skin selection did not reach the 3D table material")
+		skin_panel.skin_selected.emit(original_skin_id)
+		await process_frame
+		if str(main_scene.get("table_3d_skin_id")) != original_skin_id \
+				or str(installed_stage.call("get_table_skin_id")) != original_skin_id:
+			failures.append("Skin regression did not restore the user's original preference")
+		skin_panel.close()
+		await process_frame
+		if skin_panel.visible:
+			failures.append("Production skin chooser did not release its modal layer after close")
 	utility_bar.utility_selected.emit("helper")
 	await process_frame
 	if not bool(main_scene.get("ai_helper_enabled")) \
