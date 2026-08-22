@@ -53,14 +53,20 @@ func _capture() -> void:
 	if OS.get_cmdline_user_args().has("--show-actions"):
 		var action_bar := main_scene.get("table_3d_action_bar") as NeijiangActionBar
 		if action_bar != null:
-			action_bar.render([
+			var action_preview: Array[Dictionary] = [
 				{"id": "hu", "label": "胡"},
 				{"id": "gang", "label": "补杠"},
 				{"id": "an_gang", "label": "报杠"},
 				{"id": "peng", "label": "碰"},
 				{"id": "bao_jiao", "label": "报叫/报杠"},
-				{"id": "pass", "label": "过"},
-			], "内江操作")
+				{"id": "pass", "label": "取消"},
+			]
+			if OS.get_cmdline_user_args().has("--response-pair"):
+				action_preview = [
+					{"id": "peng", "label": "碰"},
+					{"id": "pass", "label": "取消"},
+				]
+			action_bar.render(action_preview, "内江操作")
 			main_scene.call("_queue_neijiang_3d_layout")
 			await process_frame
 	if OS.get_cmdline_user_args().has("--expand-utilities"):

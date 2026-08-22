@@ -162,22 +162,22 @@ func _verify_action_bar_contract(failures: Array[String]) -> void:
 		failures.append("Neijiang action bar contract does not support all six action slots")
 	if str(contract.get("font_path", "")) != "res://res/fonts/app_cjk.ttc":
 		failures.append("Neijiang action bar does not bind the packaged CJK font")
-	if str(contract.get("skin_binding", "")) != "active_table_skin_palette":
+	if str(contract.get("skin_binding", "")) != "active_table_skin_action_badge_texture":
 		failures.append("Neijiang action bar does not declare active table skin binding")
 	if (contract.get("focused_primary_touch_target", Vector2.ZERO) as Vector2).x < 360.0:
 		failures.append("Neijiang action bar primary focused touch target is not enlarged for iPhone")
 	if bao_button != null and bao_button.get_theme_font("font").resource_path != "res://res/fonts/app_cjk.ttc":
 		failures.append("Neijiang action button theme does not actually use the packaged CJK font")
-	var default_hu_style := action_bar.get_button("hu").get_theme_stylebox("normal") as StyleBoxFlat
-	var default_hu_color := default_hu_style.bg_color if default_hu_style != null else Color.TRANSPARENT
+	var default_hu_style := action_bar.get_button("hu").get_theme_stylebox("normal") as StyleBoxTexture
+	var default_hu_texture := default_hu_style.texture if default_hu_style != null else null
 	action_bar.set_table_skin("champagne_satin")
 	var hu_button := action_bar.get_button("hu")
 	if hu_button == null or hu_button.get_theme_stylebox("normal") == null:
 		failures.append("Neijiang action bar did not restyle buttons after a skin change")
 	else:
-		var changed_style := hu_button.get_theme_stylebox("normal") as StyleBoxFlat
-		if changed_style == null or changed_style.bg_color == default_hu_color:
-			failures.append("Neijiang action bar palette did not actually change with the selected skin")
+		var changed_style := hu_button.get_theme_stylebox("normal") as StyleBoxTexture
+		if changed_style == null or changed_style.texture == null or changed_style.texture == default_hu_texture:
+			failures.append("Neijiang action bar did not swap the Sichuan-style badge texture with the selected skin")
 	action_bar.queue_free()
 	await process_frame
 

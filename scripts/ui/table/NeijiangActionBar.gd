@@ -46,8 +46,11 @@ func render(actions: Array[Dictionary], status_text: String) -> void:
 	for action_id_value in action_buttons.keys():
 		var existing_id := str(action_id_value)
 		(action_buttons[existing_id] as Button).visible = visible_ids.has(existing_id)
+	# Keep the table view as clean as the Sichuan action UI: decisions are
+	# represented by the badges themselves, not a surrounding status card.
+	# Gameplay still owns `status_text` for accessibility/debug consumers.
 	status_label.text = status_text
-	status_label.visible = not status_text.is_empty()
+	status_label.visible = false
 	visible = not visible_ids.is_empty()
 	if not visible:
 		return
@@ -104,8 +107,8 @@ func get_visual_contract() -> Dictionary:
 		"touch_target_minimum": BUTTON_MAX_DENSE,
 		"focused_primary_touch_target": PRIMARY_FOCUSED_SIZE,
 		"focused_secondary_touch_target": SECONDARY_FOCUSED_SIZE,
-		"material_family": "skin_matched_single_ring_action_badges",
-		"skin_binding": "active_table_skin_palette",
+		"material_family": "sichuan_action_badge_texture",
+		"skin_binding": "active_table_skin_action_badge_texture",
 		"text_hierarchy": "oversized_engraved_action_word",
 		"font_path": BODY_FONT.resource_path,
 	}
@@ -122,14 +125,14 @@ func _build_ui() -> void:
 	add_child(panel)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 18)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_right", 18)
-	margin.add_theme_constant_override("margin_bottom", 14)
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 8)
 	panel.add_child(margin)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 5)
+	column.add_theme_constant_override("separation", 0)
 	margin.add_child(column)
 
 	status_label = Label.new()
@@ -145,7 +148,7 @@ func _build_ui() -> void:
 	action_row = HBoxContainer.new()
 	action_row.name = "ActionButtons"
 	action_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	action_row.add_theme_constant_override("separation", 8)
+	action_row.add_theme_constant_override("separation", 14)
 	column.add_child(action_row)
 
 
@@ -212,13 +215,15 @@ func _apply_focus_navigation(visible_ids: Array[String]) -> void:
 
 func _apply_button_style(button: Button, action_id: String) -> void:
 	var colors := _resolve_action_colors(action_id)
-	var normal := _make_action_seal_style(colors, false)
-	var hover := _make_action_seal_style(colors, false)
-	hover.bg_color = Color(colors["center"]).lightened(0.10)
-	var pressed := _make_action_seal_style(colors, true)
-	var focus := _make_action_seal_style(colors, false)
-	focus.border_color = Color(colors["light"]).lightened(0.12)
-	focus.set_border_width_all(10)
+	var normal := _make_action_badge_style(false)
+	var hover := _make_action_badge_style(false)
+	hover.modulate_color = Color(1.10, 1.07, 0.92, 1.0)
+	var pressed := _make_action_badge_style(true)
+	var focus := _make_action_badge_style(false)
+	focus.expand_margin_left = 4.0
+	focus.expand_margin_top = 4.0
+	focus.expand_margin_right = 4.0
+	focus.expand_margin_bottom = 4.0
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", pressed)
@@ -257,21 +262,22 @@ func _resolve_action_colors(action_id: String) -> Dictionary:
 	}
 
 
-func _make_action_seal_style(colors: Dictionary, pressed: bool) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(colors["center"]).darkened(0.10) if pressed else Color(colors["center"])
-	style.border_color = Color(colors["light"]).lerp(Color(colors["edge"]), 0.30)
-	style.set_border_width_all(8)
-	style.set_corner_radius_all(999)
-	style.content_margin_left = 12
-	style.content_margin_right = 12
-	style.content_margin_top = 14 if pressed else 10
-	style.content_margin_bottom = 6 if pressed else 10
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.42)
-	style.shadow_size = 10
-	style.shadow_offset = Vector2(0.0, 6.0)
-	style.anti_aliasing = true
-	style.anti_aliasing_size = 1.5
+func _make_action_badge_style(pressed: bool) -> StyleBoxTexture:
+	# This is deliberately the same skin-specific badge asset used by Sichuan
+	# Mahjong. It preserves the separate dark-green centre and copper ring rather
+	# than approximating the look with a flat grey circular border.
+	var style := StyleBoxTexture.new()
+	style.texture = ResourceLoader.load(TABLE_SKIN_CATALOG.texture_path(active_skin_id, "action_badge.png")) as Texture2D
+	style.draw_center = true
+	style.modulate_color = Color(0.80, 0.80, 0.80, 1.0) if pressed else Color.WHITE
+	style.expand_margin_left = 3.0
+	style.expand_margin_top = 3.0
+	style.expand_margin_right = 3.0
+	style.expand_margin_bottom = 3.0
+	style.content_margin_left = 18.0
+	style.content_margin_right = 18.0
+	style.content_margin_top = 4.0 if not pressed else 8.0
+	style.content_margin_bottom = 8.0
 	return style
 
 
@@ -285,10 +291,10 @@ func _panel_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	var cloth := Color(active_skin.get("albedo_tint", Color("4E6F61")))
 	var light := Color(active_skin.get("light_color", Color("F8E2C2")))
-	style.bg_color = Color(cloth.darkened(0.72), 0.78)
-	style.border_color = Color(light, 0.72)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(24)
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.38)
-	style.shadow_size = 10
+	style.bg_color = Color(cloth.darkened(0.72), 0.0)
+	style.border_color = Color(light, 0.0)
+	style.set_border_width_all(0)
+	style.set_corner_radius_all(0)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.0)
+	style.shadow_size = 0
 	return style

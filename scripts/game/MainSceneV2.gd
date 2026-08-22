@@ -732,7 +732,9 @@ func _refresh_neijiang_3d_action_bar(snapshot: Dictionary) -> void:
 		var options: Array = plan.get("bao_gang_options", [])
 		actions.append({"id": "bao_jiao", "label": "报叫/报杠" if not options.is_empty() else "报叫"})
 	if can_pass_opening or bool(reaction_options.get("can_pass", false)) or show_cancel_self_hu:
-		actions.append({"id": "pass", "label": "过"})
+		# Follow the Sichuan action UI: this declines the current reaction, so the
+		# user-facing word is the clearer “取消” instead of the rules-engine name.
+		actions.append({"id": "pass", "label": "取消"})
 	if bool(self_player.get("has_won", false)) or int(snapshot.get("current_phase", 0)) == 7:
 		actions.clear()
 	var status_text := _build_action_panel_status_text(
