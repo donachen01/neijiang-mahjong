@@ -37,7 +37,7 @@ func _export_ios_xcode_project() -> void:
 
 	var preset: Object = platform.call("create_preset")
 	var app_version := _app_version_name()
-	var team_id := _env_or_default("GODOT_IOS_TEAM_ID", "A5BDW7465Q")
+	var team_id := _env_or_default("GODOT_IOS_TEAM_ID", "FCB4ZVWWD8")
 	var bundle_id := _env_or_default("GODOT_IOS_BUNDLE_ID", "com.chendong.neijiangmahjong.iosdev")
 	var template_path := _env_or_default("GODOT_IOS_TEMPLATE", DEFAULT_IOS_TEMPLATE)
 	var output_path := _env_or_default(

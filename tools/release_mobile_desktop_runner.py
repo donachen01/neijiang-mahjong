@@ -30,7 +30,7 @@ RUNTIME_ROOT = Path(
 DEVICE_IDENTIFIER = os.environ.get(
     "NEIJIANG_IOS_DEVICE_ID", "00008120-000915803A90A01E"
 )
-TEAM_ID = os.environ.get("GODOT_IOS_TEAM_ID", "A5BDW7465Q")
+TEAM_ID = os.environ.get("GODOT_IOS_TEAM_ID", "FCB4ZVWWD8")
 BUNDLE_ID = os.environ.get(
     "GODOT_IOS_BUNDLE_ID", "com.chendong.neijiangmahjong.iosdev"
 )
