@@ -19,7 +19,7 @@ export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 export PATH="$DOTNET_ROOT:$DOTNET_ROOT/sdk:$JAVA_HOME/bin:/opt/homebrew/opt/dotnet@9/bin:/opt/homebrew/bin:/Users/chendong/Library/Android/sdk/platform-tools:$PATH"
 export GODOT_ANDROID_EXPORT_MODE=release
-PROJECT_DIR="/Users/chendong/Documents/内江麻将工程_20260502_103823_v2"
+PROJECT_DIR="${NEIJIANG_PROJECT_DIR:-/Users/chendong/Documents/内江麻将工程_20260502_103823_v2}"
 APP_VERSION="$(sed -n 's/^config\/version="\([^"]*\)"/\1/p' "$PROJECT_DIR/project.godot" | head -n 1)"
 if [[ -z "$APP_VERSION" ]]; then
   echo "Could not read application/config/version from project.godot"
