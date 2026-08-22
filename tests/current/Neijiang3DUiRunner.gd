@@ -78,8 +78,8 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 		failures.append("3D stage did not load the Neijiang-authored PBR table")
 	if str(contract.get("table_trim_finish", "")) != "continuous_outer_and_inner_champagne_gold_inlay":
 		failures.append("3D table lost the reference-matched continuous double champagne-gold inlay")
-	if str(contract.get("table_divider_finish", "")) != "two_continuous_low_contrast_emerald_felt_insets_without_corner_motifs":
-		failures.append("3D table restored obsolete centre-corner lines instead of the two calm felt insets")
+	if str(contract.get("table_divider_finish", "")) != "single_wide_skin_bound_pressed_dark_felt_seam_without_bright_outline_or_corner_motifs":
+		failures.append("3D table divider no longer uses the required single wide dark pressed-felt seam")
 	var manufactured_table := stage.get_node_or_null("ManufacturedClubTable")
 	var manufactured_table_transform := Transform3D.IDENTITY
 	if manufactured_table == null:
@@ -91,6 +91,7 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 			"InnerChampagneGoldPiping",
 			"PlayfieldInsetOuter",
 			"PlayfieldInsetInner",
+			"SinglePressedFeltSeam",
 		]:
 			if manufactured_table.find_child(required_mesh_name, true, false) == null:
 				failures.append("Production table GLB is stale or missing %s" % required_mesh_name)
@@ -99,6 +100,14 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 		failures.append("3D stage did not expose all six table skins")
 	if int(skin_contract.get("felt_material_count", 0)) < 1:
 		failures.append("3D stage did not bind the imported TableFelt material for runtime skins")
+	if int(skin_contract.get("felt_inset_material_count", 0)) != 1 \
+			or str(skin_contract.get("divider_finish", "")) != "single_wide_skin_bound_pressed_dark_felt_seam":
+		failures.append("3D table did not bind one wide dark skin-bound felt seam")
+	if manufactured_table != null:
+		for retired_loop_name in ["PlayfieldInsetOuter", "PlayfieldInsetInner"]:
+			var retired_loop := (manufactured_table as Node).find_child(retired_loop_name, true, false) as MeshInstance3D
+			if retired_loop == null or retired_loop.visible:
+				failures.append("3D table still exposes the retired bright divider loop: %s" % retired_loop_name)
 	for skin in TABLE_SKIN_CATALOG.all_skins():
 		var skin_id := str(skin.get("id", ""))
 		if not stage.apply_table_skin(skin_id):

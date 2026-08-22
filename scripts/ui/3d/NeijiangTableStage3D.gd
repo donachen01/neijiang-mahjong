@@ -137,6 +137,8 @@ var last_desired_entries: Dictionary = {}
 var startup_status := "created"
 var active_table_skin_id := NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
 var table_felt_materials: Array[StandardMaterial3D] = []
+var tabletop_dark_seam: MeshInstance3D
+var tabletop_dark_seam_material: StandardMaterial3D
 var table_skin_texture_cache: Dictionary = {}
 var table_felt_rake_light: DirectionalLight3D
 var table_felt_overhead_light: SpotLight3D
@@ -374,6 +376,7 @@ func apply_table_skin(skin_id: String) -> bool:
 		felt_material.anisotropy_enabled = true
 		felt_material.anisotropy = float(skin.get("anisotropy", 0.12))
 		felt_material.rim_enabled = false
+	_apply_tabletop_dark_seam_skin(skin)
 	_apply_table_skin_lighting(skin)
 	return true
 
@@ -391,7 +394,10 @@ func get_table_skin_contract() -> Dictionary:
 		"skin_ids": ids,
 		"skin_count": ids.size(),
 		"felt_material_count": table_felt_materials.size(),
+		"felt_inset_material_count": 1 if tabletop_dark_seam != null else 0,
 		"material_target": "TableFelt",
+		"divider_material_target": "SinglePressedFeltSeam",
+		"divider_finish": "single_wide_skin_bound_pressed_dark_felt_seam",
 		"uses_displacement": false,
 		"gameplay_geometry_unchanged": true,
 		"table_transform_unchanged": true,
@@ -419,6 +425,22 @@ func _apply_table_skin_lighting(skin: Dictionary) -> void:
 	if table_felt_bounce_light != null:
 		table_felt_bounce_light.light_color = light_color.lerp(Color("A9D5CB"), 0.38)
 		table_felt_bounce_light.light_energy = table_felt_bounce_base_energy * float(skin.get("bounce_energy", 1.0))
+
+
+func _apply_tabletop_dark_seam_skin(skin: Dictionary) -> void:
+	if tabletop_dark_seam_material == null:
+		return
+	# The seam follows the selected felt but remains deliberately quiet: a
+	# pressed/debossed upholstery line, never a luminous gameplay boundary.
+	var skin_tint: Color = skin.get("albedo_tint", Color("426252"))
+	# Alpha-blended dark green integrates with the PBR cloth below. This keeps the
+	# wide line readable as a pressed pattern without turning it into a black rail.
+	var seam_color := Color("164C3A").lerp(skin_tint.darkened(0.42), 0.18)
+	seam_color.a = 0.58
+	tabletop_dark_seam_material.albedo_color = seam_color
+	tabletop_dark_seam_material.roughness = 0.985
+	tabletop_dark_seam_material.metallic = 0.0
+	tabletop_dark_seam_material.rim_enabled = false
 
 
 func _setup_world() -> void:
@@ -583,6 +605,7 @@ func _setup_table() -> void:
 	# forbidden: they erase roughness/normal detail and caused the previous plastic table.
 	_preserve_imported_pbr_materials(table)
 	_configure_imported_table_meshes(table)
+	_setup_tabletop_dark_seam(table)
 	apply_table_skin(active_table_skin_id)
 
 
@@ -614,8 +637,84 @@ func _configure_imported_table_meshes(node: Node) -> void:
 					felt_material.rim_enabled = false
 					table_mesh.set_surface_override_material(surface_index, felt_material)
 					table_felt_materials.append(felt_material)
+		elif table_mesh.name == "PlayfieldInsetOuter" or table_mesh.name == "PlayfieldInsetInner":
+			# The authored twin turquoise loops are intentionally retired. A single,
+			# wider dark seam is built below so it reads as a table-felt detail.
+			table_mesh.visible = false
 	for child in node.get_children():
 		_configure_imported_table_meshes(child)
+
+
+func _setup_tabletop_dark_seam(table: Node3D) -> void:
+	var seam := MeshInstance3D.new()
+	seam.name = "SinglePressedFeltSeam"
+	seam.mesh = _create_single_pressed_felt_seam_mesh()
+	seam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	seam.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	seam.layers = 1 | (1 << 3)
+	tabletop_dark_seam_material = StandardMaterial3D.new()
+	tabletop_dark_seam_material.resource_local_to_scene = true
+	tabletop_dark_seam_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	tabletop_dark_seam_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	tabletop_dark_seam_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	tabletop_dark_seam_material.roughness = 0.985
+	tabletop_dark_seam_material.metallic = 0.0
+	tabletop_dark_seam_material.rim_enabled = false
+	tabletop_dark_seam_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	seam.material_override = tabletop_dark_seam_material
+	table.add_child(seam)
+	tabletop_dark_seam = seam
+
+
+func _create_single_pressed_felt_seam_mesh() -> ImmediateMesh:
+	# One broad, rounded rectangle is materially simpler and visually calmer than
+	# the two closely spaced guide loops it replaces.
+	const HALF_WIDTH := 6.48
+	const HALF_DEPTH := 3.73
+	const CORNER_RADIUS := 0.42
+	const SEAM_WIDTH := 0.145
+	const CORNER_SEGMENTS := 10
+	var outer_points := _rounded_rectangle_points(HALF_WIDTH, HALF_DEPTH, CORNER_RADIUS, CORNER_SEGMENTS)
+	var inner_points := _rounded_rectangle_points(HALF_WIDTH - SEAM_WIDTH, HALF_DEPTH - SEAM_WIDTH, CORNER_RADIUS - SEAM_WIDTH, CORNER_SEGMENTS)
+	var mesh := ImmediateMesh.new()
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for point_index in range(outer_points.size()):
+		var next_index := (point_index + 1) % outer_points.size()
+		var outer_a := outer_points[point_index]
+		var outer_b := outer_points[next_index]
+		var inner_a := inner_points[point_index]
+		var inner_b := inner_points[next_index]
+		mesh.surface_set_normal(Vector3.UP)
+		mesh.surface_add_vertex(outer_a)
+		mesh.surface_set_normal(Vector3.UP)
+		mesh.surface_add_vertex(inner_a)
+		mesh.surface_set_normal(Vector3.UP)
+		mesh.surface_add_vertex(outer_b)
+		mesh.surface_set_normal(Vector3.UP)
+		mesh.surface_add_vertex(inner_a)
+		mesh.surface_set_normal(Vector3.UP)
+		mesh.surface_add_vertex(inner_b)
+		mesh.surface_set_normal(Vector3.UP)
+		mesh.surface_add_vertex(outer_b)
+	mesh.surface_end()
+	return mesh
+
+
+func _rounded_rectangle_points(half_width: float, half_depth: float, radius: float, segments: int) -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	var centers := [
+		Vector2(half_width - radius, half_depth - radius),
+		Vector2(-half_width + radius, half_depth - radius),
+		Vector2(-half_width + radius, -half_depth + radius),
+		Vector2(half_width - radius, -half_depth + radius),
+	]
+	var start_angles := [0.0, PI * 0.5, PI, PI * 1.5]
+	for corner_index in range(centers.size()):
+		for segment_index in range(segments):
+			var angle := float(start_angles[corner_index]) + (PI * 0.5 * float(segment_index) / float(segments))
+			var point: Vector2 = centers[corner_index] + Vector2(cos(angle), sin(angle)) * radius
+			points.append(Vector3(point.x, TABLETOP_CONTACT_Y + 0.004, point.y))
+	return points
 
 
 func _setup_center_compass() -> void:
@@ -1685,7 +1784,7 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"table_frame_finish": "thick_ebonized_furniture_base_with_deep_tailored_dark_emerald_padded_rail",
 		"table_trim_finish": "continuous_outer_and_inner_champagne_gold_inlay",
 		"table_trim_construction": "recessed_shadow_bed_rounded_satin_body_and_continuous_highlight_glint",
-		"table_divider_finish": "two_continuous_low_contrast_emerald_felt_insets_without_corner_motifs",
+		"table_divider_finish": "single_wide_skin_bound_pressed_dark_felt_seam_without_bright_outline_or_corner_motifs",
 		"table_lighting_finish": "broad_uniform_warm_raking_furniture_softbox_with_restrained_opposing_cool_bounce",
 		"concealed_gang_presentation": "outer_faces_middle_jade_backs",
 		"light_count": 6,
