@@ -129,11 +129,8 @@ public sealed class NeijiangHellChallengeEngine
                 shanten);
             var pengOnlyInteractionBonus = feedsHumanPeng && humanPengThreat <= 4 && !feedsHumanHu && !feedsHumanGang
                 && (keepsReady || shanten <= 1)
-                // Keep ordinary Peng as a real game interaction.  The old
-                // gate only opened in the final ten tiles, which made
-                //透视模式 look as if it categorically refused every call.
-                && (humanAlreadyReady || state.WallCount <= 18)
-                    ? (humanPengThreat <= 1 ? 360 : 240)
+                && (humanAlreadyReady || state.WallCount <= 10)
+                    ? 720
                     : 0;
             var tier = ResolveHellDiscardTier(
                 shanten,

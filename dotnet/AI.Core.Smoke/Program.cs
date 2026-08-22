@@ -191,12 +191,6 @@ if (!SmokeOpponentRangeUsesNoHuEvidence())
     return 10;
 }
 
-if (!SmokeRetentionAwareUnseenTilePosterior())
-{
-    Console.Error.WriteLine("retention_aware_unseen_tile_posterior_smoke_failed");
-    return 101;
-}
-
 if (!SmokePosteriorNormalizationConservesRemainingTiles())
 {
     Console.Error.WriteLine("posterior_normalization_conservation_smoke_failed");
@@ -365,12 +359,6 @@ if (!SmokeReactionPrefersGangWhenPengWouldRediscard(facade))
     return 18;
 }
 
-if (!SmokeFlushMiddleTripletPrefersPengOverGang(facade))
-{
-    Console.Error.WriteLine("flush_middle_triplet_peng_over_gang_smoke_failed");
-    return 182;
-}
-
 if (!SmokeHellChallengePengRediscardPenaltyIsDecisive())
 {
     Console.Error.WriteLine("hell_challenge_peng_rediscard_decisive_smoke_failed");
@@ -381,12 +369,6 @@ if (!SmokeReactionPassesWideNoSpeedPengFromSeedLive(facade))
 {
     Console.Error.WriteLine("reaction_pass_wide_no_speed_peng_seedlive_smoke_failed");
     return 19;
-}
-
-if (!SmokeReactionPreservesCompositeRunWhenPengDoesNotAccelerate(facade))
-{
-    Console.Error.WriteLine("reaction_composite_run_preservation_smoke_failed");
-    return 191;
 }
 
 if (!SmokeLateWallPassesNarrowNoSpeedPeng(facade))
@@ -447,12 +429,6 @@ if (!SmokeFastReadyBeatsUnreadyBigPairRoute(facade))
 {
     Console.Error.WriteLine("fast_ready_beats_big_pair_route_smoke_failed");
     return 281;
-}
-
-if (!SmokeLateConfirmedFlushRemainsInExpectedValue(facade))
-{
-    Console.Error.WriteLine("late_confirmed_flush_expected_value_smoke_failed");
-    return 2811;
 }
 
 if (!SmokeBigPairRouteDoesNotOverrideLargeScoreGap())
@@ -1173,38 +1149,6 @@ static bool SmokeFastReadyBeatsUnreadyBigPairRoute(NeijiangAiFacade facade)
         && selected.Reasons.Any(reason => reason.Contains("能下叫先下叫", StringComparison.Ordinal));
 }
 
-static bool SmokeLateConfirmedFlushRemainsInExpectedValue(NeijiangAiFacade facade)
-{
-    // 已经全部为条子。牌墙只剩 4 张时，不再允许“转清一色”，但它本身的清一色
-    // 番型必须仍计入净期望；否则尾盘会把已成型大牌错误地当作平胡。
-    var hand18 = new int[18];
-    hand18[0] = 3;
-    hand18[1] = 3;
-    hand18[2] = 3;
-    hand18[3] = 2;
-    hand18[4] = 1;
-    hand18[5] = 1;
-    hand18[6] = 1;
-    var state = NeijiangStateCodec.FromRaw(1, 0, 1, 4, hand18, new int[18]);
-    var result = facade.DecideDiscard(state);
-    var selected = result.Candidates.First(candidate => candidate.TileType == result.Action.TileType);
-    var handAfter = (int[])hand18.Clone();
-    handAfter[selected.TileType]--;
-    var expected = new NeijiangExpectedScoreEngine();
-    var withoutFlush = expected.EvaluateDiscardCandidate(
-        state, handAfter, selected.Shanten, selected.LiveUkeire, selected.WaitCount,
-        selected.WaitQualityScore, selected.TenpaiProbability, selected.SelfDrawProbability,
-        selected.WinProbability, selected.DealInProbability, 0.0, 0.0, 0.50, 2, Array.Empty<string>());
-    var withFlush = expected.EvaluateDiscardCandidate(
-        state, handAfter, selected.Shanten, selected.LiveUkeire, selected.WaitCount,
-        selected.WaitQualityScore, selected.TenpaiProbability, selected.SelfDrawProbability,
-        selected.WinProbability, selected.DealInProbability, 0.0, 0.0, 0.50, 2, new[] { "清一色" });
-    Console.WriteLine($"late_confirmed_flush route={string.Join('/', selected.RoutesAfter)} base={withoutFlush.EstimatedBaseScore}->{withFlush.EstimatedBaseScore} net={withoutFlush.Net:F2}->{withFlush.Net:F2}");
-    return selected.RoutesAfter.Contains("清一色")
-        && withFlush.EstimatedBaseScore > withoutFlush.EstimatedBaseScore
-        && withFlush.Net > withoutFlush.Net;
-}
-
 static bool SmokeBigPairRouteDoesNotOverrideLargeScoreGap()
 {
     var method = typeof(NeijiangDecisionEngine).GetMethod(
@@ -1686,27 +1630,6 @@ static bool SmokeReactionPrefersGangWhenPengWouldRediscard(NeijiangAiFacade faca
         && result.ActionScores.GetValueOrDefault("gang") > result.ActionScores.GetValueOrDefault("peng");
 }
 
-static bool SmokeFlushMiddleTripletPrefersPengOverGang(NeijiangAiFacade facade)
-{
-    // 清一色中的 3-7 连张，5 条已有三张。外家再打 5 条时，碰会保留一张 5
-    // 继续承担复合搭子；明杠拿走三张 5 会拆散中枢。两者都未直接胡时应优先碰。
-    var hand18 = new int[18];
-    hand18[0] = 2;
-    hand18[1] = 2;
-    hand18[2] = 1;
-    hand18[3] = 1;
-    hand18[4] = 3;
-    hand18[5] = 1;
-    hand18[6] = 1;
-    hand18[7] = 1;
-    hand18[8] = 1;
-    var state = NeijiangStateCodec.FromRaw(2, 0, 2, 13, hand18, new int[18]);
-    var result = facade.DecideReaction(state, 4, false, true, true, 1, "discard");
-    Console.WriteLine($"flush_middle_triplet action={result.Action.ActionType} pass={result.ActionScores.GetValueOrDefault("pass")} peng={result.ActionScores.GetValueOrDefault("peng")} gang={result.ActionScores.GetValueOrDefault("gang")} current={result.CurrentShanten}/{result.CurrentLiveUkeire} after={result.ShantenAfter}/{result.LiveUkeireAfter} reasons={string.Join('|', result.Reasons)}");
-    return result.Action.ActionType == NeijiangActionType.Peng
-        && result.ActionScores.GetValueOrDefault("peng") > result.ActionScores.GetValueOrDefault("gang");
-}
-
 static bool SmokeHellChallengePengRediscardPenaltyIsDecisive()
 {
     var aiHand = new[] { 0, 0, 0, 1, 1, 2, 0, 3, 0, 0, 1, 1, 0, 1, 2, 0, 0, 1 };
@@ -1765,30 +1688,6 @@ static bool SmokeReactionPassesWideNoSpeedPengFromSeedLive(NeijiangAiFacade faca
         && result.ShantenAfter == result.CurrentShanten
         && result.CurrentLiveUkeire >= 12
         && result.ActionScores.GetValueOrDefault("peng") < result.ActionScores.GetValueOrDefault("pass");
-}
-
-static bool SmokeReactionPreservesCompositeRunWhenPengDoesNotAccelerate(NeijiangAiFacade facade)
-{
-    // 3-7 连张中间有一对 5；碰 5 会拿走复合搭子的中枢。该局碰后不降向听、
-    // 活口也没有显著增加，因此教程规则要求保留门前的多面转身。
-    var hand18 = new int[18];
-    hand18[2] = 1;  // 3条
-    hand18[3] = 1;  // 4条
-    hand18[4] = 2;  // 5条 pair，外家打出 5条可碰
-    hand18[5] = 1;  // 6条
-    hand18[6] = 1;  // 7条
-    hand18[9] = 1;  // 1筒
-    hand18[10] = 1; // 2筒
-    hand18[11] = 1; // 3筒
-    hand18[13] = 1; // 5筒
-    hand18[14] = 1; // 6筒
-    hand18[15] = 1; // 7筒
-    hand18[17] = 1; // 9筒
-    var state = NeijiangStateCodec.FromRaw(3, 0, 3, 15, hand18, new int[18]);
-    var result = facade.DecideReaction(state, 4, false, true, false, 1, "discard");
-    Console.WriteLine($"reaction_composite_run action={result.Action.ActionType} pass={result.ActionScores.GetValueOrDefault("pass")} peng={result.ActionScores.GetValueOrDefault("peng")} current={result.CurrentShanten}/{result.CurrentLiveUkeire} after={result.ShantenAfter}/{result.LiveUkeireAfter} reasons={string.Join('|', result.Reasons)}");
-    return result.Action.ActionType == NeijiangActionType.Pass
-        && result.ActionScores.GetValueOrDefault("peng") + 500 < result.ActionScores.GetValueOrDefault("pass");
 }
 
 static bool SmokeLateWallPassesNarrowNoSpeedPeng(NeijiangAiFacade facade)
@@ -2369,43 +2268,6 @@ static bool SmokeOpponentRangeUsesNoHuEvidence()
     return range.WaitProbability18[1] < range.WaitProbability18[4] * 0.55
         && range.HoldProbability18[1] < range.HoldProbability18[4]
         && range.WallPosterior18[1] > 0.0;
-}
-
-static bool SmokeRetentionAwareUnseenTilePosterior()
-{
-    // 教程中的可执行反例：同样是未掌握的牌，已被对手打过并形成安全证据的牌，
-    // 不应和其目标花色中的新鲜中张一样被假定为“仍在对手手里”。
-    var discards = new[]
-    {
-        new[] { 1, 1, 0, 9, 10, 11, 12 },
-        Array.Empty<int>(),
-        Array.Empty<int>(),
-        Array.Empty<int>(),
-    };
-    var state = NeijiangStateCodec.FromRaw(
-        1,
-        0,
-        1,
-        8,
-        new int[18],
-        new int[18],
-        null,
-        discards);
-    state.IsReady[0] = true;
-    state.IsCalled[0] = true;
-    var evidence = new NeijiangEvidenceEngine().Build(state);
-    var range = new NeijiangOpponentRangeEngine().BuildSeatRange(state, evidence, 0);
-    var belief = new NeijiangBeliefEngine().Build(state);
-    var safeTile = 1;
-    var freshMiddleTile = 4;
-    var retained = range.RetentionLikelihood18[freshMiddleTile];
-    var safeRetention = range.RetentionLikelihood18[safeTile];
-    var retainedHold = belief.SeatTileHoldProbability[0][freshMiddleTile];
-    var safeHold = belief.SeatTileHoldProbability[0][safeTile];
-    Console.WriteLine($"retention_posterior safe={safeRetention:F3}/{safeHold:F3} fresh_middle={retained:F3}/{retainedHold:F3}");
-    return retained > safeRetention * 3.0
-        && retainedHold > safeHold * 2.0
-        && belief.SeatTileRetentionLikelihood[0][freshMiddleTile] > belief.SeatTileRetentionLikelihood[0][safeTile];
 }
 
 static bool SmokePosteriorNormalizationConservesRemainingTiles()

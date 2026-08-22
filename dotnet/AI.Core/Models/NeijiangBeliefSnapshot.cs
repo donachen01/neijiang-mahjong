@@ -7,7 +7,6 @@ public sealed class NeijiangBeliefSnapshot
     public Dictionary<int, double> SeatReadyPosterior { get; } = new();
     public Dictionary<int, Dictionary<int, double>> SeatTileDanger { get; } = new();
     public Dictionary<int, Dictionary<int, double>> SeatTileHoldProbability { get; } = new();
-    public Dictionary<int, Dictionary<int, double>> SeatTileRetentionLikelihood { get; } = new();
     public Dictionary<int, Dictionary<int, double>> SeatTileWaitProbability { get; } = new();
     public Dictionary<int, Dictionary<int, double>> SeatTileNoHuEvidence { get; } = new();
     public Dictionary<int, Dictionary<int, double>> SeatSuitDemand { get; } = new();
