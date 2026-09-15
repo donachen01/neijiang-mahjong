@@ -34,10 +34,13 @@ func _run() -> void:
 
 func _verify_mobile_renderer_contract(failures: Array[String]) -> void:
 	var mobile_renderer := str(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile", ""))
-	if mobile_renderer != "forward_plus":
+	if mobile_renderer != "mobile":
 		failures.append(
-			"Sichuan-derived PBR table requires forward_plus on mobile, got %s" % mobile_renderer
+			"Migrated mobile power profile requires Godot Mobile renderer, got %s" % mobile_renderer
 		)
+	if int(ProjectSettings.get_setting("performance/mobile_active_frame_cap", 0)) != 60 \
+		or int(ProjectSettings.get_setting("performance/mobile_idle_frame_cap", 0)) != 30:
+		failures.append("Mobile power profile lost its 60 fps active / 30 fps idle contract")
 	if not bool(ProjectSettings.get_setting("rendering/textures/vram_compression/import_etc2_astc", false)):
 		failures.append(
 			"Sichuan-derived PBR table requires ETC2/ASTC imports for iOS and Android packages"
@@ -78,8 +81,8 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 		failures.append("3D stage did not load the Neijiang-authored PBR table")
 	if str(contract.get("table_trim_finish", "")) != "continuous_outer_and_inner_champagne_gold_inlay":
 		failures.append("3D table lost the reference-matched continuous double champagne-gold inlay")
-	if str(contract.get("table_divider_finish", "")) != "single_wide_skin_bound_pressed_dark_felt_seam_without_bright_outline_or_corner_motifs":
-		failures.append("3D table divider no longer uses the required single wide dark pressed-felt seam")
+	if str(contract.get("table_divider_finish", "")) != "none_clean_uninterrupted_felt":
+		failures.append("3D tabletop must remain a clean uninterrupted felt surface")
 	var manufactured_table := stage.get_node_or_null("ManufacturedClubTable")
 	var manufactured_table_transform := Transform3D.IDENTITY
 	if manufactured_table == null:
@@ -91,7 +94,6 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 			"InnerChampagneGoldPiping",
 			"PlayfieldInsetOuter",
 			"PlayfieldInsetInner",
-			"SinglePressedFeltSeam",
 		]:
 			if manufactured_table.find_child(required_mesh_name, true, false) == null:
 				failures.append("Production table GLB is stale or missing %s" % required_mesh_name)
@@ -100,9 +102,9 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 		failures.append("3D stage did not expose all six table skins")
 	if int(skin_contract.get("felt_material_count", 0)) < 1:
 		failures.append("3D stage did not bind the imported TableFelt material for runtime skins")
-	if int(skin_contract.get("felt_inset_material_count", 0)) != 1 \
-			or str(skin_contract.get("divider_finish", "")) != "single_wide_skin_bound_pressed_dark_felt_seam":
-		failures.append("3D table did not bind one wide dark skin-bound felt seam")
+	if int(skin_contract.get("felt_inset_material_count", -1)) != 0 \
+			or str(skin_contract.get("divider_finish", "")) != "none_clean_uninterrupted_felt":
+		failures.append("3D table still exposes a track-like felt seam")
 	if manufactured_table != null:
 		for retired_loop_name in ["PlayfieldInsetOuter", "PlayfieldInsetInner"]:
 			var retired_loop := (manufactured_table as Node).find_child(retired_loop_name, true, false) as MeshInstance3D
@@ -133,6 +135,40 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 	]) as Array
 	if sorted_hand.is_empty() or str((sorted_hand[0] as Dictionary).get("suit", "")) != "tiao":
 		failures.append("Neijiang 3D hand sorting did not use the two-suit order")
+	var source_meld_entries: Dictionary = {}
+	stage.call("_append_meld_entries", source_meld_entries, 0, [{
+		"type": "peng",
+		"from_seat": 1,
+		"tiles": [
+			{"id": 601, "suit": "tiao", "rank": 6},
+			{"id": 602, "suit": "tiao", "rank": 6},
+			{"id": 603, "suit": "tiao", "rank": 6},
+		],
+	}])
+	var source_entry: Dictionary = source_meld_entries.get("meld_0_0_601", {})
+	if source_entry.is_empty() or int(source_entry.get("meld_source_seat", -1)) != -1:
+		failures.append("Meld source tile still depends on the retired face-arrow metadata")
+	var source_basis := (source_entry.get("transform", Transform3D.IDENTITY) as Transform3D).basis
+	if absf(source_basis.x.dot(source_basis.z)) > 0.001:
+		failures.append("Rotated meld source tile basis is no longer orthogonal")
+	var add_gang_entries: Dictionary = {}
+	stage.call("_append_meld_entries", add_gang_entries, 0, [{
+		"type": "gang",
+		"gang_subtype": "add_gang",
+		"from_seat": 0,
+		"tiles": [
+			{"id": 611, "suit": "tong", "rank": 4},
+			{"id": 612, "suit": "tong", "rank": 4},
+			{"id": 613, "suit": "tong", "rank": 4},
+			{"id": 614, "suit": "tong", "rank": 4},
+		],
+	}])
+	var base_transform := ((add_gang_entries.get("meld_0_0_612", {}) as Dictionary).get("transform", Transform3D.IDENTITY) as Transform3D)
+	var stacked_transform := ((add_gang_entries.get("meld_0_0_614", {}) as Dictionary).get("transform", Transform3D.IDENTITY) as Transform3D)
+	if stacked_transform.origin.x != base_transform.origin.x \
+		or stacked_transform.origin.z != base_transform.origin.z \
+		or stacked_transform.origin.y <= base_transform.origin.y:
+		failures.append("Add-gang fourth tile is not stacked directly above the existing peng")
 	await process_frame
 	var pick_tile := stage.tile_nodes.get("hand_0_2") as NeijiangTile3D
 	if pick_tile == null:
@@ -216,10 +252,11 @@ func _verify_seat_hud_contract(failures: Array[String]) -> void:
 		failures.append("Neijiang SeatHUD active state lost its stable edge treatment")
 	if hud.report_badge == null or hud.report_badge.text != "杠×2":
 		failures.append("Neijiang SeatHUD did not render the bao-gang count")
-	if str(contract.get("name_font_path", "")) != "res://res/fonts/nameplate_calligraphy.ttf" \
+	if str(contract.get("name_font_path", "")) != "res://res/fonts/app_cjk.ttc" \
 		or str(contract.get("body_font_path", "")) != "res://res/fonts/app_cjk.ttc":
 		failures.append("Neijiang SeatHUD does not bind its packaged name/body CJK fonts")
-	if hud.name_label.get_theme_font("font").resource_path != "res://res/fonts/nameplate_calligraphy.ttf" \
+	var name_font := hud.name_label.get_theme_font("font") as FontVariation
+	if name_font == null or name_font.base_font.resource_path != "res://res/fonts/app_cjk.ttc" \
 		or hud.score_label.get_theme_font("font").resource_path != "res://res/fonts/app_cjk.ttc":
 		failures.append("Neijiang SeatHUD theme does not actually use the packaged CJK fonts")
 	hud.queue_free()
@@ -296,6 +333,8 @@ func _verify_table_skin_contract(failures: Array[String]) -> void:
 		failures.append("换肤面板丢失手机安全区或模态输入合同")
 	if (panel_contract.get("touch_target", Vector2.ZERO) as Vector2).x < 88.0:
 		failures.append("换肤卡片的触控区域过小")
+	if (panel_contract.get("authored_size", Vector2.ZERO) as Vector2) != Vector2(940.0, 752.0):
+		failures.append("换肤面板没有同步四川麻将 940x752 大尺寸规格")
 	var emitted_skin_ids: Array[String] = []
 	panel.skin_selected.connect(func(skin_id: String) -> void: emitted_skin_ids.append(skin_id))
 	for skin in skins:

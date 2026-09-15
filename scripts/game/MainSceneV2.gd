@@ -73,15 +73,18 @@ const UI_PREFS_KEY_AI_HELPER := "ai_helper_enabled"
 const UI_PREFS_KEY_OPPONENT_HANDS := "opponent_hands_enabled"
 const UI_PREFS_KEY_3D_TABLE := "neijiang_3d_table_enabled"
 const UI_PREFS_KEY_TABLE_SKIN := "neijiang_table_skin_id"
+const UI_PREFS_KEY_VOICE_LANGUAGE := "voice_language"
 const EMULATED_MOUSE_SUPPRESSION_MSEC := 480
 const EMULATED_MOUSE_POSITION_TOLERANCE := 34.0
 const TILE_VISUAL_BASE_SIZE := Vector2(92.0, 140.0)
 const SETTLEMENT_PANEL_SCREEN_RATIO := Vector2(0.985, 0.965)
 const SETTLEMENT_PANEL_MAX_SIZE := Vector2(4096.0, 4096.0)
 const SETTLEMENT_PANEL_MIN_SIZE := Vector2(1320.0, 760.0)
-const SETTLEMENT_TILE_SCALE := 0.47
-const SETTLEMENT_MELD_TILE_SCALE := 0.39
-const SETTLEMENT_WIN_TILE_SCALE := 0.50
+const SETTLEMENT_TILE_SCALE := 1.28
+const SETTLEMENT_MELD_TILE_SCALE := 1.28
+const SETTLEMENT_WIN_TILE_SCALE := 1.28
+const SETTLEMENT_ORNAMENT_TEXTURE := preload("res://res/art/ui/settlement_target/shu_cloud_mountain_frame_v1.png")
+const SETTLEMENT_CLOUD_FRAME_SCRIPT := preload("res://scripts/ui/table/SettlementCloudFrame.gd")
 const MATTE_FELT_BG := Color("155D3F")
 const MATTE_FELT_BASE := Color("2F9860")
 const MATTE_FELT_PANEL := Color("3AA162")
@@ -203,10 +206,10 @@ enum SeatDock {
 @onready var settlement_panel: Panel = %SettlementPanel
 @onready var settlement_shade: ColorRect = %SettlementShade
 @onready var settlement_round_label: Label = %SettlementRoundLabel
-@onready var settlement_content: HBoxContainer = %SettlementContent
+@onready var settlement_content: VBoxContainer = %SettlementContent
 @onready var settlement_player_list_card: Panel = %SettlementPlayerListCard
 @onready var settlement_player_list_title: Label = %SettlementPlayerListTitle
-@onready var settlement_player_list: VBoxContainer = %SettlementPlayerList
+@onready var settlement_player_list: HBoxContainer = %SettlementPlayerList
 @onready var settlement_detail_card: Panel = %SettlementDetailCard
 @onready var settlement_hero_card: Panel = %SettlementHeroCard
 @onready var settlement_hero_badge: Label = %SettlementHeroBadge
@@ -220,8 +223,10 @@ enum SeatDock {
 @onready var settlement_hand_row: VBoxContainer = %SettlementHandRow
 @onready var settlement_breakdown_card: Panel = %SettlementBreakdownCard
 @onready var settlement_breakdown_title: Label = %SettlementBreakdownTitle
+@onready var settlement_breakdown_scroll: ScrollContainer = $UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard/SettlementDetailMargin/SettlementDetailVBox/SettlementBreakdownCard/SettlementBreakdownMargin/SettlementBreakdownVBox/SettlementBreakdownScroll
 @onready var settlement_breakdown_list: VBoxContainer = %SettlementBreakdownList
 @onready var settlement_close_button: Button = %SettlementCloseButton
+@onready var settlement_header_left_spacer: Control = %SettlementHeaderLeftSpacer
 @onready var next_round_button: Button = %NextRoundButton
 @onready var settlement_margin: MarginContainer = $UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin
 @onready var settlement_vbox: VBoxContainer = $UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox
@@ -249,6 +254,15 @@ var bao_gang_option_checks: Array[Button] = []
 var bao_gang_dialog_committed := false
 var selected_tile_id: int = -1
 var settlement_selected_seat: int = -1
+var settlement_player_buttons: Dictionary = {}
+var settlement_layout_scale: float = 1.0
+var settlement_skin_texture: Texture2D
+var settlement_skin_base := MATTE_FELT_DEEP
+var settlement_skin_panel := MATTE_FELT_PANEL
+var settlement_skin_active := MATTE_FELT_PANEL
+var settlement_skin_text := IVORY_SOFT
+var settlement_skin_aux := Color("E4D2AE")
+var settlement_skin_accent := GOLD_SOFT
 var last_snapshot: Dictionary = {}
 var table_3d_enabled := true
 # Keep the authored stage through its engine-native base type. On iOS release
@@ -284,6 +298,7 @@ var sfx_process_id: int = -1
 var pending_tile_voice_token: int = 0
 var seat_voice_profiles: Dictionary = {}
 var voice_cache: Dictionary = {}
+var voice_language := "mandarin"
 var opening_roll_payload: Dictionary = {}
 var opening_roll_animation_ticks: int = 0
 var opening_roll_started_round: int = -1
@@ -384,8 +399,16 @@ const SELF_ROW_TILE_VISUAL_HEIGHT := 204.0
 const TILE_VISUAL_BASE_RENDER_HEIGHT := 153.0
 const SELF_ROW_TILE_VISUAL_SCALE := SELF_ROW_TILE_VISUAL_HEIGHT / TILE_VISUAL_BASE_RENDER_HEIGHT
 
+var mobile_power_profile_enabled := false
+var mobile_active_frame_cap := 60
+var mobile_idle_frame_cap := 30
+var mobile_idle_delay_msec := 1400
+var mobile_activity_deadline_msec := 0
+var mobile_current_frame_cap := -1
+
 
 func _ready() -> void:
+	_apply_mobile_power_profile()
 	opening_roll_visual_rng.randomize()
 	ai_action_delay_rng.randomize()
 	_load_ui_preferences()
@@ -409,6 +432,7 @@ func _ready() -> void:
 	_setup_neijiang_3d_ui()
 	_apply_style()
 	_apply_neijiang_settlement_shell()
+	_setup_sichuan_settlement_surface()
 	_mount_self_won_stamp_overlay()
 	_configure_board_lanes()
 	_bind_board_square_layout()
@@ -450,6 +474,80 @@ func _ready() -> void:
 	game_manager.opening_roll_started.connect(_on_opening_roll_started)
 	_on_snapshot_changed(game_manager.get_snapshot())
 	call_deferred("_center_ai_tuning_panel")
+
+
+func _setup_sichuan_settlement_surface() -> void:
+	if settlement_panel == null:
+		return
+	if not root_ui.resized.is_connected(_queue_settlement_overlay_layout):
+		root_ui.resized.connect(_queue_settlement_overlay_layout)
+	var settlement_header := settlement_header_left_spacer.get_parent()
+	settlement_header.add_theme_constant_override("h_separation", 0)
+	settlement_header.move_child(settlement_header_left_spacer, 2)
+	var balance_fill := Panel.new()
+	balance_fill.name = "HeaderBalanceFill"
+	balance_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	balance_fill.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	balance_fill.add_theme_stylebox_override("panel", _build_settlement_round_title_style())
+	settlement_header_left_spacer.add_child(balance_fill)
+	# 中间局数标题拥有独立的满框底板，宽度止于右侧平衡区，
+	# 高度铺满整个抬头行；不再让背景只跟随文字字框。
+	var round_title_fill := Panel.new()
+	round_title_fill.name = "RoundTitleFullBackdrop"
+	round_title_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	round_title_fill.show_behind_parent = true
+	round_title_fill.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	round_title_fill.add_theme_stylebox_override("panel", _build_settlement_round_title_style())
+	settlement_round_label.add_child(round_title_fill)
+	_add_settlement_cloud_frame(settlement_close_button, false)
+	_add_settlement_cloud_frame(next_round_button, false)
+	_ensure_settlement_unified_content_surface()
+	_configure_settlement_breakdown_scroll()
+	call_deferred("_layout_settlement_overlay")
+
+
+func _add_settlement_cloud_frame(host: Control, square_mode: bool) -> void:
+	if host == null or host.get_node_or_null("CloudFrame") != null:
+		return
+	var frame := SETTLEMENT_CLOUD_FRAME_SCRIPT.new() as Control
+	frame.name = "CloudFrame"
+	frame.set("square_mode", square_mode)
+	host.add_child(frame)
+
+
+func _ensure_settlement_unified_content_surface() -> void:
+	if settlement_panel == null or settlement_panel.get_node_or_null("UnifiedContentSurface") != null:
+		return
+	var surface := Panel.new()
+	surface.name = "UnifiedContentSurface"
+	surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	settlement_panel.add_child(surface)
+	var content_margin := settlement_panel.get_node_or_null("SettlementMargin") as Control
+	if content_margin != null:
+		settlement_panel.move_child(surface, content_margin.get_index())
+	var felt := TextureRect.new()
+	felt.name = "UnifiedContentFelt"
+	felt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	felt.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	felt.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	felt.stretch_mode = TextureRect.STRETCH_TILE
+	surface.add_child(felt)
+	var veil := ColorRect.new()
+	veil.name = "UnifiedContentVeil"
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	surface.add_child(veil)
+	_layout_settlement_unified_content_surface()
+
+
+func _layout_settlement_unified_content_surface() -> void:
+	if settlement_panel == null or settlement_content == null:
+		return
+	var surface := settlement_panel.get_node_or_null("UnifiedContentSurface") as Control
+	if surface == null:
+		return
+	surface.global_position = settlement_content.global_position
+	surface.size = settlement_content.size
 
 
 func _setup_neijiang_3d_ui() -> void:
@@ -663,7 +761,7 @@ func _update_neijiang_3d_ui(snapshot: Dictionary) -> void:
 		if seat_hud != null:
 			seat_hud.render(_player_by_seat(players, seat), active_seat, dealer_seat)
 	if table_3d_utility_bar != null:
-		table_3d_utility_bar.render(snapshot, ai_helper_enabled, opponent_hands_enabled)
+		table_3d_utility_bar.render(snapshot, ai_helper_enabled, opponent_hands_enabled, voice_language)
 	# AI advice is gameplay information, not a legacy skin component.  Keep the
 	# same event-driven helper panel in both UI kits so mobile users see the C#
 	# recommendation text as well as the coloured 3D tile marker.
@@ -780,6 +878,8 @@ func _on_neijiang_3d_utility_selected(action: String) -> void:
 			_on_top_opponent_hand_button_pressed()
 		"skin":
 			_open_neijiang_table_skin_panel()
+		"voice":
+			_on_voice_language_pressed()
 		"settlement":
 			_on_top_settlement_info_pressed()
 		"next_round":
@@ -803,11 +903,12 @@ func _apply_neijiang_3d_layout() -> void:
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
 		return
 	var safe_margins := _neijiang_safe_area_margins(viewport_size)
-	# Keep HUD cards at their authored 230×146 maximum on very tall device
-	# viewports. The former 1.10 upscale made a 253px side card wider than the
-	# iPhone's exterior lane and forced decorative clipping or tile overlap.
+	# 内江无需缺门信息，铭牌收为只容纳姓名、分数和局内状态的紧凑规格。
 	var ui_scale := clampf(viewport_size.y / DESIGN_BASE_SIZE.y, 0.72, 1.00)
-	var hud_size := Vector2(230.0, 146.0)
+	var hud_size := Vector2(190.0, 132.0) * Vector2(
+		maxf(1.0, viewport_size.x / 2048.0),
+		maxf(1.0, viewport_size.y / 1152.0)
+	)
 	# HUD 停靠以实际 3D 手牌/副露的屏幕投影为约束，不再把 2048×1152 的
 	# 固定像素位置等比套到超宽手机。这样名字牌在开局、碰杠和胡牌后都不会
 	# 遮挡实体麻将，且仍被 iOS/Android 安全区夹紧。
@@ -1098,6 +1199,10 @@ func _is_neijiang_3d_ui_point_blocked(global_pos: Vector2) -> bool:
 
 
 func _input(event: InputEvent) -> void:
+	# 真实触摸、点击与按键唤醒短暂的 60 fps 窗口；鼠标悬停不应让移动端
+	# 永久停留在高功耗档。
+	if not (event is InputEventMouseMotion):
+		_mark_mobile_activity()
 	if table_3d_enabled and table_3d_skin_panel != null and table_3d_skin_panel.visible:
 		return
 	if table_3d_enabled and _handle_neijiang_3d_utility_pointer(event):
@@ -1257,7 +1362,67 @@ func _setup_opening_roll_timers() -> void:
 
 
 func _process(_delta: float) -> void:
-	pass
+	_update_mobile_frame_budget()
+
+
+func _apply_mobile_power_profile() -> void:
+	mobile_power_profile_enabled = OS.has_feature("ios") or OS.has_feature("android")
+	if not mobile_power_profile_enabled:
+		return
+	mobile_active_frame_cap = maxi(30, int(ProjectSettings.get_setting("performance/mobile_active_frame_cap", 60)))
+	mobile_idle_frame_cap = clampi(
+		int(ProjectSettings.get_setting("performance/mobile_idle_frame_cap", 30)),
+		15,
+		mobile_active_frame_cap
+	)
+	mobile_idle_delay_msec = maxi(250, int(ProjectSettings.get_setting("performance/mobile_idle_delay_msec", 1400)))
+	OS.low_processor_usage_mode = true
+	OS.low_processor_usage_mode_sleep_usec = maxi(
+		1000,
+		int(ProjectSettings.get_setting("performance/mobile_low_processor_sleep_usec", 10000))
+	)
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
+	_mark_mobile_activity(mobile_idle_delay_msec)
+
+
+func _mark_mobile_activity(hold_msec: int = -1) -> void:
+	if not mobile_power_profile_enabled:
+		return
+	set_process(true)
+	var requested_hold_msec := mobile_idle_delay_msec if hold_msec < 0 else maxi(0, hold_msec)
+	mobile_activity_deadline_msec = maxi(
+		mobile_activity_deadline_msec,
+		Time.get_ticks_msec() + requested_hold_msec
+	)
+	_set_mobile_frame_cap(mobile_active_frame_cap)
+
+
+func _update_mobile_frame_budget() -> void:
+	if not mobile_power_profile_enabled:
+		return
+	if Time.get_ticks_msec() >= mobile_activity_deadline_msec:
+		_set_mobile_frame_cap(mobile_idle_frame_cap)
+		# SceneTree 的 Timer、C# 同步调用和 snapshot 信号不依赖这个空帧回调。
+		# 新输入和权威快照都会在状态变化前重新唤醒它。
+		set_process(false)
+
+
+func _set_mobile_frame_cap(frame_cap: int) -> void:
+	if frame_cap == mobile_current_frame_cap:
+		return
+	mobile_current_frame_cap = frame_cap
+	Engine.max_fps = frame_cap
+
+
+func get_mobile_power_profile_contract() -> Dictionary:
+	return {
+		"active_frame_cap": int(ProjectSettings.get_setting("performance/mobile_active_frame_cap", 60)),
+		"idle_frame_cap": int(ProjectSettings.get_setting("performance/mobile_idle_frame_cap", 30)),
+		"idle_delay_msec": int(ProjectSettings.get_setting("performance/mobile_idle_delay_msec", 1400)),
+		"low_processor_mode": true,
+		"ai_contract": "timers_signals_and_synchronous_runtime_remain_active",
+		"idle_main_scene_process": "suspended_only_after_static_delay",
+	}
 
 
 func _kick_ai_timers_after_background_delivery() -> void:
@@ -3045,6 +3210,7 @@ func _register_ai_tuning_click_action(control: Control, action: Callable) -> voi
 func _on_snapshot_changed(snapshot: Dictionary) -> void:
 	if snapshot.is_empty():
 		return
+	_mark_mobile_activity()
 	_recover_stale_draw_transition(snapshot)
 	var previous_snapshot := last_snapshot.duplicate(true)
 	last_snapshot = snapshot.duplicate(true)
@@ -3529,16 +3695,9 @@ func _shell_quote(text: String) -> String:
 
 func _assign_voice_profiles_for_round(snapshot: Dictionary) -> void:
 	seat_voice_profiles.clear()
-	seat_voice_profiles[0] = {
-		"gender": "male",
-		"pack": "male",
-	}
-	var players: Array = snapshot.get("players", [])
-	for seat in [1, 2, 3]:
-		var player := _player_by_seat(players, seat)
-		if player.is_empty():
-			continue
-		var use_male := randi() % 2 == 0
+	# 固定分配避免同一玩家每局突然变声：本家/对家男声，上家/下家女声。
+	for seat in range(4):
+		var use_male := seat in [0, 2]
 		seat_voice_profiles[seat] = {
 			"gender": "male" if use_male else "female",
 			"pack": "male" if use_male else "female",
@@ -3579,10 +3738,11 @@ func _action_audio_key(text: String) -> String:
 
 
 func _load_voice_stream(pack: String, key: String) -> AudioStream:
-	var cache_key := "%s/%s" % [pack, key]
+	var dialect_dir := "tts_sichuan" if voice_language == "sichuan" else "tts"
+	var cache_key := "%s/%s/%s" % [dialect_dir, pack, key]
 	if voice_cache.has(cache_key):
 		return voice_cache[cache_key]
-	var path := "%s/%s/%s.wav" % [AUDIO_TTS_DIR, pack, key]
+	var path := "res://res/audio/%s/%s/%s.wav" % [dialect_dir, pack, key]
 	if not ResourceLoader.exists(path):
 		return null
 	var stream := load(path) as AudioStream
@@ -4020,6 +4180,21 @@ func _update_discard_helper_panel(snapshot: Dictionary, trainer_hint: Dictionary
 		discard_helper_compare.visible = false
 		discard_helper_options.text = ""
 		discard_helper_options.visible = false
+		return
+	var action_recommendation := str(trainer_hint.get("action_recommendation", "")).strip_edges().to_lower()
+	if not action_recommendation.is_empty():
+		var action_labels := {"hu": "胡", "peng": "碰", "gang": "杠", "pass": "过"}
+		discard_helper_summary.text = "建议%s" % str(action_labels.get(action_recommendation, action_recommendation))
+		var reasons: Array = trainer_hint.get("action_reasons", [])
+		var reason_text := str(trainer_hint.get("action_reason", ""))
+		if reason_text.is_empty() and not reasons.is_empty():
+			reason_text = str(reasons[0])
+		discard_helper_compare.text = reason_text
+		discard_helper_compare.visible = not reason_text.is_empty()
+		discard_helper_options.text = ""
+		discard_helper_options.visible = false
+		discard_helper_panel.visible = true
+		_position_discard_helper_panel()
 		return
 
 	var recommended: Dictionary = trainer_hint.get("recommended", {})
@@ -4572,8 +4747,7 @@ func _layout_settlement_overlay() -> void:
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
 		return
 
-	var outer_margin := 10.0
-	var compact_margin := 6.0
+	var outer_margin := maxf(18.0, minf(viewport_size.x, viewport_size.y) * 0.025)
 	var max_size := Vector2(
 		minf(SETTLEMENT_PANEL_MAX_SIZE.x, maxf(0.0, viewport_size.x - outer_margin * 2.0)),
 		minf(SETTLEMENT_PANEL_MAX_SIZE.y, maxf(0.0, viewport_size.y - outer_margin * 2.0))
@@ -4582,18 +4756,21 @@ func _layout_settlement_overlay() -> void:
 		clampf(viewport_size.x * SETTLEMENT_PANEL_SCREEN_RATIO.x, minf(SETTLEMENT_PANEL_MIN_SIZE.x, max_size.x), max_size.x),
 		clampf(viewport_size.y * SETTLEMENT_PANEL_SCREEN_RATIO.y, minf(SETTLEMENT_PANEL_MIN_SIZE.y, max_size.y), max_size.y)
 	)
-	if viewport_size.x < 1700.0 or viewport_size.y < 940.0:
-		target_size = Vector2(maxf(0.0, viewport_size.x - compact_margin * 2.0), maxf(0.0, viewport_size.y - compact_margin * 2.0))
 	settlement_panel.custom_minimum_size = target_size
 	settlement_panel.size = target_size
+	settlement_panel.clip_contents = true
+	settlement_content.clip_contents = true
+	settlement_detail_card.clip_contents = true
+	settlement_player_list_card.clip_contents = true
 
-	var scale := clampf(target_size.y / 1000.0, 0.90, 1.30)
-	_set_margin_constants(settlement_margin, 28.0 * scale, 12.0 * scale, 28.0 * scale, 16.0 * scale)
-	_set_margin_constants(settlement_player_list_margin, 18.0 * scale, 18.0 * scale, 18.0 * scale, 18.0 * scale)
-	_set_margin_constants(settlement_detail_margin, 20.0 * scale, 14.0 * scale, 20.0 * scale, 14.0 * scale)
-	_set_margin_constants(settlement_hero_margin, 22.0 * scale, 14.0 * scale, 22.0 * scale, 14.0 * scale)
-	_set_margin_constants(settlement_hand_margin, 14.0 * scale, 10.0 * scale, 14.0 * scale, 10.0 * scale)
-	_set_margin_constants(settlement_breakdown_margin, 14.0 * scale, 10.0 * scale, 14.0 * scale, 10.0 * scale)
+	var scale := clampf(minf(target_size.x / 2048.0, target_size.y / 1152.0), 0.72, 1.0)
+	settlement_layout_scale = scale
+	_set_margin_constants(settlement_margin, 26.0 * scale, 22.0 * scale, 26.0 * scale, 22.0 * scale)
+	_set_margin_constants(settlement_player_list_margin, 12.0 * scale, 10.0 * scale, 12.0 * scale, 10.0 * scale)
+	_set_margin_constants(settlement_detail_margin, 18.0 * scale, 10.0 * scale, 18.0 * scale, 10.0 * scale)
+	_set_margin_constants(settlement_hero_margin, 24.0 * scale, 18.0 * scale, 24.0 * scale, 18.0 * scale)
+	_set_margin_constants(settlement_hand_margin, 8.0 * scale, 8.0 * scale, 8.0 * scale, 8.0 * scale)
+	_set_margin_constants(settlement_breakdown_margin, 8.0 * scale, 8.0 * scale, 8.0 * scale, 8.0 * scale)
 
 	settlement_vbox.add_theme_constant_override("separation", int(round(10.0 * scale)))
 	settlement_content.add_theme_constant_override("separation", int(round(18.0 * scale)))
@@ -4605,26 +4782,35 @@ func _layout_settlement_overlay() -> void:
 	settlement_hero_stats.add_theme_constant_override("separation", int(round(22.0 * scale)))
 	settlement_hand_row.add_theme_constant_override("separation", int(round(10.0 * scale)))
 	settlement_breakdown_vbox.add_theme_constant_override("separation", int(round(8.0 * scale)))
-	settlement_breakdown_list.add_theme_constant_override("separation", int(round(8.0 * scale)))
-
-	settlement_player_list_card.custom_minimum_size = Vector2(maxf(390.0, target_size.x * 0.25), 0.0)
-	settlement_hero_card.custom_minimum_size = Vector2(0.0, 156.0 * scale)
-	settlement_hand_card.custom_minimum_size = Vector2(0.0, 205.0 * scale)
-	settlement_breakdown_card.custom_minimum_size = Vector2(0.0, 390.0 * scale)
-	settlement_close_button.custom_minimum_size = Vector2(124.0 * scale, 52.0 * scale)
-	next_round_button.custom_minimum_size = Vector2(300.0 * scale, 88.0 * scale)
-	settlement_close_button.add_theme_font_size_override("font_size", int(round(22.0 * scale)))
-	next_round_button.add_theme_font_size_override("font_size", int(round(34.0 * scale)))
-	settlement_round_label.add_theme_font_size_override("font_size", int(round(20.0 * scale)))
-	settlement_player_list_title.add_theme_font_size_override("font_size", int(round(28.0 * scale)))
-	settlement_breakdown_title.add_theme_font_size_override("font_size", int(round(24.0 * scale)))
-	settlement_hero_badge.add_theme_font_size_override("font_size", int(round(18.0 * scale)))
-	settlement_hero_name.add_theme_font_size_override("font_size", int(round(26.0 * scale)))
-	settlement_hero_result.add_theme_font_size_override("font_size", int(round(36.0 * scale)))
-	settlement_hero_summary.add_theme_font_size_override("font_size", int(round(18.0 * scale)))
-	settlement_hero_hu.add_theme_font_size_override("font_size", int(round(22.0 * scale)))
-	settlement_hero_fan.add_theme_font_size_override("font_size", int(round(22.0 * scale)))
-	settlement_hero_score.add_theme_font_size_override("font_size", int(round(54.0 * scale)))
+	settlement_breakdown_list.add_theme_constant_override("separation", int(round(4.0 * scale)))
+	var scroll_bar := settlement_breakdown_scroll.get_v_scroll_bar()
+	if scroll_bar != null:
+		scroll_bar.custom_minimum_size = Vector2(maxf(34.0, 42.0 * scale), 0.0)
+	var header_height := 124.0 * scale
+	var footer_height := 72.0 * scale
+	var usable_height := target_size.y - (44.0 * scale + header_height + footer_height + 42.0 * scale)
+	var content_height := maxf(220.0 * scale, usable_height)
+	settlement_content.custom_minimum_size = Vector2(0.0, content_height)
+	settlement_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	call_deferred("_layout_settlement_unified_content_surface")
+	settlement_player_list_card.custom_minimum_size = Vector2(0.0, clampf(content_height * 0.255, 170.0 * scale, 224.0 * scale))
+	settlement_player_list_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	settlement_player_list_card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var detail_height := maxf(300.0 * scale, content_height - settlement_player_list_card.custom_minimum_size.y - 12.0 * scale)
+	settlement_detail_card.custom_minimum_size = Vector2(0.0, detail_height)
+	settlement_detail_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	settlement_hero_card.visible = false
+	settlement_hero_card.custom_minimum_size = Vector2.ZERO
+	settlement_hand_card.custom_minimum_size = Vector2(0.0, clampf(detail_height * 0.46, 224.0 * scale, 330.0 * scale))
+	settlement_hand_card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	settlement_breakdown_card.custom_minimum_size = Vector2(0.0, maxf(180.0 * scale, detail_height - settlement_hand_card.custom_minimum_size.y - 12.0 * scale))
+	settlement_breakdown_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	settlement_close_button.custom_minimum_size = Vector2(176.0 * scale, 82.0 * scale)
+	var title_width := 460.0 * scale
+	var close_width := 176.0 * scale
+	settlement_header_left_spacer.custom_minimum_size = Vector2(maxf(0.0, title_width - close_width), 0.0)
+	%SettlementTitle.custom_minimum_size = Vector2(title_width, header_height)
+	next_round_button.custom_minimum_size = Vector2(430.0 * scale, 94.0 * scale)
 
 
 func _set_margin_constants(margin: MarginContainer, left: float, top: float, right: float, bottom: float) -> void:
@@ -4642,7 +4828,7 @@ func _settlement_content_scale() -> float:
 	var panel_height := settlement_panel.size.y
 	if panel_height <= 1.0:
 		panel_height = settlement_panel.custom_minimum_size.y
-	return clampf(panel_height / 1000.0, 1.05, 1.48)
+	return settlement_layout_scale
 
 
 func _refresh_ding_que_panel(snapshot: Dictionary) -> void:
@@ -5432,6 +5618,7 @@ func _discard_row_step_for_seat(seat: int, tile_size: Vector2) -> Vector2:
 
 
 func _render_settlement(snapshot: Dictionary) -> void:
+	_refresh_settlement_skin_palette()
 	var settlement_data: Dictionary = snapshot.get("settlement_data", {})
 	var settlement_view_data := settlement_data.duplicate(true)
 	settlement_view_data["use_ding_que_phase"] = bool(snapshot.get("rules", {}).get("use_ding_que_phase", true))
@@ -5462,12 +5649,12 @@ func _render_settlement(snapshot: Dictionary) -> void:
 	var round_prefix := "+" if round_delta > 0 else ""
 	var dealer_seat := int(settlement_view_data.get("dealer_seat", snapshot.get("current_dealer_seat", 0)))
 
-	settlement_round_label.text = "第 %d 局 · 庄家%s · %s" % [
+	settlement_round_label.text = "◇ ───  第 %d 局 · 庄家%s · %s  ─── ◇" % [
 		int(settlement_view_data.get("round_index", snapshot.get("round_index", 1))),
 		_seat_name(dealer_seat),
 		_settlement_end_reason_text(str(settlement_view_data.get("end_reason", ""))),
 	]
-	settlement_player_list_title.text = "流局查叫" if str(settlement_view_data.get("end_reason", "")) == "draw_wall_empty" else "胡牌结算"
+	settlement_player_list_title.text = "本局结算"
 	settlement_breakdown_title.text = "分数明细"
 	settlement_hero_badge.text = "本局最佳"
 	settlement_hero_badge.visible = best_seats.has(focus_seat)
@@ -5519,6 +5706,7 @@ func _resolve_settlement_best_seats(players: Array, score_changes: Dictionary) -
 
 func _render_settlement_player_list(players: Array, score_changes: Dictionary, focus_seat: int, dealer_seat: int, best_seats: Array[int]) -> void:
 	_clear_children(settlement_player_list)
+	settlement_player_buttons.clear()
 	var scale := _settlement_content_scale()
 	var sorted_players := players.duplicate()
 	sorted_players.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -5529,11 +5717,12 @@ func _render_settlement_player_list(players: Array, score_changes: Dictionary, f
 		var seat := int(player.get("seat", 0))
 		var delta := int(score_changes.get(seat, 0))
 		var row_button := Button.new()
-		row_button.flat = true
-		row_button.focus_mode = Control.FOCUS_NONE
+		row_button.flat = false
+		row_button.focus_mode = Control.FOCUS_ALL
 		row_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		row_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row_button.custom_minimum_size = Vector2(0, 118 * scale)
+		row_button.custom_minimum_size = Vector2(0, maxf(92.0, 112.0 * scale))
+		row_button.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		row_button.add_theme_stylebox_override("normal", _build_settlement_list_row_style(seat == focus_seat, delta))
 		row_button.add_theme_stylebox_override("hover", _build_settlement_list_row_hover_style(seat == focus_seat, delta))
 		row_button.add_theme_stylebox_override("pressed", _build_settlement_list_row_style(seat == focus_seat, delta))
@@ -5542,6 +5731,7 @@ func _render_settlement_player_list(players: Array, score_changes: Dictionary, f
 		row_button.add_theme_color_override("font_color", Color(0, 0, 0, 0))
 		row_button.add_theme_font_size_override("font_size", 1)
 		settlement_player_list.add_child(row_button)
+		settlement_player_buttons[seat] = row_button
 
 		var card := Panel.new()
 		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -5561,23 +5751,27 @@ func _render_settlement_player_list(players: Array, score_changes: Dictionary, f
 
 		var inner := HBoxContainer.new()
 		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inner.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		inner.alignment = BoxContainer.ALIGNMENT_CENTER
 		inner.add_theme_constant_override("separation", int(round(12 * scale)))
 		margin.add_child(inner)
 
 		var avatar := Label.new()
-		avatar.custom_minimum_size = Vector2(76, 76) * scale
+		avatar.custom_minimum_size = Vector2(144, 132) * scale
 		avatar.text = _settlement_avatar_text(seat)
 		avatar.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		avatar.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_apply_settlement_label_style(avatar, seat == focus_seat, true)
 		if seat == focus_seat:
 			_apply_settlement_focus_row_text_style(avatar)
-		avatar.add_theme_font_size_override("font_size", int(round(30 * scale)))
+		avatar.add_theme_font_size_override("font_size", clampi(int(round(82 * scale)), 62, 84))
 		avatar.add_theme_stylebox_override("normal", _build_settlement_avatar_style(seat == focus_seat))
 		inner.add_child(avatar)
+		_add_settlement_cloud_frame(avatar, true)
 
 		var name_box := VBoxContainer.new()
 		name_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		name_box.add_theme_constant_override("separation", int(round(4 * scale)))
 		inner.add_child(name_box)
 
@@ -5588,7 +5782,8 @@ func _render_settlement_player_list(players: Array, score_changes: Dictionary, f
 		var name_label := Label.new()
 		name_label.text = _settlement_display_name(seat)
 		_apply_settlement_label_style(name_label, seat == focus_seat, true)
-		name_label.add_theme_font_size_override("font_size", int(round((29 if seat == focus_seat else 26) * scale)))
+		name_label.add_theme_font_override("font", load("res://res/fonts/app_cjk.ttc"))
+		name_label.add_theme_font_size_override("font_size", clampi(int(round((50 if seat == focus_seat else 47) * scale)), 38, 52))
 		if seat == focus_seat:
 			_apply_settlement_focus_row_text_style(name_label)
 		name_row.add_child(name_label)
@@ -5612,7 +5807,7 @@ func _render_settlement_player_list(players: Array, score_changes: Dictionary, f
 		var total_label := Label.new()
 		total_label.text = "总分 %d" % int(player.get("score", 0))
 		_apply_settlement_label_style(total_label, seat == focus_seat, false, true)
-		total_label.add_theme_font_size_override("font_size", int(round(24 * scale)))
+		total_label.add_theme_font_size_override("font_size", clampi(int(round(38 * scale)), 31, 40))
 		if seat == focus_seat:
 			_apply_settlement_focus_row_text_style(total_label, true)
 		name_box.add_child(total_label)
@@ -5621,12 +5816,19 @@ func _render_settlement_player_list(players: Array, score_changes: Dictionary, f
 		var prefix := "+" if delta > 0 else ""
 		delta_label.text = "%s%d" % [prefix, delta]
 		_apply_settlement_label_style(delta_label, seat == focus_seat, true)
-		delta_label.add_theme_font_size_override("font_size", int(round((42 if seat == focus_seat else 36) * scale)))
+		delta_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		delta_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		delta_label.add_theme_font_override("font", load("res://res/fonts/app_cjk.ttc"))
+		delta_label.add_theme_font_size_override("font_size", clampi(int(round((68 if seat == focus_seat else 64) * scale)), 50, 70))
 		if seat == focus_seat:
 			_apply_settlement_focus_row_text_style(delta_label)
 		elif delta < 0:
 			delta_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.84, 1.0))
 		inner.add_child(delta_label)
+		if seat != focus_seat:
+			for label in [name_label, total_label, delta_label]:
+				label.add_theme_color_override("font_color", Color("2C2118"))
+				label.add_theme_color_override("font_outline_color", Color.TRANSPARENT)
 
 
 func _render_settlement_hand(players: Array, settlement_data: Dictionary, focus_seat: int) -> void:
@@ -5638,65 +5840,53 @@ func _render_settlement_hand(players: Array, settlement_data: Dictionary, focus_
 
 	var row_card := Panel.new()
 	row_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row_card.add_theme_stylebox_override("panel", _build_settlement_hand_row_style(true))
 	settlement_hand_row.add_child(row_card)
 
 	var row_margin := MarginContainer.new()
 	row_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	row_margin.add_theme_constant_override("margin_left", int(round(18 * scale)))
-	row_margin.add_theme_constant_override("margin_top", int(round(14 * scale)))
+	# The tag + tile composite has a taller visual ascender than its Control box.
+	# Balance the free space optically so the complete two-line group sits at the
+	# centre of the settlement hand section instead of hugging its upper edge.
+	row_margin.add_theme_constant_override("margin_top", int(round(40 * scale)))
 	row_margin.add_theme_constant_override("margin_right", int(round(18 * scale)))
 	row_margin.add_theme_constant_override("margin_bottom", int(round(14 * scale)))
 	row_card.add_child(row_margin)
 
-	var group := VBoxContainer.new()
-	group.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	group.add_theme_constant_override("separation", int(round(10 * scale)))
-	row_margin.add_child(group)
-
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", int(round(12 * scale)))
-	group.add_child(header)
-
-	var name_label := Label.new()
-	name_label.text = _settlement_display_name(focus_seat)
-	_apply_settlement_label_style(name_label, true, true)
-	name_label.add_theme_font_size_override("font_size", int(round(30 * scale)))
-	header.add_child(name_label)
-
-	if bool(player.get("has_won", false)):
-		var win_badge := Label.new()
-		win_badge.text = _settlement_win_badge_text(settlement_data, focus_seat)
-		_apply_settlement_label_style(win_badge, true, false)
-		win_badge.add_theme_stylebox_override("normal", _build_settlement_hero_badge_style())
-		win_badge.add_theme_font_size_override("font_size", int(round(18 * scale)))
-		header.add_child(win_badge)
-
-	var use_ding_que := _settlement_uses_ding_que(settlement_data)
-	var ding_que := str(player.get("ding_que", "")) if use_ding_que else ""
-	if ding_que != "":
-		var ding_que_label := Label.new()
-		ding_que_label.text = _ding_que_display(ding_que)
-		_apply_settlement_label_style(ding_que_label, true, false, true)
-		ding_que_label.add_theme_stylebox_override("normal", _build_settlement_hand_tag_style(ding_que, true))
-		ding_que_label.add_theme_font_size_override("font_size", int(round(18 * scale)))
-		header.add_child(ding_que_label)
-
-	var tiles := _build_settlement_hand_tiles(player, settlement_data, focus_seat)
-	_render_settlement_all_tiles_row(group, tiles, player.get("melds", []), settlement_data, focus_seat)
+	var display_settlement_data := settlement_data
+	if _find_focus_win_event(display_settlement_data, focus_seat).is_empty():
+		var fallback_winning_tile: Dictionary = player.get("winning_tile", {})
+		if bool(player.get("has_won", false)) and not fallback_winning_tile.is_empty():
+			display_settlement_data = settlement_data.duplicate(true)
+			var fallback_events: Array = display_settlement_data.get("win_events", [])
+			fallback_events.append({
+				"winner_seat": focus_seat,
+				"source_seat": int(player.get("winning_source_seat", focus_seat)),
+				"winning_tile": fallback_winning_tile.duplicate(true),
+				"win_type": str(player.get("win_type", "discard_win")),
+			})
+			display_settlement_data["win_events"] = fallback_events
+	var tiles := _build_settlement_hand_tiles(player, display_settlement_data, focus_seat)
+	_render_settlement_all_tiles_row(row_margin, tiles, player.get("melds", []), display_settlement_data, focus_seat)
 
 
-func _render_settlement_all_tiles_row(parent: VBoxContainer, hand_tiles: Array, melds: Array, settlement_data: Dictionary, seat: int) -> void:
+func _render_settlement_all_tiles_row(parent: Control, hand_tiles: Array, melds: Array, settlement_data: Dictionary, seat: int) -> void:
 	var scale := _settlement_content_scale()
-	var row := HBoxContainer.new()
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", int(round(14 * scale)))
-	parent.add_child(row)
-
+	var win_event := _find_focus_win_event(settlement_data, seat)
+	var winning_tile: Dictionary = win_event.get("winning_tile", {}) if not win_event.is_empty() else {}
+	var tile_scale := _resolve_settlement_tile_fit_scale(parent, hand_tiles.size(), melds, not winning_tile.is_empty())
+	var center := CenterContainer.new()
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(center)
 	var lane := HBoxContainer.new()
 	lane.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lane.add_theme_constant_override("separation", int(round(8 * scale)))
-	row.add_child(lane)
+	lane.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	lane.alignment = BoxContainer.ALIGNMENT_CENTER
+	lane.add_theme_constant_override("separation", int(round(12 * scale)))
+	center.add_child(lane)
 
 	if hand_tiles.is_empty() and melds.is_empty() and _find_focus_win_event(settlement_data, seat).is_empty():
 		var empty_label := Label.new()
@@ -5706,69 +5896,118 @@ func _render_settlement_all_tiles_row(parent: VBoxContainer, hand_tiles: Array, 
 		lane.add_child(empty_label)
 		return
 
-	for tile_data in hand_tiles:
-		lane.add_child(_create_settlement_tile(tile_data, SETTLEMENT_TILE_SCALE * scale))
+	lane.add_child(_create_settlement_labeled_tile_group("", hand_tiles, tile_scale, false, false))
 
 	for meld in melds:
-		lane.add_child(_create_settlement_group_tag(_settlement_meld_tag_text(meld)))
-		for tile_data in meld.get("tiles", []):
-			lane.add_child(_create_settlement_tile(tile_data, SETTLEMENT_MELD_TILE_SCALE * scale))
+		lane.add_child(_create_settlement_labeled_tile_group(
+			_settlement_meld_source_label(meld, seat),
+			meld.get("tiles", []),
+			tile_scale,
+			false,
+			true
+		))
 
-	var win_event := _find_focus_win_event(settlement_data, seat)
 	if not win_event.is_empty():
-		var winning_tile: Dictionary = win_event.get("winning_tile", {})
 		if not winning_tile.is_empty():
-			lane.add_child(_create_settlement_group_tag(_settlement_win_badge_text(settlement_data, seat)))
-			lane.add_child(_create_settlement_claim_tile(
-				winning_tile,
-				SETTLEMENT_WIN_TILE_SCALE * scale,
-				seat,
-				int(win_event.get("source_seat", seat)),
-				str(win_event.get("win_type", ""))
-			))
+			var winning_group := _create_settlement_labeled_tile_group(
+				_settlement_winning_source_label(win_event, seat),
+				[winning_tile],
+				tile_scale,
+				true,
+				true
+			)
+			winning_group.name = "SettlementWinningTileGroup"
+			lane.add_child(winning_group)
+
+
+func _resolve_settlement_tile_fit_scale(parent: Control, hand_count: int, melds: Array, has_winning_tile: bool) -> float:
+	var layout_scale := _settlement_content_scale()
+	var tile_count := hand_count + (1 if has_winning_tile else 0)
+	var tile_group_count := 1 + (1 if has_winning_tile else 0)
+	for meld in melds:
+		tile_count += (meld.get("tiles", []) as Array).size()
+		tile_group_count += 1
+	if tile_count <= 0:
+		return SETTLEMENT_TILE_SCALE * layout_scale
+	var available_width := maxf(parent.size.x, maxf(settlement_hand_card.size.x - 72.0 * layout_scale, settlement_panel.size.x - 120.0 * layout_scale))
+	var between_group_width := float(maxi(0, tile_group_count - 1)) * 12.0 * layout_scale
+	var within_group_width := float(maxi(0, tile_count - tile_group_count)) * 5.0 * layout_scale
+	var usable_tile_width := maxf(1.0, available_width - between_group_width - within_group_width) * 0.88
+	var fitted_scale := usable_tile_width / (float(tile_count) * TILE_VISUAL_BASE_SIZE.x)
+	return clampf(fitted_scale, 0.72 * layout_scale, SETTLEMENT_TILE_SCALE * layout_scale)
+
+
+func _create_settlement_labeled_tile_group(label_text: String, tiles: Array, tile_scale: float, winning: bool = false, show_tag: bool = true) -> VBoxContainer:
+	var scale := _settlement_content_scale()
+	var group := VBoxContainer.new()
+	group.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	group.alignment = BoxContainer.ALIGNMENT_CENTER
+	group.add_theme_constant_override("separation", int(round(8.0 * scale)))
+	if label_text.is_empty() or not show_tag:
+		var tag_spacer := Control.new()
+		tag_spacer.custom_minimum_size = Vector2(0.0, 54.0 * scale)
+		group.add_child(tag_spacer)
+	else:
+		var tag := _create_settlement_group_tag(label_text)
+		tag.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		group.add_child(tag)
+	var tile_row := HBoxContainer.new()
+	tile_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	tile_row.add_theme_constant_override("separation", int(round(5.0 * scale)))
+	group.add_child(tile_row)
+	for tile_data in tiles:
+		tile_row.add_child(_create_settlement_tile(tile_data, tile_scale, winning))
+	return group
+
+
+func _settlement_meld_source_label(meld: Dictionary, focus_seat: int) -> String:
+	var action := _settlement_meld_tag_text(meld)
+	var source_seat := int(meld.get("source_seat", meld.get("from_seat", -1)))
+	if source_seat < 0 or source_seat == focus_seat:
+		return action
+	return "%s · %s" % [action, _seat_name(source_seat)]
+
+
+func _settlement_winning_source_label(win_event: Dictionary, focus_seat: int) -> String:
+	var win_type := str(win_event.get("win_type", ""))
+	var source_seat := int(win_event.get("source_seat", focus_seat))
+	match win_type:
+		"self_draw":
+			return "自摸"
+		"gang_self_draw":
+			return "杠上花"
+		"discard_win":
+			return "%s点炮" % _seat_name(source_seat)
+		"gang_discard_win":
+			return "%s杠上炮" % _seat_name(source_seat)
+		"qiang_gang_hu":
+			return "%s抢杠" % _seat_name(source_seat)
+		_:
+			return "胡牌"
 
 
 func _create_settlement_tile(tile_data: Dictionary, scale: float, highlight_winning: bool = false) -> Control:
 	var tile: Control = TILE_SCENE.instantiate()
 	tile.call("configure", tile_data, scale, false, false, false, false, highlight_winning)
+	if tile.has_method("set_settlement_display"):
+		tile.call("set_settlement_display", true)
 	return tile
 
 
 func _create_settlement_claim_tile(tile_data: Dictionary, scale: float, focus_seat: int, source_seat: int, win_type: String) -> Control:
-	var tile: Control = _create_settlement_tile(tile_data, scale, true)
-	if win_type in ["self_draw", "gang_self_draw"] or source_seat == focus_seat or source_seat < 0:
-		return tile
-	var wrapper := Control.new()
-	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var tile_size: Vector2 = tile.custom_minimum_size
-	wrapper.custom_minimum_size = tile_size
-	wrapper.size = tile_size
-	wrapper.add_child(tile)
-
-	var badge := Label.new()
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badge.text = _settlement_claim_text(focus_seat, source_seat)
-	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	badge.custom_minimum_size = Vector2(tile_size.x * 0.82, maxf(30.0, tile_size.y * 0.26))
-	badge.position = Vector2((tile_size.x - badge.custom_minimum_size.x) * 0.5, tile_size.y * 0.36)
-	badge.add_theme_font_size_override("font_size", int(round(clampf(tile_size.y * 0.18, 15.0, 30.0))))
-	_apply_settlement_label_style(badge, true, false)
-	badge.add_theme_color_override("font_color", Color(0.34, 0.20, 0.02, 0.96))
-	badge.add_theme_stylebox_override("normal", _build_settlement_claim_badge_style())
-	wrapper.add_child(badge)
-	return wrapper
+	# Compatibility entry point: source information now lives above the tile.
+	return _create_settlement_tile(tile_data, scale, true)
 
 
 func _create_settlement_group_tag(text: String) -> Label:
 	var scale := _settlement_content_scale()
 	var tag := Label.new()
-	tag.custom_minimum_size = Vector2(78, 44) * scale
+	tag.custom_minimum_size = Vector2(104, 54) * scale
 	tag.text = text
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_apply_settlement_label_style(tag, true, false, true)
-	tag.add_theme_font_size_override("font_size", int(round(22 * scale)))
+	tag.add_theme_font_size_override("font_size", clampi(int(round(32 * scale)), 27, 34))
 	tag.add_theme_stylebox_override("normal", _build_settlement_group_tag_style())
 	return tag
 
@@ -6409,10 +6648,16 @@ func _resolve_gang_unit_score(gang_type: String) -> int:
 
 func _apply_settlement_visuals(round_delta: int) -> void:
 	var scale := _settlement_content_scale()
-	settlement_shade.color = Color(0.03, 0.07, 0.05, 0.72)
+	_refresh_settlement_skin_palette()
+	settlement_shade.color = Color(0.01, 0.025, 0.02, 0.72)
+	_apply_settlement_skin_texture()
+	_apply_settlement_unified_content_surface()
+	_apply_settlement_section_texture(settlement_player_buttons.get(settlement_selected_seat) as Control, "ActivePlayerSkinTexture", 0.82)
+	_apply_settlement_section_texture(settlement_detail_card, "ActiveDetailSkinTexture", 0.82)
+	_configure_settlement_breakdown_scroll()
 	settlement_panel.add_theme_stylebox_override("panel", _build_settlement_panel_style())
 	settlement_hero_card.add_theme_stylebox_override("panel", _build_settlement_hero_style(round_delta))
-	settlement_breakdown_card.add_theme_stylebox_override("panel", _build_settlement_detail_style())
+	settlement_breakdown_card.add_theme_stylebox_override("panel", _build_settlement_inner_section_style())
 	settlement_hand_card.add_theme_stylebox_override("panel", _build_settlement_hand_style())
 	settlement_player_list_card.add_theme_stylebox_override("panel", _build_settlement_side_style())
 	settlement_detail_card.add_theme_stylebox_override("panel", _build_settlement_detail_style())
@@ -6420,39 +6665,128 @@ func _apply_settlement_visuals(round_delta: int) -> void:
 	settlement_close_button.add_theme_stylebox_override("hover", _build_settlement_utility_button_hover_style())
 	settlement_close_button.add_theme_stylebox_override("pressed", _build_settlement_utility_button_pressed_style())
 	settlement_close_button.add_theme_stylebox_override("focus", _build_settlement_utility_button_hover_style())
-	settlement_close_button.add_theme_color_override("font_color", IVORY_SOFT)
+	settlement_close_button.add_theme_color_override("font_color", Color("6D2A20"))
 	next_round_button.add_theme_stylebox_override("normal", _build_settlement_primary_button_style())
 	next_round_button.add_theme_stylebox_override("hover", _build_settlement_primary_button_hover_style())
 	next_round_button.add_theme_stylebox_override("pressed", _build_settlement_primary_button_pressed_style())
 	next_round_button.add_theme_stylebox_override("focus", _build_settlement_primary_button_hover_style())
-	next_round_button.add_theme_color_override("font_color", Color(0.19, 0.16, 0.10, 1.0))
+	next_round_button.add_theme_color_override("font_color", Color("FFE8A6"))
 	settlement_hero_badge.add_theme_stylebox_override("normal", _build_settlement_hero_badge_style())
-	settlement_hero_badge.add_theme_font_size_override("font_size", int(round(22 * scale)))
+	settlement_hero_badge.add_theme_font_size_override("font_size", clampi(int(round(26 * scale)), 22, 28))
+	settlement_hero_badge.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	settlement_hero_badge.custom_minimum_size = Vector2(112.0 * scale, 0.0)
+	settlement_hero_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_apply_settlement_label_style(settlement_hero_badge, true, true)
 	_apply_settlement_label_style(%SettlementTitle, false, true)
-	%SettlementTitle.add_theme_font_size_override("font_size", int(round(44 * scale)))
-	%SettlementTitle.add_theme_color_override("font_color", IVORY_SOFT)
-	settlement_round_label.add_theme_font_size_override("font_size", int(round(25 * scale)))
-	settlement_round_label.add_theme_color_override("font_color", Color(0.97, 0.93, 0.80, 1.0))
+	%SettlementTitle.add_theme_font_size_override("font_size", clampi(int(round(102 * scale)), 76, 104))
+	%SettlementTitle.add_theme_color_override("font_color", Color("FFE5A0"))
+	%SettlementTitle.add_theme_color_override("font_outline_color", Color("5B3217"))
+	%SettlementTitle.add_theme_constant_override("outline_size", 3)
+	%SettlementTitle.add_theme_stylebox_override("normal", _build_settlement_round_title_style())
+	settlement_round_label.add_theme_font_size_override("font_size", clampi(int(round(46 * scale)), 36, 48))
+	settlement_round_label.add_theme_color_override("font_color", Color("F9DFC0"))
+	settlement_round_label.add_theme_stylebox_override("normal", _build_settlement_centered_round_title_style())
+	settlement_round_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	settlement_round_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	settlement_round_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	settlement_player_list_title.add_theme_color_override("font_color", IVORY_SOFT)
-	settlement_player_list_title.add_theme_font_size_override("font_size", int(round(34 * scale)))
+	settlement_player_list_title.add_theme_font_size_override("font_size", clampi(int(round(38 * scale)), 32, 40))
 	settlement_hero_result.add_theme_font_size_override("font_size", int(round(44 * scale)))
 	settlement_hero_result.add_theme_color_override("font_color", Color(0.98, 0.94, 0.82, 1.0))
-	settlement_hero_name.add_theme_font_size_override("font_size", int(round(32 * scale)))
+	settlement_hero_name.add_theme_font_size_override("font_size", clampi(int(round(39 * scale)), 32, 42))
 	settlement_hero_name.add_theme_color_override("font_color", Color(0.98, 0.94, 0.84, 1.0))
 	settlement_hero_name.autowrap_mode = TextServer.AUTOWRAP_OFF
 	settlement_hero_name.clip_text = true
-	settlement_hero_summary.add_theme_font_size_override("font_size", int(round(22 * scale)))
+	settlement_hero_summary.add_theme_font_size_override("font_size", clampi(int(round(28 * scale)), 24, 30))
 	settlement_hero_summary.add_theme_color_override("font_color", Color(0.90, 0.88, 0.82, 0.94))
-	settlement_hero_hu.add_theme_font_size_override("font_size", int(round(28 * scale)))
-	settlement_hero_fan.add_theme_font_size_override("font_size", int(round(28 * scale)))
-	settlement_hero_score.add_theme_font_size_override("font_size", int(round(64 * scale)))
+	settlement_hero_hu.add_theme_font_size_override("font_size", clampi(int(round(32 * scale)), 27, 34))
+	settlement_hero_fan.add_theme_font_size_override("font_size", clampi(int(round(32 * scale)), 27, 34))
+	settlement_hero_score.add_theme_font_size_override("font_size", clampi(int(round(82 * scale)), 72, 88))
 	settlement_hero_score.add_theme_color_override("font_color", Color(0.98, 0.95, 0.84, 1.0))
 	_apply_settlement_label_style(settlement_breakdown_title, false, true)
-	settlement_breakdown_title.add_theme_font_size_override("font_size", int(round(30 * scale)))
-	settlement_breakdown_title.add_theme_color_override("font_color", IVORY_SOFT)
-	settlement_close_button.add_theme_font_size_override("font_size", int(round(26 * scale)))
-	next_round_button.add_theme_font_size_override("font_size", int(round(42 * scale)))
+	settlement_breakdown_title.add_theme_font_size_override("font_size", clampi(int(round(54 * scale)), 42, 56))
+	settlement_breakdown_title.add_theme_color_override("font_color", Color("F9D98A"))
+	settlement_breakdown_title.add_theme_stylebox_override("normal", _build_settlement_breakdown_title_style())
+	settlement_breakdown_title.custom_minimum_size = Vector2(360.0 * scale, 68.0 * scale)
+	settlement_breakdown_title.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	settlement_breakdown_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_add_settlement_cloud_frame(settlement_breakdown_title, false)
+	settlement_close_button.add_theme_font_size_override("font_size", clampi(int(round(38 * scale)), 30, 40))
+	next_round_button.add_theme_font_size_override("font_size", clampi(int(round(54 * scale)), 42, 56))
+
+
+func _refresh_settlement_skin_palette() -> void:
+	var skin: Dictionary = TABLE_SKIN_CATALOG.get_skin(table_3d_skin_id)
+	var tint := Color(skin.get("albedo_tint", Color("3E6654")))
+	var light := Color(skin.get("light_color", Color("F6E8CF")))
+	settlement_skin_texture = ResourceLoader.load(TABLE_SKIN_CATALOG.texture_path(table_3d_skin_id, "albedo_2k.jpg")) as Texture2D
+	settlement_skin_base = tint.darkened(0.68)
+	settlement_skin_panel = tint.darkened(0.48)
+	settlement_skin_active = tint.darkened(0.04)
+	var luminance := tint.r * 0.2126 + tint.g * 0.7152 + tint.b * 0.0722
+	# The selected card and detail surface always sit directly on textured felt;
+	# use light ink there even when the source skin's average tint is bright.
+	settlement_skin_text = Color("FFF3D7")
+	settlement_skin_aux = Color("E4D2AE")
+	settlement_skin_accent = light.darkened(0.30)
+
+
+func _apply_settlement_unified_content_surface() -> void:
+	_ensure_settlement_unified_content_surface()
+	var surface := settlement_panel.get_node_or_null("UnifiedContentSurface") as Panel
+	if surface == null:
+		return
+	surface.add_theme_stylebox_override("panel", _build_settlement_unified_content_style())
+	var felt := surface.get_node_or_null("UnifiedContentFelt") as TextureRect
+	if felt != null:
+		felt.texture = settlement_skin_texture
+		felt.modulate = Color(1.0, 1.0, 1.0, 0.88)
+	var veil := surface.get_node_or_null("UnifiedContentVeil") as ColorRect
+	if veil != null:
+		veil.color = Color(settlement_skin_base, 0.34)
+
+
+func _apply_settlement_section_texture(host: Control, node_name: String, opacity: float) -> void:
+	if host == null or settlement_skin_texture == null:
+		return
+	var texture_rect := host.get_node_or_null(node_name) as TextureRect
+	if texture_rect == null:
+		texture_rect = TextureRect.new()
+		texture_rect.name = node_name
+		texture_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		texture_rect.stretch_mode = TextureRect.STRETCH_TILE
+		texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		host.add_child(texture_rect)
+		host.move_child(texture_rect, 0)
+	texture_rect.texture = settlement_skin_texture
+	texture_rect.modulate = Color(1.0, 1.0, 1.0, opacity)
+
+
+func _apply_settlement_skin_texture() -> void:
+	_apply_settlement_section_texture(settlement_panel, "SettlementSkinTexture", 0.72)
+	var ornament := settlement_panel.get_node_or_null("SettlementOrnamentOverlay") as TextureRect
+	if ornament == null:
+		ornament = TextureRect.new()
+		ornament.name = "SettlementOrnamentOverlay"
+		ornament.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		ornament.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ornament.stretch_mode = TextureRect.STRETCH_SCALE
+		ornament.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		settlement_panel.add_child(ornament)
+		settlement_panel.move_child(ornament, 1)
+	ornament.texture = SETTLEMENT_ORNAMENT_TEXTURE
+	ornament.modulate = Color(1.0, 0.98, 0.92, 0.92)
+
+
+func _configure_settlement_breakdown_scroll() -> void:
+	var bar := settlement_breakdown_scroll.get_v_scroll_bar()
+	if bar == null:
+		return
+	bar.add_theme_stylebox_override("scroll", _build_settlement_scroll_track_style())
+	bar.add_theme_stylebox_override("grabber", _build_settlement_scroll_grabber_style(false))
+	bar.add_theme_stylebox_override("grabber_highlight", _build_settlement_scroll_grabber_style(true))
+	bar.add_theme_stylebox_override("grabber_pressed", _build_settlement_scroll_grabber_style(true))
 
 
 func _apply_settlement_label_style(label: Control, dark_text: bool = false, large: bool = false, use_aux: bool = false) -> void:
@@ -6487,34 +6821,39 @@ func _apply_settlement_focus_row_text_style(label: Control, aux: bool = false) -
 
 func _apply_settlement_breakdown_label_style(label: Label, is_header: bool = false, is_score: bool = false) -> void:
 	var scale := _settlement_content_scale()
-	label.add_theme_font_size_override("font_size", int(round((28 if is_header else 25) * scale)))
-	label.add_theme_color_override("font_color", Color(0.96, 0.93, 0.84, 1.0))
+	label.add_theme_font_size_override("font_size", clampi(int(round((40 if is_header else 37) * scale)), 31, 42))
+	label.add_theme_color_override("font_color", settlement_skin_text)
 	label.add_theme_color_override("font_outline_color", Color(0.07, 0.11, 0.09, 0.84))
 	label.add_theme_constant_override("outline_size", 1)
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	if is_score:
-		label.add_theme_font_size_override("font_size", int(round(28 * scale)))
+		label.add_theme_font_size_override("font_size", clampi(int(round(42 * scale)), 34, 44))
 
 
 func _build_settlement_side_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.29, 0.23, 0.96)
-	style.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.58)
-	style.set_border_width_all(2)
-	style.corner_radius_top_left = 22
-	style.corner_radius_top_right = 22
-	style.corner_radius_bottom_left = 22
-	style.corner_radius_bottom_right = 22
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.26)
-	style.shadow_size = 10
-	style.shadow_offset = Vector2(0, 5)
+	style.bg_color = Color.TRANSPARENT
+	style.border_color = Color.TRANSPARENT
+	style.set_border_width_all(0)
+	return style
+
+
+func _build_settlement_unified_content_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(settlement_skin_base, 0.18)
+	style.border_color = Color.TRANSPARENT
+	style.set_border_width_all(0)
+	style.set_corner_radius_all(0)
+	style.shadow_color = Color(0.02, 0.025, 0.02, 0.30)
+	style.shadow_size = 8
+	style.shadow_offset = Vector2(0, 4)
 	return style
 
 
 func _build_settlement_detail_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.11, 0.26, 0.21, 0.96)
-	style.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.62)
+	style.bg_color = Color(settlement_skin_base, 0.12)
+	style.border_color = Color(settlement_skin_accent, 0.52)
 	style.set_border_width_all(2)
 	style.corner_radius_top_left = 22
 	style.corner_radius_top_right = 22
@@ -6527,16 +6866,25 @@ func _build_settlement_detail_style() -> StyleBoxFlat:
 
 
 func _build_settlement_hand_style() -> StyleBoxFlat:
-	var style := _build_settlement_detail_style()
-	style.bg_color = Color(0.13, 0.31, 0.24, 0.96)
+	return _build_settlement_inner_section_style()
+
+
+func _build_settlement_inner_section_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color.TRANSPARENT
+	style.border_color = Color.TRANSPARENT
+	style.set_border_width_all(0)
+	style.set_corner_radius_all(0)
+	style.shadow_color = Color.TRANSPARENT
+	style.shadow_size = 0
 	return style
 
 
 func _build_settlement_hand_row_style(is_focus: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.18, 0.38, 0.30, 0.98) if is_focus else Color(0.12, 0.28, 0.22, 0.90)
-	style.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.82) if is_focus else Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.34)
-	style.set_border_width_all(2 if is_focus else 1)
+	style.bg_color = Color.TRANSPARENT
+	style.border_color = Color.TRANSPARENT
+	style.set_border_width_all(0)
 	style.corner_radius_top_left = 12
 	style.corner_radius_top_right = 12
 	style.corner_radius_bottom_left = 12
@@ -6583,16 +6931,68 @@ func _build_settlement_breakdown_row_style(is_header: bool, alternate: bool) -> 
 	var style := StyleBoxFlat.new()
 	if is_header:
 		style.bg_color = Color(0.18, 0.39, 0.31, 0.98)
-		style.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.70)
-		style.set_border_width_all(2)
+		style.border_color = Color(settlement_skin_accent, 0.52)
+		style.set_border_width_all(0)
+		style.set_border_width(SIDE_BOTTOM, 1)
 	else:
-		style.bg_color = Color(0.13, 0.29, 0.23, 0.92) if alternate else Color(0.10, 0.25, 0.20, 0.92)
-		style.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.16)
-		style.set_border_width_all(1)
-	style.corner_radius_top_left = 10
-	style.corner_radius_top_right = 10
-	style.corner_radius_bottom_left = 10
-	style.corner_radius_bottom_right = 10
+		style.bg_color = Color(settlement_skin_base, 0.10 if alternate else 0.04)
+		style.border_color = Color.TRANSPARENT
+		style.set_border_width_all(0)
+	return style
+
+
+func _build_settlement_breakdown_title_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("2B2118")
+	style.border_color = Color("C99A4A")
+	style.set_border_width_all(3)
+	style.set_corner_radius_all(18)
+	style.content_margin_left = 18
+	style.content_margin_right = 18
+	# CJK font ascender makes the mathematically centered baseline look high.
+	# Reserve a small optical top inset so the visible glyphs sit at panel center.
+	style.content_margin_top = 14
+	style.content_margin_bottom = 0
+	return style
+
+
+func _build_settlement_round_title_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.105, 0.075, 0.045, 0.94)
+	style.border_color = Color("B8873F")
+	style.set_border_width(SIDE_TOP, 1)
+	style.set_border_width(SIDE_BOTTOM, 1)
+	style.content_margin_left = 18
+	style.content_margin_right = 18
+	return style
+
+
+func _build_settlement_centered_round_title_style() -> StyleBoxFlat:
+	var style := _build_settlement_round_title_style()
+	# app_cjk 的可见字面相对字体行框偏上，只对中间局次文字作光学下移；
+	# 两侧标题和平衡底板继续使用无内边距差的基础样式。
+	style.content_margin_top = 12
+	style.content_margin_bottom = 0
+	return style
+
+
+func _build_settlement_scroll_track_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(settlement_skin_base, 0.44)
+	style.border_color = Color(settlement_skin_accent, 0.58)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	return style
+
+
+func _build_settlement_scroll_grabber_style(highlighted: bool) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(settlement_skin_accent, 1.0 if highlighted else 0.82)
+	style.border_color = Color("FFF0BC") if highlighted else Color("7D5727")
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(10)
+	style.content_margin_top = 18
+	style.content_margin_bottom = 18
 	return style
 
 
@@ -6613,15 +7013,18 @@ func _build_settlement_hero_style(round_delta: int) -> StyleBoxFlat:
 
 func _build_settlement_list_row_style(is_focus: bool, delta: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.18, 0.39, 0.31, 0.98) if is_focus else Color(0.11, 0.27, 0.22, 0.92)
-	if delta < 0 and not is_focus:
-		style.bg_color = Color(0.12, 0.24, 0.21, 0.92)
-	style.border_color = Color(1.0, 0.92, 0.74, 0.96) if is_focus else Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.24)
-	style.set_border_width_all(2 if is_focus else 1)
-	style.corner_radius_top_left = 14
-	style.corner_radius_top_right = 14
-	style.corner_radius_bottom_left = 14
-	style.corner_radius_bottom_right = 14
+	if is_focus:
+		style.bg_color = Color(settlement_skin_active, 0.16)
+		style.border_color = Color(settlement_skin_accent, 0.72)
+		style.set_border_width_all(2)
+		style.set_corner_radius_all(14)
+		style.shadow_color = Color(0.02, 0.025, 0.02, 0.22)
+		style.shadow_size = 4
+	else:
+		style.bg_color = Color("F5E8CF")
+		style.border_color = Color(settlement_skin_accent, 0.76)
+		style.set_border_width_all(2)
+		style.set_corner_radius_all(14)
 	return style
 
 
@@ -6634,16 +7037,15 @@ func _build_settlement_list_row_hover_style(is_focus: bool, delta: int) -> Style
 
 func _build_settlement_avatar_style(is_focus: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.68, 0.52, 0.23, 0.96) if is_focus else Color(0.32, 0.25, 0.14, 0.96)
-	style.border_color = Color(0.98, 0.87, 0.56, 0.88)
-	style.set_border_width_all(2)
+	style.bg_color = Color("096346") if is_focus else Color("8B3424")
+	style.border_color = Color("D7B56D")
+	style.set_border_width_all(3)
 	style.corner_radius_top_left = 14
 	style.corner_radius_top_right = 14
 	style.corner_radius_bottom_left = 14
 	style.corner_radius_bottom_right = 14
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.18)
-	style.shadow_size = 4
-	style.shadow_offset = Vector2(0, 2)
+	style.shadow_color = Color.TRANSPARENT
+	style.shadow_size = 0
 	return style
 
 
@@ -6699,9 +7101,9 @@ func _build_settlement_panel_style() -> StyleBoxFlat:
 
 func _build_settlement_utility_button_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.14, 0.33, 0.26, 0.96)
-	style.border_color = Color(GOLD_SOFT.r, GOLD_SOFT.g, GOLD_SOFT.b, 0.74)
-	style.set_border_width_all(2)
+	style.bg_color = Color("FFF7E8")
+	style.border_color = Color("D2AE68")
+	style.set_border_width_all(4)
 	style.corner_radius_top_left = 18
 	style.corner_radius_top_right = 18
 	style.corner_radius_bottom_left = 18
@@ -6712,7 +7114,7 @@ func _build_settlement_utility_button_style() -> StyleBoxFlat:
 	style.content_margin_bottom = 8
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.24)
 	style.shadow_size = 6
-	style.shadow_offset = Vector2(0, 3)
+	style.shadow_offset = Vector2(3, 4)
 	return style
 
 
@@ -6732,9 +7134,9 @@ func _build_settlement_utility_button_pressed_style() -> StyleBoxFlat:
 
 func _build_settlement_primary_button_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.80, 0.63, 0.25, 0.99)
-	style.border_color = Color(0.52, 0.30, 0.10, 0.94)
-	style.set_border_width_all(3)
+	style.bg_color = Color("086346")
+	style.border_color = Color("E1BD68")
+	style.set_border_width_all(4)
 	style.corner_radius_top_left = 20
 	style.corner_radius_top_right = 20
 	style.corner_radius_bottom_left = 20
@@ -6745,7 +7147,7 @@ func _build_settlement_primary_button_style() -> StyleBoxFlat:
 	style.content_margin_bottom = 10
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.28)
 	style.shadow_size = 8
-	style.shadow_offset = Vector2(0, 4)
+	style.shadow_offset = Vector2(5, 6)
 	return style
 
 
@@ -6795,10 +7197,10 @@ func _settlement_display_name(seat: int) -> String:
 
 
 func _player_name_by_seat(seat: int) -> String:
-	var snapshot := game_manager.get_snapshot()
+	var snapshot := last_snapshot if not last_snapshot.is_empty() else game_manager.get_snapshot()
 	var players: Array = snapshot.get("players", [])
 	var player := _player_by_seat(players, seat)
-	return str(player.get("name", ""))
+	return str(player.get("nickname", player.get("name", "")))
 
 
 func _on_settlement_player_selected(seat: int) -> void:
@@ -8128,6 +8530,8 @@ func _load_ui_preferences() -> void:
 		return
 	ai_helper_enabled = bool(config.get_value(UI_PREFS_SECTION, UI_PREFS_KEY_AI_HELPER, false))
 	opponent_hands_enabled = bool(config.get_value(UI_PREFS_SECTION, UI_PREFS_KEY_OPPONENT_HANDS, false))
+	var saved_voice_language := str(config.get_value(UI_PREFS_SECTION, UI_PREFS_KEY_VOICE_LANGUAGE, "mandarin"))
+	voice_language = saved_voice_language if saved_voice_language in ["mandarin", "sichuan"] else "mandarin"
 	table_3d_enabled = bool(config.get_value(UI_PREFS_SECTION, UI_PREFS_KEY_3D_TABLE, true))
 	var saved_skin_id := str(config.get_value(
 		UI_PREFS_SECTION,
@@ -8145,9 +8549,17 @@ func _save_ui_preferences() -> void:
 	var config := ConfigFile.new()
 	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_AI_HELPER, ai_helper_enabled)
 	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_OPPONENT_HANDS, opponent_hands_enabled)
+	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_VOICE_LANGUAGE, voice_language)
 	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_3D_TABLE, table_3d_enabled)
 	config.set_value(UI_PREFS_SECTION, UI_PREFS_KEY_TABLE_SKIN, table_3d_skin_id)
 	config.save(UI_PREFS_PATH)
+
+
+func _on_voice_language_pressed() -> void:
+	voice_language = "sichuan" if voice_language == "mandarin" else "mandarin"
+	voice_cache.clear()
+	_save_ui_preferences()
+	_on_snapshot_changed(game_manager.get_snapshot())
 
 
 func _on_top_ai_tuning_button_pressed() -> void:

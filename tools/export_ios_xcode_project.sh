@@ -77,15 +77,15 @@ trap cleanup_export_guards EXIT
 cp "$PROJECT_DIR/tools/export_ios_xcode_direct.gd" "$TEMP_EXPORT_SCRIPT"
 for directory in docs evidence build dotnet tests tools backups 测试数据统计; do
   marker="$PROJECT_DIR/$directory/.gdignore"
-  # `build` is intentionally a symlink to the external runtime volume on this
-  # workstation. A symlinked external build tree is not part of the Godot
-  # resource scan and may be read-only in constrained release environments.
-  if [[ -L "$PROJECT_DIR/$directory" ]]; then
-    continue
-  fi
-  if [[ -d "$PROJECT_DIR/$directory" && ! -e "$marker" ]]; then
+  # Godot follows the external `build` symlink during export. If its target is
+  # writable, place the same temporary guard there; otherwise fail instead of
+  # silently packaging historical Xcode/APK outputs into data.pck.
+  if [[ -d "$PROJECT_DIR/$directory" && ! -e "$marker" && -w "$PROJECT_DIR/$directory" ]]; then
     : > "$marker"
     CREATED_GDIGNORE+=("$marker")
+  elif [[ -L "$PROJECT_DIR/$directory" && ! -e "$marker" ]]; then
+    echo "Cannot guard symlinked export-only directory: $PROJECT_DIR/$directory"
+    exit 1
   fi
 done
 

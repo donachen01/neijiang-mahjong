@@ -889,26 +889,34 @@ theme_override_constants/margin_bottom = 18
 layout_mode = 2
 theme_override_constants/separation = 9
 
-[node name="SettlementTitle" type="Label" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox"]
+[node name="SettlementHeader" type="GridContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox"]
+layout_mode = 2
+columns = 4
+theme_override_constants/h_separation = 12
+
+[node name="SettlementHeaderLeftSpacer" type="Control" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementHeader"]
 unique_name_in_owner = true
 layout_mode = 2
-horizontal_alignment = 1
+
+[node name="SettlementTitle" type="Label" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementHeader"]
+unique_name_in_owner = true
+layout_mode = 2
 text = "本局结算"
 
-[node name="SettlementCloseButton" type="Button" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox"]
+[node name="SettlementRoundLabel" type="Label" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementHeader"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 10
-custom_minimum_size = Vector2(92, 40)
-text = "关闭"
-
-[node name="SettlementRoundLabel" type="Label" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox"]
-unique_name_in_owner = true
-layout_mode = 2
+size_flags_horizontal = 3
 horizontal_alignment = 1
 text = "第 1 局 · 庄家本家"
 
-[node name="SettlementContent" type="HBoxContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox"]
+[node name="SettlementCloseButton" type="Button" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(92, 40)
+text = "关闭"
+
+[node name="SettlementContent" type="VBoxContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
@@ -917,7 +925,7 @@ theme_override_constants/separation = 18
 [node name="SettlementPlayerListCard" type="Panel" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(292, 0)
+custom_minimum_size = Vector2(0, 180)
 
 [node name="SettlementPlayerListMargin" type="MarginContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementPlayerListCard"]
 layout_mode = 1
@@ -937,10 +945,11 @@ theme_override_constants/separation = 14
 
 [node name="SettlementPlayerListTitle" type="Label" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementPlayerListCard/SettlementPlayerListMargin/SettlementPlayerListVBox"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 text = "玩家结算"
 
-[node name="SettlementPlayerList" type="VBoxContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementPlayerListCard/SettlementPlayerListMargin/SettlementPlayerListVBox"]
+[node name="SettlementPlayerList" type="HBoxContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementPlayerListCard/SettlementPlayerListMargin/SettlementPlayerListVBox"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
@@ -950,6 +959,7 @@ theme_override_constants/separation = 10
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 3
 
 [node name="SettlementDetailMargin" type="MarginContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard"]
 layout_mode = 1
@@ -969,6 +979,7 @@ theme_override_constants/separation = 8
 
 [node name="SettlementHeroCard" type="Panel" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard/SettlementDetailMargin/SettlementDetailVBox"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 custom_minimum_size = Vector2(0, 148)
 
@@ -1037,7 +1048,7 @@ text = "+12"
 [node name="SettlementHandCard" type="Panel" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard/SettlementDetailMargin/SettlementDetailVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-custom_minimum_size = Vector2(0, 190)
+custom_minimum_size = Vector2(0, 280)
 
 [node name="SettlementHandMargin" type="MarginContainer" parent="UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementContent/SettlementDetailCard/SettlementDetailMargin/SettlementDetailVBox/SettlementHandCard"]
 layout_mode = 1

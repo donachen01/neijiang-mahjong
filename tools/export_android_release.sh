@@ -39,7 +39,10 @@ MONO_ANDROID_APK_SHA256="68493b048df30efad322fa565c56c1e88c976fc3e832fe2d3427869
 GRADLE_BUILD_DIR="${GODOT_ANDROID_GRADLE_BUILD_DIR:-/tmp/neijiang_mahjong_android_gradle_build}"
 export GODOT_ANDROID_GRADLE_BUILD_DIR="$GRADLE_BUILD_DIR"
 GRADLE_PROJECT_DIR="$GRADLE_BUILD_DIR/build"
-ANDROID_SOURCE_HASH="8175018790bb188d4962d3350726dffb"
+# Godot compares this value with the installed source template's MD5. Derive
+# it from the verified local template so a legitimate template refresh cannot
+# leave the Gradle build directory stamped with a stale hard-coded hash.
+ANDROID_SOURCE_HASH="$(md5 -q "$ANDROID_SOURCE_TEMPLATE")"
 EXPECTED_BUILD_VERSION="$ANDROID_SOURCE_TEMPLATE [$ANDROID_SOURCE_HASH]"
 
 if [[ -z "$GODOT_BIN" || ! -x "$GODOT_BIN" ]]; then

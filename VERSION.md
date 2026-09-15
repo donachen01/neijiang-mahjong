@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.63`
+Current app version: `1.0.81`
 
-`1.0.63` fixes the iPhone gray-screen regression by aligning the mobile renderer with the Sichuan 3D source project's Forward+ contract, prevents legacy 2D seat/top-bar controls from resurfacing after snapshot refreshes, and adds a packaged runtime probe for verifying the active renderer, 3D camera/table/tile stage, and hidden legacy controls on the installed device.
+`1.0.81` completes the Sichuan-style table and settlement UI migration: a cleaner felt surface, compact nameplates, enlarged skin chooser, aligned settlement header and player cards, larger centred settlement tiles, and source labels above claimed or winning tiles while preserving the v1.0.70 perspective AI policy.
 
 ## Versioning Workflow
 

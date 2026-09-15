@@ -397,7 +397,7 @@ func get_table_skin_contract() -> Dictionary:
 		"felt_inset_material_count": 1 if tabletop_dark_seam != null else 0,
 		"material_target": "TableFelt",
 		"divider_material_target": "SinglePressedFeltSeam",
-		"divider_finish": "single_wide_skin_bound_pressed_dark_felt_seam",
+		"divider_finish": "none_clean_uninterrupted_felt",
 		"uses_displacement": false,
 		"gameplay_geometry_unchanged": true,
 		"table_transform_unchanged": true,
@@ -455,13 +455,13 @@ func _setup_world() -> void:
 	# A restrained warm-grey ambient keeps the emerald felt natural under
 	# Metal's filmic tonemapper. Mahjong tiles receive their own layer-2 fill
 	# below, so this table calibration does not cost glyph readability.
-	environment.ambient_light_color = Color("AEB8A7")
-	environment.ambient_light_energy = 0.045
+	environment.ambient_light_color = Color("A9B79C")
+	environment.ambient_light_energy = 0.22
 	environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	# A very small finishing grade keeps the private-club emerald rich without
 	# changing tile glyph colours or clipping the champagne-gold highlights.
-	environment.adjustment_enabled = true
+	environment.adjustment_enabled = false
 	environment.adjustment_brightness = 1.055
 	environment.adjustment_contrast = 1.035
 	environment.adjustment_saturation = 0.985
@@ -502,8 +502,8 @@ func _setup_world() -> void:
 	# highlight and keeps the forest-green felt from drifting toward cyan. Tiles
 	# receive the dedicated layer-2 fill light, so this table calibration does not
 	# cost glyph readability.
-	key_light.light_color = Color("FFF0E3")
-	key_light.light_energy = 0.28
+	key_light.light_color = Color("FFF1E1")
+	key_light.light_energy = 0.79
 	# DirectionalLight3D shines along local -Z. The -170-degree yaw points the
 	# ground component toward the player's right/down screen quadrant, matching
 	# the supplied commercial reference instead of the former right/up shadow.
@@ -524,8 +524,8 @@ func _setup_world() -> void:
 	fill_light.position = Vector3(-2.6, 7.8, 8.0)
 	# 只照麻将牌的暖中性补光：去掉旧冷蓝补光在象牙材质上形成的灰雾，
 	# 同时不改变绿毡、木框、玩家名牌或其他场景物件的色温。
-	fill_light.light_color = Color("F4DEBC")
-	fill_light.light_energy = 5.0 if compatibility_renderer else 7.0
+	fill_light.light_color = Color("DED8CC")
+	fill_light.light_energy = 1.30
 	fill_light.omni_range = 18.0
 	# Layer 2 is reserved for Mahjong tiles. A camera-side fill preserves glyph
 	# readability on upright faces without washing out the green table or filling
@@ -549,7 +549,7 @@ func _setup_world() -> void:
 	# The previous 0.94 Metal energy lifted the entire cloth into pale mint and
 	# flattened the pile.  A lower grazing source lets the albedo stay deep while
 	# the wider normal/roughness tufts still catch soft local highlights.
-	table_softbox.light_energy = 0.48 if compatibility_renderer else 0.88
+	table_softbox.light_energy = 0.0
 	table_felt_rake_light = table_softbox
 	table_felt_rake_base_energy = table_softbox.light_energy
 	table_softbox.light_cull_mask = 1 << 3
@@ -564,7 +564,7 @@ func _setup_world() -> void:
 	table_velvet_key.name = "TableFeltCenteredOverheadSoftbox"
 	table_velvet_key.position = Vector3(0.0, 10.8, -2.30)
 	table_velvet_key.light_color = Color("F4E7CD")
-	table_velvet_key.light_energy = 4.80 if compatibility_renderer else 7.80
+	table_velvet_key.light_energy = 0.0
 	table_felt_overhead_light = table_velvet_key
 	table_felt_overhead_base_energy = table_velvet_key.light_energy
 	table_velvet_key.spot_range = 18.5
@@ -579,7 +579,7 @@ func _setup_world() -> void:
 	table_bounce.name = "TableFeltCoolBounce"
 	table_bounce.rotation_degrees = Vector3(-72.0, 142.0, 12.0)
 	table_bounce.light_color = Color("B8DACD")
-	table_bounce.light_energy = 0.012
+	table_bounce.light_energy = 0.0
 	table_felt_bounce_light = table_bounce
 	table_felt_bounce_base_energy = table_bounce.light_energy
 	table_bounce.light_cull_mask = 1 << 3
@@ -605,7 +605,9 @@ func _setup_table() -> void:
 	# forbidden: they erase roughness/normal detail and caused the previous plastic table.
 	_preserve_imported_pbr_materials(table)
 	_configure_imported_table_meshes(table)
-	_setup_tabletop_dark_seam(table)
+	# 与四川麻将当前桌面一致：桌布保持完整连续，不额外绘制赛道式边界。
+	tabletop_dark_seam = null
+	tabletop_dark_seam_material = null
 	apply_table_skin(active_table_skin_id)
 
 
@@ -1023,26 +1025,45 @@ func _append_hand_entries(
 
 func _append_meld_entries(desired: Dictionary, seat: int, melds: Array) -> void:
 	var flat_index := 0
+	var accumulated_sequence_shift := 0.0
 	for meld_index in range(melds.size()):
 		var meld: Dictionary = melds[meld_index]
 		var meld_tiles: Array = meld.get("tiles", [])
 		var source_seat := int(meld.get("from_seat", seat))
-		# 碰的中间张、杠的第二张固定承载来源箭头。来源座位仍由 from_seat
-		# 决定箭头方向和文字，不再因为来源方向把箭头挪到牌组两端。
-		var claim_index := mini(1, meld_tiles.size() - 1)
 		var meld_type := str(meld.get("type", ""))
 		var gang_subtype := str(meld.get("gang_subtype", meld.get("gang_type", "melded_gang")))
+		var concealed_gang := _is_concealed_gang(meld)
+		var add_gang := meld_type == "gang" and gang_subtype in ["add_gang", "bu_gang"]
+		var direct_gang := meld_type == "gang" and not concealed_gang and not add_gang
+		var exposes_source := (meld_type == "peng" or direct_gang) and source_seat != seat
+		var claim_index := _claim_tile_index_for_meld(meld_tiles.size(), seat, source_seat) if exposes_source else -1
+		var meld_scale := self_layout_scale * SELF_MELD_VISUAL_SCALE_FACTOR if seat == 0 else MELD_SCALE
+		var half_rotation_extra := (NeijiangTile3D.TILE_SIZE.z - NeijiangTile3D.TILE_SIZE.x) * meld_scale * 0.5
+		var stacked_position := Vector3.ZERO
 		for tile_index in range(meld_tiles.size()):
 			var tile_value = meld_tiles[tile_index]
 			var tile: Dictionary = tile_value
 			var tile_id := int(tile.get("id", flat_index))
-			var concealed_gang := _is_concealed_gang(meld)
+			var is_stacked_add_tile := add_gang and tile_index == meld_tiles.size() - 1
 			var position := _meld_position(seat, tile_index, meld_index, flat_index, concealed_gang)
+			position += _meld_sequence_vector(seat) * accumulated_sequence_shift
+			if claim_index >= 0:
+				if claim_index > 0 and tile_index >= claim_index:
+					position += _meld_sequence_vector(seat) * half_rotation_extra
+				if tile_index > claim_index:
+					position += _meld_sequence_vector(seat) * half_rotation_extra
+				if tile_index == claim_index:
+					position += _meld_owner_outward_vector(seat) * half_rotation_extra
+			if add_gang and tile_index == 1:
+				stacked_position = position
+			if is_stacked_add_tile:
+				position = stacked_position
+				position.y += NeijiangTile3D.TILE_SIZE.y * meld_scale + 0.035
 			var key := "meld_%d_%d_%d" % [seat, meld_index, tile_id]
 			# 本轮暗杠视觉合同：两边明示、中间两张扣背。暗杠没有来源牌，
 			# 因此外侧正面也不会错误出现碰/杠来源箭头。
 			var show_face := not concealed_gang or tile_index == 0 or tile_index == meld_tiles.size() - 1
-			var is_claim_tile := not concealed_gang and source_seat != seat and tile_index == claim_index
+			var is_claim_tile := exposes_source and tile_index == claim_index
 			if not show_face:
 				var concealed_scale := self_layout_scale if seat == 0 else MELD_SCALE
 				position.y += CONCEALED_BACK_FLIP_Y_OFFSET * concealed_scale
@@ -1051,6 +1072,9 @@ func _append_meld_entries(desired: Dictionary, seat: int, melds: Array) -> void:
 				if show_face
 				else _concealed_back_up_basis_for_seat(seat)
 			)
+			# 来源牌本身横放，并按上/对/下家落在左/中/右；不再覆盖箭头。
+			if is_claim_tile:
+				meld_basis = meld_basis * Basis(Vector3.UP, PI * 0.5)
 			desired[key] = _entry(
 				tile,
 				show_face,
@@ -1072,9 +1096,9 @@ func _append_meld_entries(desired: Dictionary, seat: int, melds: Array) -> void:
 				false,
 				false,
 				concealed_gang and not show_face,
-				source_seat if is_claim_tile else -1,
+				-1,
 				seat,
-				meld_type if is_claim_tile else ""
+				""
 			)
 			var motion_kind := "peng" if meld_type == "peng" else "gang"
 			desired[key]["motion_kind"] = motion_kind
@@ -1083,14 +1107,39 @@ func _append_meld_entries(desired: Dictionary, seat: int, melds: Array) -> void:
 			if is_claim_tile:
 				desired[key]["motion_role"] = "source_discard_to_meld"
 				desired[key]["motion_source_seat"] = source_seat
-			elif motion_kind == "gang" and gang_subtype == "add_gang" and tile_index == meld_tiles.size() - 1:
+			elif motion_kind == "gang" and add_gang and tile_index == meld_tiles.size() - 1:
 				desired[key]["motion_role"] = "fourth_tile_hand_to_existing_peng"
 				desired[key]["motion_source_seat"] = seat
 			elif motion_kind == "gang" and gang_subtype == "an_gang":
 				desired[key]["motion_role"] = "concealed_gang_outer_faces_middle_backs"
 			else:
 				desired[key]["motion_role"] = "group_formation"
-			flat_index += 1
+			if not is_stacked_add_tile:
+				flat_index += 1
+		if claim_index >= 0:
+			accumulated_sequence_shift += half_rotation_extra * 2.0
+
+
+func _meld_sequence_vector(seat: int) -> Vector3:
+	match seat:
+		0, 1, 3:
+			return Vector3.RIGHT if seat == 0 else Vector3.BACK
+		2:
+			return Vector3.LEFT
+	return Vector3.RIGHT
+
+
+func _meld_owner_outward_vector(seat: int) -> Vector3:
+	match seat:
+		0:
+			return Vector3.BACK
+		1:
+			return Vector3.LEFT
+		2:
+			return Vector3.FORWARD
+		3:
+			return Vector3.RIGHT
+	return Vector3.BACK
 
 
 func _claim_tile_index_for_meld(tile_count: int, owner_seat: int, source_seat: int) -> int:
@@ -1098,17 +1147,13 @@ func _claim_tile_index_for_meld(tile_count: int, owner_seat: int, source_seat: i
 		return 0
 	if source_seat == owner_seat:
 		return tile_count - 1
-	# 沿用旧 2D 牌组的来源牌落位习惯：横向座位按上/下家分左右，
-	# 纵向座位按对/本家分两端；对面来源落在组中，箭头再给出精确方向。
-	if owner_seat in [0, 2]:
-		if source_seat == 1:
+	var relative_source := posmod(source_seat - owner_seat, 4)
+	match relative_source:
+		1:
 			return 0
-		if source_seat == 3:
-			return tile_count - 1
-	else:
-		if source_seat == 2:
-			return 0
-		if source_seat == 0:
+		2:
+			return mini(1, tile_count - 1)
+		3:
 			return tile_count - 1
 	return mini(1, tile_count - 1)
 
@@ -1773,7 +1818,7 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"right_meld_axis": "same_yaw_and_z_flow_as_right_hand",
 		"far_meld_zone": "below_far_hand_not_right_player_band",
 		"winning_source_markers": true,
-		"meld_source_feedback": "compact_sky_blue_flat_face_arrow_on_second_tile_without_seat_label",
+		"meld_source_feedback": "source_tile_rotated_horizontal_and_placed_left_middle_right_by_relative_seat",
 		"winning_source_feedback": "compact_sky_blue_flat_face_arrow_without_seat_label",
 		"winning_source_text": false,
 		"tile_back_color": NeijiangTile3D.NORMAL_TILE_BACK_COLOR.to_html(false),
@@ -1784,7 +1829,7 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"table_frame_finish": "thick_ebonized_furniture_base_with_deep_tailored_dark_emerald_padded_rail",
 		"table_trim_finish": "continuous_outer_and_inner_champagne_gold_inlay",
 		"table_trim_construction": "recessed_shadow_bed_rounded_satin_body_and_continuous_highlight_glint",
-		"table_divider_finish": "single_wide_skin_bound_pressed_dark_felt_seam_without_bright_outline_or_corner_motifs",
+		"table_divider_finish": "none_clean_uninterrupted_felt",
 		"table_lighting_finish": "broad_uniform_warm_raking_furniture_softbox_with_restrained_opposing_cool_bounce",
 		"concealed_gang_presentation": "outer_faces_middle_jade_backs",
 		"light_count": 6,

@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="内江麻将"
-config/version="1.0.77"
+config/version="1.0.81"
 run/main_scene="res://scenes/boot/SplashScreen.tscn"
 config/features=PackedStringArray("4.6", "C#")
 config/icon="res://res/art/app_icon/app_icon_1024.png"
@@ -38,7 +38,15 @@ project/assembly_name="NeijiangMahjong.Godot"
 
 [rendering]
 
-renderer/rendering_method.mobile="forward_plus"
+# 桌面继续使用 Forward+；iOS/Android 使用针对移动 GPU 的 Mobile 渲染器。
+renderer/rendering_method.mobile="mobile"
 textures/vram_compression/import_etc2_astc=true
 lights_and_shadows/directional_shadow/size.mobile=4096
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile=2
+
+[performance]
+
+mobile_active_frame_cap=60
+mobile_idle_frame_cap=30
+mobile_idle_delay_msec=1400
+mobile_low_processor_sleep_usec=10000

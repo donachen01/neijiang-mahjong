@@ -337,13 +337,13 @@ func _test_neijiang_settlement_hides_stale_ding_que_tags(root_node: Node):
 	}
 	root_node.call("_render_settlement", snapshot)
 	var settlement_title: Label = root_node.get("settlement_player_list_title") as Label
-	if settlement_title == null or settlement_title.text != "流局查叫":
-		return "expected draw settlement title 流局查叫, got %s" % (settlement_title.text if settlement_title != null else "<missing>")
+	if settlement_title == null or settlement_title.text != "本局结算":
+		return "expected unified settlement title 本局结算, got %s" % (settlement_title.text if settlement_title != null else "<missing>")
 	var win_snapshot := snapshot.duplicate(true)
 	win_snapshot["settlement_data"]["end_reason"] = "battle_end"
 	root_node.call("_render_settlement", win_snapshot)
-	if settlement_title.text != "胡牌结算":
-		return "expected battle settlement title 胡牌结算, got %s" % settlement_title.text
+	if settlement_title.text != "本局结算":
+		return "expected battle settlement title 本局结算, got %s" % settlement_title.text
 	var hand_row: Control = root_node.get("settlement_hand_row") as Control
 	if hand_row == null:
 		return "missing settlement hand row"

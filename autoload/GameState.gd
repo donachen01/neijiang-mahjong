@@ -2381,7 +2381,11 @@ func _get_human_trainer_hint_snapshot() -> Dictionary:
 		latest_trainer_hint_cache_key = ""
 		_clear_pending_trainer_hint_request()
 		return {}
-	var can_show_hint: bool = can_human_discard(seat) or can_human_add_gang(seat) or can_human_an_gang(seat) or can_human_self_hu(seat)
+	var reaction_options := get_human_reaction_options(seat)
+	var can_react := bool(reaction_options.get("can_peng", false)) \
+		or bool(reaction_options.get("can_gang", false)) \
+		or bool(reaction_options.get("can_hu", false))
+	var can_show_hint: bool = can_human_discard(seat) or can_human_add_gang(seat) or can_human_an_gang(seat) or can_human_self_hu(seat) or can_react
 	if not can_show_hint:
 		latest_trainer_hint.clear()
 		latest_trainer_hint_cache_key = ""
@@ -2391,9 +2395,50 @@ func _get_human_trainer_hint_snapshot() -> Dictionary:
 	if cache_key == latest_trainer_hint_cache_key and not latest_trainer_hint.is_empty():
 		return latest_trainer_hint.duplicate(true)
 	latest_trainer_hint_cache_key = cache_key
+	if can_react:
+		latest_trainer_hint = _build_human_reaction_trainer_hint(seat, reaction_options)
+		return latest_trainer_hint.duplicate(true)
 	if _start_human_trainer_hint_request(seat, cache_key):
 		return latest_trainer_hint.duplicate(true)
 	return _build_trainer_hint_for_seat(seat)
+
+
+func _build_human_reaction_trainer_hint(seat: int, legal_options: Dictionary) -> Dictionary:
+	var candidate := _get_reaction_candidate_for_seat(seat)
+	if candidate.is_empty() or ai_manager == null or not ai_manager.has_method("analyze_reaction"):
+		return {}
+	var legal_candidate := candidate.duplicate(true)
+	legal_candidate["can_peng"] = bool(legal_options.get("can_peng", false))
+	legal_candidate["can_gang"] = bool(legal_options.get("can_gang", false))
+	legal_candidate["can_hu"] = bool(legal_options.get("can_hu", false))
+	var analysis: Dictionary = ai_manager.analyze_reaction(
+		legal_candidate,
+		_build_player_state(seat),
+		_build_table_state(),
+		current_discard_context,
+		rules,
+		ai_tuning_config,
+		hu_checker,
+		int(ai_level) == int(AILevel.CHEATING)
+	)
+	if analysis.is_empty():
+		return {}
+	var action := str(analysis.get("action", "pass")).strip_edges().to_lower()
+	if action == "peng" and not bool(legal_options.get("can_peng", false)):
+		return {}
+	if action == "gang" and not bool(legal_options.get("can_gang", false)):
+		return {}
+	if action == "hu" and not bool(legal_options.get("can_hu", false)):
+		return {}
+	return {
+		"action_recommendation": action,
+		"action_reason": str(analysis.get("reason", "")),
+		"action_reasons": Array(analysis.get("reasons", [])).duplicate(true),
+		"action_scores": analysis.get("action_scores", {}).duplicate(true),
+		"legal_actions": legal_options.duplicate(true),
+		"backend_mode": str(analysis.get("backend_mode", "")),
+		"state_signature": _ai_reaction_state_signature(seat),
+	}
 
 
 func _build_trainer_hint_cache_key(seat: int) -> String:
@@ -2402,7 +2447,8 @@ func _build_trainer_hint_cache_key(seat: int) -> String:
 	for tile in player.get("hand_tiles", []):
 		hand_ids.append(str(int(tile.get("id", -1))))
 	hand_ids.sort()
-	return "%d|%d|%s|%s|%d|%d|%d|%d" % [
+	var reaction_options := get_human_reaction_options(seat)
+	return "%d|%d|%s|%s|%d|%d|%d|%d|%d|%d|%d" % [
 		int(current_phase),
 		int(current_turn_seat),
 		str(player.get("ding_que", "")),
@@ -2411,6 +2457,9 @@ func _build_trainer_hint_cache_key(seat: int) -> String:
 		int(_get_recent_discard_tile_id()),
 		int(can_human_add_gang(seat)),
 		int(can_human_an_gang(seat)),
+		int(bool(reaction_options.get("can_peng", false))),
+		int(bool(reaction_options.get("can_gang", false))),
+		int(bool(reaction_options.get("can_hu", false))),
 	]
 
 

@@ -27,6 +27,28 @@ func _capture() -> void:
 	get_root().add_child(root_node)
 
 	await process_frame
+	if _capture_mode() == "settlement":
+		_force_settlement_preview(root_node)
+		await process_frame
+		await process_frame
+		var settlement_image: Image = get_root().get_texture().get_image()
+		var settlement_path := ProjectSettings.globalize_path(output_path)
+		var settlement_error := settlement_image.save_png(settlement_path)
+		print(settlement_path)
+		quit(0 if settlement_error == OK else 1)
+		return
+	if _capture_mode() == "skin":
+		var skin_panel: Control = root_node.get("table_3d_skin_panel") as Control
+		if skin_panel != null:
+			skin_panel.call("open", str(root_node.get("table_3d_skin_id")))
+		await process_frame
+		await process_frame
+		var skin_image: Image = get_root().get_texture().get_image()
+		var skin_path := ProjectSettings.globalize_path(output_path)
+		var skin_error := skin_image.save_png(skin_path)
+		print(skin_path)
+		quit(0 if skin_error == OK else 1)
+		return
 	_force_playable_snapshot()
 	_force_discard_demo()
 	_log_self_hand_debug(root_node)
@@ -37,6 +59,12 @@ func _capture() -> void:
 	_force_self_hand_preview(root_node)
 	_force_self_hu_preview(root_node)
 	_force_ai_helper_preview(root_node)
+	if _capture_mode() == "utility-expanded":
+		var utility := root_node.get("table_3d_utility_bar") as Control
+		if utility != null:
+			utility.call("set_collapsed", false)
+		await process_frame
+		await process_frame
 
 	var image: Image = get_root().get_texture().get_image()
 	if image == null:
@@ -62,6 +90,54 @@ func _capture_output_path() -> String:
 			if value != "":
 				return value
 	return DEFAULT_OUTPUT_PATH
+
+
+func _capture_mode() -> String:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--capture-mode="):
+			return argument.trim_prefix("--capture-mode=")
+	return "table"
+
+
+func _force_settlement_preview(root_node: Node) -> void:
+	var players := []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"nickname": ["陈旭", "舒燕", "陈东", "舒玲"][seat],
+			"score": [18, -4, 7, -11][seat],
+			"hand_tiles": [
+				{"id": 8000 + seat * 20, "suit": "tiao", "rank": 2},
+				{"id": 8001 + seat * 20, "suit": "tiao", "rank": 3},
+				{"id": 8002 + seat * 20, "suit": "tong", "rank": 5},
+				{"id": 8003 + seat * 20, "suit": "tong", "rank": 6},
+				{"id": 8004 + seat * 20, "suit": "wan", "rank": 8},
+			],
+			"melds": [],
+			"has_won": seat == 0,
+			"winning_tile": {"id": 8999, "suit": "tong", "rank": 5} if seat == 0 else {},
+		})
+	var snapshot := {
+		"current_phase": 7,
+		"round_index": 8,
+		"current_dealer_seat": 0,
+		"rules": {"use_ding_que_phase": false},
+		"players": players,
+		"settlement_data": {
+			"round_index": 8,
+			"dealer_seat": 0,
+			"end_reason": "battle_end",
+			"score_changes": {0: 12, 1: -4, 2: 1, 3: -9},
+			"winner_seats": [0],
+			"win_events": [{"winner_seat": 0, "source_seat": 3, "winning_tile": {"id": 8999, "suit": "tong", "rank": 5}, "win_type": "discard_win"}],
+			"gang_events": [],
+			"draw_assessment": [],
+		},
+	}
+	root_node.call("_render_settlement", snapshot)
+	var overlay := root_node.get("settlement_overlay") as Control
+	if overlay != null:
+		overlay.visible = true
 
 
 func _force_playable_snapshot() -> void:

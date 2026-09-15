@@ -6,7 +6,8 @@ signal closed
 
 const CATALOG := preload("res://scripts/ui/table/NeijiangTableSkinCatalog.gd")
 const BODY_FONT := preload("res://res/fonts/app_cjk.ttc")
-const CARD_SIZE := Vector2(320.0, 138.0)
+const CARD_SIZE := Vector2(420.0, 176.0)
+const AUTHORED_SIZE := Vector2(940.0, 752.0)
 
 var selected_skin_id := NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
 var safe_margins := Vector4(18.0, 14.0, 18.0, 18.0)
@@ -20,7 +21,7 @@ var skin_buttons: Dictionary = {}
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	z_index = 90
+	z_index = 320
 	_build_ui()
 	visible = false
 	set_process_unhandled_key_input(true)
@@ -28,8 +29,9 @@ func _ready() -> void:
 
 func open(current_skin_id: String) -> void:
 	selected_skin_id = current_skin_id if CATALOG.has_skin(current_skin_id) else CATALOG.DEFAULT_SKIN_ID
-	_refresh_selection()
 	visible = true
+	_refresh_selection()
+	_apply_safe_layout()
 	call_deferred("_focus_selected")
 
 
@@ -53,6 +55,8 @@ func get_visual_contract() -> Dictionary:
 		"columns": 2,
 		"touch_target": CARD_SIZE,
 		"modal": true,
+		"blocks_gameplay_input": true,
+		"authored_size": AUTHORED_SIZE,
 	}
 
 
@@ -78,14 +82,14 @@ func _build_ui() -> void:
 	add_child(panel)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 26)
-	margin.add_theme_constant_override("margin_top", 22)
-	margin.add_theme_constant_override("margin_right", 26)
-	margin.add_theme_constant_override("margin_bottom", 24)
+	margin.add_theme_constant_override("margin_left", 30)
+	margin.add_theme_constant_override("margin_top", 26)
+	margin.add_theme_constant_override("margin_right", 30)
+	margin.add_theme_constant_override("margin_bottom", 28)
 	panel.add_child(margin)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 16)
+	column.add_theme_constant_override("separation", 18)
 	margin.add_child(column)
 
 	var header := HBoxContainer.new()
@@ -95,15 +99,15 @@ func _build_ui() -> void:
 	title_label.text = "桌布皮肤"
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_label.add_theme_font_override("font", BODY_FONT)
-	title_label.add_theme_font_size_override("font_size", 28)
+	title_label.add_theme_font_size_override("font_size", 40)
 	title_label.add_theme_color_override("font_color", Color("FFF1CF"))
 	header.add_child(title_label)
 	close_button = Button.new()
 	close_button.text = "关闭"
-	close_button.custom_minimum_size = Vector2(92.0, 52.0)
+	close_button.custom_minimum_size = Vector2(132.0, 68.0)
 	close_button.focus_mode = Control.FOCUS_ALL
 	close_button.add_theme_font_override("font", BODY_FONT)
-	close_button.add_theme_font_size_override("font_size", 19)
+	close_button.add_theme_font_size_override("font_size", 28)
 	close_button.add_theme_stylebox_override("normal", _button_style(Color("173D31"), Color("B88943"), 1))
 	close_button.add_theme_stylebox_override("hover", _button_style(Color("245A42"), Color("E2BC6A"), 2))
 	close_button.add_theme_stylebox_override("pressed", _button_style(Color("102E27"), Color("E2BC6A"), 2))
@@ -114,14 +118,14 @@ func _build_ui() -> void:
 	var description := Label.new()
 	description.text = "六套 Poly Haven 实体布料材质，仅更换桌布与专属灯光，不影响牌局操作。"
 	description.add_theme_font_override("font", BODY_FONT)
-	description.add_theme_font_size_override("font_size", 17)
+	description.add_theme_font_size_override("font_size", 24)
 	description.add_theme_color_override("font_color", Color("D8CFB7"))
 	column.add_child(description)
 
 	grid = GridContainer.new()
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 14)
-	grid.add_theme_constant_override("v_separation", 14)
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 16)
 	column.add_child(grid)
 	for skin in CATALOG.all_skins():
 		_create_skin_card(skin)
@@ -140,11 +144,11 @@ func _create_skin_card(skin: Dictionary) -> void:
 	button.expand_icon = true
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.add_theme_font_override("font", BODY_FONT)
-	button.add_theme_font_size_override("font_size", 20)
+	button.add_theme_font_size_override("font_size", 29)
 	button.add_theme_color_override("font_color", Color("F4E9D0"))
 	button.add_theme_color_override("font_hover_color", Color("FFF4D8"))
 	button.add_theme_color_override("font_pressed_color", Color("FFF4D8"))
-	button.add_theme_constant_override("icon_separation", 18)
+	button.add_theme_constant_override("icon_separation", 22)
 	button.pressed.connect(_select_skin.bind(skin_id))
 	grid.add_child(button)
 	skin_buttons[skin_id] = button
@@ -208,11 +212,10 @@ func _apply_safe_layout() -> void:
 	if panel == null:
 		return
 	var available := size - Vector2(safe_margins.x + safe_margins.z, safe_margins.y + safe_margins.w)
-	var authored_size := Vector2(700.0, 578.0)
-	var fit_scale := minf(1.0, minf(available.x / authored_size.x, available.y / authored_size.y))
-	panel.size = authored_size
+	var fit_scale := minf(1.0, minf(available.x / AUTHORED_SIZE.x, available.y / AUTHORED_SIZE.y))
+	panel.size = AUTHORED_SIZE
 	panel.scale = Vector2.ONE * maxf(0.58, fit_scale)
-	var visual_size := authored_size * panel.scale
+	var visual_size := AUTHORED_SIZE * panel.scale
 	panel.position = Vector2(
 		safe_margins.x + maxf(0.0, (available.x - visual_size.x) * 0.5),
 		safe_margins.y + maxf(0.0, (available.y - visual_size.y) * 0.5)

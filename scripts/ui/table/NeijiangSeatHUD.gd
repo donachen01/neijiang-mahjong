@@ -3,7 +3,7 @@ extends Control
 
 # 与四川麻将最新版保持一致的“墨玉漆面 + 低饱和古铜”材质语言。
 # 状态仍由内江规则数据驱动；这里仅改变信息的视觉承载方式。
-const HUD_SIZE := Vector2(230.0, 146.0)
+const HUD_SIZE := Vector2(190.0, 132.0)
 const JADE_SHELL := Color("0D3029")
 const JADE_MEDALLION := Color("163E34")
 const JADE_BADGE := Color("194B3C")
@@ -34,6 +34,18 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	custom_minimum_size = HUD_SIZE
 	_build_ui()
+	resized.connect(_apply_responsive_type)
+	_apply_responsive_type()
+
+
+func _apply_responsive_type() -> void:
+	if name_label == null:
+		return
+	var type_scale := clampf(size.y / HUD_SIZE.y, 0.92, 1.0)
+	name_label.add_theme_font_size_override("font_size", int(round(39.0 * type_scale)))
+	score_label.add_theme_font_size_override("font_size", int(round(42.0 * type_scale)))
+	dealer_badge.add_theme_font_size_override("font_size", int(round(30.0 * type_scale)))
+	dealer_badge.position = Vector2(maxf(6.0, size.x - 50.0), 6.0)
 
 
 func configure(seat_index: int) -> void:
@@ -71,11 +83,11 @@ func get_visual_contract() -> Dictionary:
 		"active_state_uses_shape_and_color": true,
 		"minimum_size": custom_minimum_size,
 		"material_family": "unified_smoked_jade_nameplate",
-		"identity_encoding": ["nickname_last_glyph", "name", "score"],
+		"identity_encoding": ["name", "score"],
 		"active_treatment": "single_thin_antique_gold_edge",
 		"active_text_badge": "none",
 		"badges_inside_bounds": true,
-		"name_font_path": NAME_FONT.resource_path,
+		"name_font_path": BODY_FONT.resource_path,
 		"body_font_path": BODY_FONT.resource_path,
 	}
 
@@ -104,10 +116,10 @@ func _build_ui() -> void:
 	var margin := MarginContainer.new()
 	margin.name = "HudContentMargin"
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 10)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_right", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 6)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 6)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(margin)
 
@@ -120,6 +132,7 @@ func _build_ui() -> void:
 	avatar_center.custom_minimum_size = Vector2(72, 72)
 	avatar_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	avatar_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	avatar_center.visible = false
 	row.add_child(avatar_center)
 
 	avatar_medallion = AVATAR_MEDALLION_SCRIPT.new() as Control
@@ -146,35 +159,38 @@ func _build_ui() -> void:
 	text_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	text_column.alignment = BoxContainer.ALIGNMENT_CENTER
-	text_column.add_theme_constant_override("separation", 0)
+	text_column.add_theme_constant_override("separation", 7)
 	text_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(text_column)
 
 	name_label = Label.new()
 	name_label.name = "PlayerName"
 	name_label.text = "玩家"
-	name_label.custom_minimum_size = Vector2(0, 38)
+	name_label.custom_minimum_size = Vector2(0, 42)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	name_label.add_theme_font_size_override("font_size", 28)
-	name_label.add_theme_font_override("font", NAME_FONT)
+	name_label.add_theme_font_size_override("font_size", 39)
+	var emphasized_font := FontVariation.new()
+	emphasized_font.base_font = BODY_FONT
+	emphasized_font.variation_embolden = 0.72
+	name_label.add_theme_font_override("font", emphasized_font)
 	_apply_text_style(name_label, TEXT_PRIMARY)
 	text_column.add_child(name_label)
 
 	score_label = Label.new()
 	score_label.name = "PlayerScore"
 	score_label.text = "0分"
-	score_label.custom_minimum_size = Vector2(0, 36)
+	score_label.custom_minimum_size = Vector2(0, 40)
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	score_label.add_theme_font_size_override("font_size", 27)
+	score_label.add_theme_font_size_override("font_size", 42)
 	score_label.add_theme_font_override("font", BODY_FONT)
 	_apply_text_style(score_label, TEXT_SECONDARY)
 	text_column.add_child(score_label)
 
 	status_row = HBoxContainer.new()
-	status_row.custom_minimum_size = Vector2(0, 32)
+	status_row.custom_minimum_size = Vector2(0, 26)
 	status_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	status_row.add_theme_constant_override("separation", 5)
 	status_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -223,12 +239,12 @@ func _make_badge(text_value: String, fill: Color, width: float) -> Label:
 
 func _shell_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = JADE_SHELL
-	style.border_color = Color(AGED_COPPER, 0.46)
+	style.bg_color = Color(0.025, 0.13, 0.11, 0.28)
+	style.border_color = Color(Color("9D743A"), 0.62)
 	style.set_border_width_all(1)
 	style.set_corner_radius_all(8)
-	style.shadow_color = Color(0.0, 0.02, 0.01, 0.32)
-	style.shadow_size = 5
+	style.shadow_color = Color(0.0, 0.02, 0.01, 0.16)
+	style.shadow_size = 4
 	style.shadow_offset = Vector2(2, 3)
 	style.set_content_margin_all(6)
 	return style
