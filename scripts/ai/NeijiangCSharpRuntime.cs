@@ -510,6 +510,13 @@ public partial class NeijiangCSharpRuntime : Node
             tier = item.Tier,
             tierRank = item.TierRank,
             tierAdjustment = item.TierAdjustment,
+            perspectiveBranchScore = item.PerspectiveBranchScore,
+            perspectiveBranchCount = item.PerspectiveBranchCount,
+            perspectiveExpectedNextShanten = item.PerspectiveExpectedNextShanten,
+            perspectiveExpectedNextLiveUkeire = item.PerspectiveExpectedNextLiveUkeire,
+            perspectiveWorstNextShanten = item.PerspectiveWorstNextShanten,
+            perspectiveWorstNextLiveUkeire = item.PerspectiveWorstNextLiveUkeire,
+            perspectiveTwoDrawCompletionProxy = item.PerspectiveTwoDrawCompletionProxy,
             dealInTargetSeats = item.DealInTargetSeats,
             reasons = item.Reasons
         };
@@ -716,6 +723,13 @@ public partial class NeijiangCSharpRuntime : Node
         sb.Append(",\"tier\":\"").Append(EscapeJsonString(item.Tier)).Append('"');
         sb.Append(",\"tierRank\":").Append(item.TierRank);
         sb.Append(",\"tierAdjustment\":").Append(item.TierAdjustment);
+        sb.Append(",\"perspectiveBranchScore\":").Append(JsonDouble(item.PerspectiveBranchScore));
+        sb.Append(",\"perspectiveBranchCount\":").Append(item.PerspectiveBranchCount);
+        sb.Append(",\"perspectiveExpectedNextShanten\":").Append(JsonDouble(item.PerspectiveExpectedNextShanten));
+        sb.Append(",\"perspectiveExpectedNextLiveUkeire\":").Append(JsonDouble(item.PerspectiveExpectedNextLiveUkeire));
+        sb.Append(",\"perspectiveWorstNextShanten\":").Append(item.PerspectiveWorstNextShanten);
+        sb.Append(",\"perspectiveWorstNextLiveUkeire\":").Append(item.PerspectiveWorstNextLiveUkeire);
+        sb.Append(",\"perspectiveTwoDrawCompletionProxy\":").Append(JsonDouble(item.PerspectiveTwoDrawCompletionProxy));
         sb.Append(",\"dealInTargetSeats\":");
         AppendJsonIntArray(sb, item.DealInTargetSeats);
         sb.Append(",\"reasons\":");

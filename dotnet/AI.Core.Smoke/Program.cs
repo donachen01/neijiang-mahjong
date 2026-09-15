@@ -215,6 +215,12 @@ if (!SmokeLimitedLookaheadScoresFutureImprovement())
     return 14;
 }
 
+if (!SmokePerspectiveBranchUsesExactWallAndWorstBranch())
+{
+    Console.Error.WriteLine("perspective_branch_smoke_failed");
+    return 1401;
+}
+
 if (!SmokeHellOracleRejectsExactDealIn())
 {
     Console.Error.WriteLine("hell_oracle_dealin_smoke_failed");
@@ -2374,6 +2380,27 @@ static bool SmokeLimitedLookaheadScoresFutureImprovement()
         && summary.Score > -18.0;
 }
 
+static bool SmokePerspectiveBranchUsesExactWallAndWorstBranch()
+{
+    var hand = new int[18];
+    foreach (var tile in new[] { 0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 16, 17 })
+        hand[tile]++;
+    var wall = Enumerable.Repeat(1, 18).ToArray();
+    wall[6] = 4;
+    wall[14] = 3;
+    var engine = new NeijiangPerspectiveBranchEngine();
+    var summary = engine.Evaluate(hand, wall, 0, 1, 5);
+    var sixBranch = summary.Branches.FirstOrDefault(branch => branch.DrawTileType == 6);
+    Console.WriteLine($"perspective_branch score={summary.Score:F2} branches={summary.BranchCount} expected={summary.ExpectedNextShanten:F2}/{summary.ExpectedNextLiveUkeire:F2} worst={summary.WorstNextShanten}/{summary.WorstNextLiveUkeire}");
+    return summary.BranchCount > 0
+        && sixBranch is not null
+        && sixBranch.DrawCount == 4
+        && sixBranch.BestDiscardTileType is >= 0 and < 18
+        && double.IsFinite(summary.Score)
+        && summary.WorstNextShanten >= summary.ExpectedNextShanten
+        && summary.Reasons.Any(reason => reason.Contains("透视两步", StringComparison.Ordinal));
+}
+
 static bool SmokeHellOracleRejectsExactDealIn()
 {
     var aiHand = new int[18];
@@ -2528,7 +2555,11 @@ static bool SmokeHellChallengeReportsSelectedShape()
     return result.SelectedShanten == selected.Shanten
         && result.SelectedLiveUkeire == selected.LiveUkeire
         && result.SelectedWaitCount == selected.WaitCount
-        && result.SelectedTier == selected.Tier;
+        && result.SelectedTier == selected.Tier
+        && selected.PerspectiveBranchCount > 0
+        && double.IsFinite(selected.PerspectiveBranchScore)
+        && selected.PerspectiveWorstNextShanten >= selected.PerspectiveExpectedNextShanten
+        && selected.Reasons.Any(reason => reason.Contains("透视两步", StringComparison.Ordinal));
 }
 
 static bool SmokeHellChallengeTierKeepsOneAwayOverWideTwoAway()

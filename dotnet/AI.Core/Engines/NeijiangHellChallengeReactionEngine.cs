@@ -9,6 +9,7 @@ public sealed class NeijiangHellChallengeReactionEngine
     private readonly NeijiangShantenEngine _shanten = new();
     private readonly NeijiangUkeireEngine _ukeire = new();
     private readonly NeijiangHellChallengeEngine _followUpDiscard = new();
+    private readonly NeijiangPerspectiveBranchEngine _perspectiveBranches = new();
 
     public NeijiangReactionDecisionResult DecideReaction(
         NeijiangStateView state,
@@ -72,7 +73,13 @@ public sealed class NeijiangHellChallengeReactionEngine
                 }.Concat(teamPlan.Reasons).Distinct().ToArray());
         }
 
-        var best = BuildPassResult(reactionTileType, currentShanten, currentLive, humanPressure, scores);
+        var passPerspective = _perspectiveBranches.Evaluate(
+            state.Hand18,
+            exactWall18,
+            currentMeldCount,
+            currentShanten,
+            currentLive);
+        var best = BuildPassResult(reactionTileType, currentShanten, currentLive, humanPressure, scores, passPerspective);
         var bestKey = "pass";
         var directMeldedGangAvailable = canGang
             && reactionTileType is >= 0 and < 18
@@ -159,10 +166,12 @@ public sealed class NeijiangHellChallengeReactionEngine
         int currentShanten,
         int currentLive,
         int humanPressure,
-        Dictionary<string, int> scores)
+        Dictionary<string, int> scores,
+        NeijiangPerspectiveBranchSummary perspective)
     {
-        var score = -20 + currentLive * 4 - humanPressure * 8;
+        var score = (int)Math.Round(-20 + currentLive * 4 - humanPressure * 8 + perspective.Score);
         scores["pass"] = score;
+        scores["pass_perspective_branch"] = (int)Math.Round(perspective.Score);
         return BuildResult(
             NeijiangActionType.Pass,
             reactionTileType,
@@ -177,7 +186,7 @@ public sealed class NeijiangHellChallengeReactionEngine
             {
                 "地狱挑战：过牌保留当前路径",
                 $"当前活张 {currentLive}"
-            });
+            }.Concat(perspective.Reasons).Distinct().ToArray());
     }
 
     private NeijiangReactionDecisionResult EvaluateCall(
@@ -199,6 +208,9 @@ public sealed class NeijiangHellChallengeReactionEngine
         var meldCountAfter = state.GetMeldCount(state.SeatIndex) + 1;
         var shantenAfter = _shanten.CalcBestShanten(handAfter, meldCountAfter);
         var liveAfter = EstimateBestLiveUkeire(handAfter, exactWall18, meldCountAfter);
+        var perspective = actionType == NeijiangActionType.Peng
+            ? EvaluateBestPostPengRoute(handAfter, exactWall18, meldCountAfter)
+            : _perspectiveBranches.Evaluate(handAfter, exactWall18, meldCountAfter, shantenAfter, liveAfter);
         var blocksHuman = sourceSeat == 0 && reactionType == "discard";
         var callBase = actionType == NeijiangActionType.Gang ? 190 : 120;
         var teamPlanPressure = blocksHuman ? seatPlan.CallInterceptionBias : seatPlan.PressureBonus / 3;
@@ -215,7 +227,8 @@ public sealed class NeijiangHellChallengeReactionEngine
         {
             nonHumanMiddlePengPenalty = 460;
         }
-        var score = callBase + teamBlockBonus + speedScore + readyBonus + gangBonus - slowPenalty - nonHumanMiddlePengPenalty;
+        var score = (int)Math.Round(callBase + teamBlockBonus + speedScore + readyBonus + gangBonus
+            - slowPenalty - nonHumanMiddlePengPenalty + perspective.Score);
         var actionText = actionType == NeijiangActionType.Gang ? "杠" : "碰";
         var reasons = new List<string>
         {
@@ -233,16 +246,43 @@ public sealed class NeijiangHellChallengeReactionEngine
             reasons.Add("团队：明杠收雨钱并争取补牌");
         if (nonHumanMiddlePengPenalty > 0)
             reasons.Add("牌理约束：AI 间中张碰牌未直接下叫，避免见碰就碰");
+        reasons.AddRange(perspective.Reasons);
 
         var scores = new Dictionary<string, int>(inheritedScores)
         {
             [actionType == NeijiangActionType.Gang ? "gang" : "peng"] = score,
+            [actionType == NeijiangActionType.Gang ? "gang_perspective_branch" : "peng_perspective_branch"] = (int)Math.Round(perspective.Score),
             ["team_block_human"] = blocksHuman ? teamBlockBonus : 0,
             ["team_plan_pressure"] = teamPlanPressure
         };
         if (nonHumanMiddlePengPenalty > 0)
             scores["middle_peng_shape_penalty"] = -nonHumanMiddlePengPenalty;
         return BuildResult(actionType, reactionTileType, score, currentShanten, currentLive, shantenAfter, liveAfter, humanPressure, scores, reasons.Concat(teamPlanReasons).Distinct().ToArray());
+    }
+
+    private NeijiangPerspectiveBranchSummary EvaluateBestPostPengRoute(
+        IReadOnlyList<int> handAfterPeng,
+        IReadOnlyList<int> exactWall18,
+        int meldCountAfter)
+    {
+        NeijiangPerspectiveBranchSummary? best = null;
+        var bestCombined = double.NegativeInfinity;
+        for (var discardTile = 0; discardTile < 18; discardTile++)
+        {
+            if (handAfterPeng[discardTile] <= 0)
+                continue;
+            var afterDiscard = handAfterPeng.Take(18).ToArray();
+            afterDiscard[discardTile]--;
+            var shanten = _shanten.CalcBestShanten(afterDiscard, meldCountAfter);
+            var live = EstimateBestLiveUkeire(afterDiscard, exactWall18, meldCountAfter);
+            var branch = _perspectiveBranches.Evaluate(afterDiscard, exactWall18, meldCountAfter, shanten, live);
+            var combined = -shanten * 900.0 + live * 25.0 + branch.Score;
+            if (combined <= bestCombined)
+                continue;
+            bestCombined = combined;
+            best = branch;
+        }
+        return best ?? new NeijiangPerspectiveBranchSummary();
     }
 
     private NeijiangReactionDecisionResult ApplyPengRediscardSameTilePenalty(

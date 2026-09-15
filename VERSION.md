@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.81`
+Current app version: `1.0.82`
 
-`1.0.81` completes the Sichuan-style table and settlement UI migration: a cleaner felt surface, compact nameplates, enlarged skin chooser, aligned settlement header and player cards, larger centred settlement tiles, and source labels above claimed or winning tiles while preserving the v1.0.70 perspective AI policy.
+`1.0.82` fuses the proven Sichuan two-ply route comparison into Neijiang's v1.0.70 perspective policy. Exact-wall discard candidates now compare weighted draw, best follow-up discard, expected live waits, completion proxy, and worst branches; pass, peng, and gang reactions use the same branch depth, while normal late-wall play re-enables bounded lightweight lookahead. The 1.0.81 UI remains unchanged.
 
 ## Versioning Workflow
 

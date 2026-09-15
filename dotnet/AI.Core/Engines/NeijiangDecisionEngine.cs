@@ -116,7 +116,7 @@ public sealed class NeijiangDecisionEngine
                 meldCount,
                 effectiveShanten,
                 effectiveLiveUkeire,
-                0);
+                ResolveLookaheadDrawTypes(state.WallCount, effectiveShanten));
             limitedLookaheadMs += Stopwatch.GetElapsedTime(moduleStarted).TotalMilliseconds;
             var dangerEval = _danger.EvaluateDetail(tileType, state, belief);
             var danger = dangerEval.Risk;
@@ -1061,6 +1061,14 @@ public sealed class NeijiangDecisionEngine
         if (shanten <= 1) return 3;
         if (liveUkeire >= 6) return 4;
         return 5;
+    }
+
+    private static int ResolveLookaheadDrawTypes(int wallCount, int shanten)
+    {
+        if (wallCount <= 0) return 0;
+        if (wallCount <= 6) return 6;
+        if (wallCount <= 12 && shanten <= 1) return 4;
+        return 0;
     }
 
     private static double EstimateTenpaiProbability(int shanten, int liveUkeire)

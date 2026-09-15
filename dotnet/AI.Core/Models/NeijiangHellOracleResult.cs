@@ -53,6 +53,13 @@ public sealed class NeijiangHellChallengeCandidate
     public string Tier { get; init; } = "";
     public int TierRank { get; init; }
     public int TierAdjustment { get; init; }
+    public double PerspectiveBranchScore { get; init; }
+    public int PerspectiveBranchCount { get; init; }
+    public double PerspectiveExpectedNextShanten { get; init; }
+    public double PerspectiveExpectedNextLiveUkeire { get; init; }
+    public int PerspectiveWorstNextShanten { get; init; }
+    public int PerspectiveWorstNextLiveUkeire { get; init; }
+    public double PerspectiveTwoDrawCompletionProxy { get; init; }
     public IReadOnlyList<int> DealInTargetSeats { get; init; } = Array.Empty<int>();
     public IReadOnlyList<string> Reasons { get; init; } = Array.Empty<string>();
 }

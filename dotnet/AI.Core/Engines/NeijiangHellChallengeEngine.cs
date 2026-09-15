@@ -8,6 +8,7 @@ public sealed class NeijiangHellChallengeEngine
     private readonly NeijiangUkeireEngine _ukeire = new();
     private readonly NeijiangHandShapeEngine _shape = new();
     private readonly NeijiangBaoJiaoActionEngine _baoJiaoAction = new();
+    private readonly NeijiangPerspectiveBranchEngine _perspectiveBranches = new();
 
     public NeijiangHellOracleResult DecideDiscard(
         NeijiangStateView state,
@@ -102,6 +103,12 @@ public sealed class NeijiangHellChallengeEngine
                 : improvingTiles.Sum(tile => SafeCount(exactWall18, tile));
             var keepsReady = exactReadyTiles.Count > 0 || shanten <= 0;
             var shapeSummary = _shape.Evaluate(remainingHand, exactWall18.ToArray(), meldCount, shanten);
+            var perspectiveBranch = _perspectiveBranches.Evaluate(
+                remainingHand,
+                exactWall18,
+                meldCount,
+                shanten,
+                exactWallRemaining);
             var speedPressure = ResolveSpeedPressure(state.WallCount, shanten, keepsReady);
             var humanPengThreat = feedsHumanPeng
                 ? EstimateHumanPengThreat(state, allHands18, exactWall18, tileType)
@@ -154,6 +161,7 @@ public sealed class NeijiangHellChallengeEngine
                 + speedPressure
                 + tierAdjustment
                 + (int)Math.Round(shapeSummary.ShapeScore * 210.0)
+                + (int)Math.Round(perspectiveBranch.Score)
                 + (feedsHumanPeng && humanPengThreat <= 1 && keepsReady && exactWallRemaining > 0 ? 900 : 0)
                 + tempoPengAllowanceBonus
                 + pengOnlyInteractionBonus
@@ -194,6 +202,8 @@ public sealed class NeijiangHellChallengeEngine
                 reasons.Add("老麻将：抢先下叫，速度优先");
             foreach (var reason in shapeSummary.Reasons.Take(2))
                 reasons.Add(reason);
+            foreach (var reason in perspectiveBranch.Reasons.Take(3))
+                reasons.Add(reason);
             reasons.Add($"三家协作：{seatPlan.Summary}，弃牌安全偏置 +{seatPlan.DiscardSafetyBias}");
             candidates.Add(new NeijiangHellChallengeCandidate
             {
@@ -215,6 +225,13 @@ public sealed class NeijiangHellChallengeEngine
                 Tier = tier.Label,
                 TierRank = tier.Rank,
                 TierAdjustment = tierAdjustment,
+                PerspectiveBranchScore = perspectiveBranch.Score,
+                PerspectiveBranchCount = perspectiveBranch.BranchCount,
+                PerspectiveExpectedNextShanten = perspectiveBranch.ExpectedNextShanten,
+                PerspectiveExpectedNextLiveUkeire = perspectiveBranch.ExpectedNextLiveUkeire,
+                PerspectiveWorstNextShanten = perspectiveBranch.WorstNextShanten,
+                PerspectiveWorstNextLiveUkeire = perspectiveBranch.WorstNextLiveUkeire,
+                PerspectiveTwoDrawCompletionProxy = perspectiveBranch.OrderedTwoDrawCompletionProxy,
                 DealInTargetSeats = dealInTargetSeats.ToArray(),
                 Reasons = reasons.ToArray()
             });
