@@ -55,6 +55,8 @@ func build_score_changes(players: Array, settlement_data: Dictionary, rules_conf
 			var transfer_type: String = str(event.get("transfer_type", ""))
 			if transfer_type != "hu_jiao_zhuan_yi":
 				continue
+			if not _is_transfer_actor_eligible(players, settlement_data, event):
+				continue
 			var winner_seat: int = int(event.get("to_seat", -1))
 			var gang_type: String = str(event.get("gang_type", ""))
 			var payer_seats: Array = event.get("payer_seats", [])
@@ -87,6 +89,19 @@ func build_score_changes(players: Array, settlement_data: Dictionary, rules_conf
 	_apply_draw_adjustments(changes, settlement_data)
 
 	return changes
+
+
+func _is_transfer_actor_eligible(players: Array, settlement_data: Dictionary, event: Dictionary) -> bool:
+	var actor_seat: int = int(event.get("from_seat", event.get("related_actor_seat", -1)))
+	if actor_seat < 0 or actor_seat >= players.size():
+		return false
+	if bool(players[actor_seat].get("has_won", false)):
+		return true
+	for item in settlement_data.get("draw_assessment", []):
+		if int(item.get("seat", -1)) != actor_seat:
+			continue
+		return bool(item.get("is_ting", false))
+	return bool(players[actor_seat].get("bao_jiao", false))
 
 
 func _resolve_hand_basic_score(capped_fan: int, rules_config = null) -> int:

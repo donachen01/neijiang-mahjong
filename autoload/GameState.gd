@@ -5116,6 +5116,7 @@ func _finalize_qiang_gang_after_hu_or_pass() -> void:
 	if qiang_status == "claimed_by_hu":
 		var actor_seat: int = int(pending_qiang_gang_context.get("actor_seat", current_turn_seat))
 		var winner_seats: Array = pending_qiang_gang_context.get("winner_seats", [])
+		_append_qiang_gang_zhuan_yi_event(actor_seat, winner_seats)
 		pending_qiang_gang_context.clear()
 		_clear_reaction_context()
 		var next_seat := _resolve_resume_seat_after_discard_hu(actor_seat, winner_seats)
@@ -5657,6 +5658,32 @@ func _append_hu_jiao_zhuan_yi_event(from_seat: int, to_seat: int, tile: Dictiona
 	_rebuild_settlement_summary()
 
 
+func _append_qiang_gang_zhuan_yi_event(from_seat: int, winner_seats: Array) -> void:
+	if winner_seats.is_empty() or pending_qiang_gang_context.is_empty():
+		return
+	var to_seat: int = int(winner_seats[0])
+	var payer_seats: Array = []
+	for payer in _get_active_non_winner_seats_excluding(from_seat):
+		var payer_seat: int = int(payer)
+		if payer_seat != to_seat:
+			payer_seats.append(payer_seat)
+	var events: Array = settlement_data.get("transfer_events", [])
+	events.append(
+		{
+			"from_seat": from_seat,
+			"to_seat": to_seat,
+			"tile": Dictionary(pending_qiang_gang_context.get("tile", {})).duplicate(true),
+			"transfer_type": "hu_jiao_zhuan_yi",
+			"reason": "补杠被抢胡，补杠雨钱按内江规则转给顺位第一胡家。",
+			"gang_type": "add_gang",
+			"payer_seats": payer_seats,
+			"related_actor_seat": from_seat,
+			"related_outcome": "qiang_gang_hu",
+		}
+	)
+	settlement_data["transfer_events"] = events
+
+
 func _append_qiang_gang_hu_placeholder(actor_seat: int, tile: Dictionary, placeholder_type: String) -> void:
 	var items: Array = settlement_data.get("qiang_gang_hu_placeholders", [])
 	items.append(
@@ -5792,6 +5819,8 @@ func _rebuild_settlement_summary() -> void:
 		lines.append("转移事件：暂无")
 	else:
 		for event in transfer_events:
+			if not _is_transfer_event_eligible(event):
+				continue
 			var from_seat: int = int(event.get("from_seat", -1))
 			var to_seat: int = int(event.get("to_seat", -1))
 			lines.append("转移事件：%s -> %s｜%s" % [
@@ -5799,7 +5828,6 @@ func _rebuild_settlement_summary() -> void:
 				_seat_display_name(to_seat),
 				_transfer_type_display_name(str(event.get("transfer_type", ""))),
 			])
-
 	var qiang_gang_items: Array = settlement_data.get("qiang_gang_hu_placeholders", [])
 	if qiang_gang_items.is_empty():
 		lines.append("抢杠胡占位：暂无")
@@ -5855,6 +5883,18 @@ func _rebuild_settlement_summary() -> void:
 	for review_line in _build_trainer_review_lines():
 		lines.append(review_line)
 	settlement_data["summary_text"] = "\n".join(lines)
+
+
+func _is_transfer_event_eligible(event: Dictionary) -> bool:
+	var actor_seat: int = int(event.get("from_seat", event.get("related_actor_seat", -1)))
+	if actor_seat < 0 or actor_seat >= players.size():
+		return false
+	if bool(players[actor_seat].get("has_won", false)):
+		return true
+	for item in settlement_data.get("draw_assessment", []):
+		if int(item.get("seat", -1)) == actor_seat:
+			return bool(item.get("is_ting", false))
+	return bool(players[actor_seat].get("bao_jiao", false))
 
 
 func _apply_settlement_scores_once() -> void:

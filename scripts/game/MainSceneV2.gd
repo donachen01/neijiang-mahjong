@@ -6294,6 +6294,8 @@ func _build_settlement_breakdown_lines(players: Array, settlement_data: Dictiona
 	for event in settlement_data.get("transfer_events", []):
 		if str(event.get("transfer_type", "")) != "hu_jiao_zhuan_yi":
 			continue
+		if not _is_settlement_transfer_eligible(players, settlement_data, event):
+			continue
 		var transfer_winner_seat: int = int(event.get("to_seat", -1))
 		var transfer_unit_score: int = _resolve_gang_unit_score(str(event.get("gang_type", "")))
 		var transfer_payers: Array = event.get("payer_seats", [])
@@ -6370,6 +6372,18 @@ func _build_settlement_breakdown_lines(players: Array, settlement_data: Dictiona
 	if lines.is_empty():
 		lines.append({"reason": "本局暂无细分事件", "source": _seat_name(focus_seat), "factor": "-", "score": "%s%d" % ["+" if round_delta > 0 else "", round_delta]})
 	return lines
+
+
+func _is_settlement_transfer_eligible(players: Array, settlement_data: Dictionary, event: Dictionary) -> bool:
+	var actor_seat: int = int(event.get("from_seat", event.get("related_actor_seat", -1)))
+	if actor_seat < 0 or actor_seat >= players.size():
+		return false
+	if bool(players[actor_seat].get("has_won", false)):
+		return true
+	for item in settlement_data.get("draw_assessment", []):
+		if int(item.get("seat", -1)) == actor_seat:
+			return bool(item.get("is_ting", false))
+	return bool(players[actor_seat].get("bao_jiao", false))
 
 
 func _build_cha_jiao_reason_text(item: Dictionary) -> String:
