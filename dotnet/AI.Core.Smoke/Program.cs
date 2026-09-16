@@ -221,6 +221,12 @@ if (!SmokePerspectiveBranchUsesExactWallAndWorstBranch())
     return 1401;
 }
 
+if (!SmokeFairBranchUsesPosteriorWithoutExactWall())
+{
+    Console.Error.WriteLine("fair_branch_smoke_failed");
+    return 1402;
+}
+
 if (!SmokeHellOracleRejectsExactDealIn())
 {
     Console.Error.WriteLine("hell_oracle_dealin_smoke_failed");
@@ -2399,6 +2405,24 @@ static bool SmokePerspectiveBranchUsesExactWallAndWorstBranch()
         && double.IsFinite(summary.Score)
         && summary.WorstNextShanten >= summary.ExpectedNextShanten
         && summary.Reasons.Any(reason => reason.Contains("透视两步", StringComparison.Ordinal));
+}
+
+static bool SmokeFairBranchUsesPosteriorWithoutExactWall()
+{
+    var hand = new int[18];
+    foreach (var tile in new[] { 0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 16, 17 })
+        hand[tile]++;
+    var unknown = Enumerable.Repeat(2, 18).ToArray();
+    var posterior = Enumerable.Range(0, 18).ToDictionary(tile => tile, _ => 0.25);
+    posterior[6] = 0.90;
+    posterior[14] = 0.75;
+    var summary = new NeijiangFairBranchEngine().Evaluate(hand, unknown, posterior, 0, 1, 5);
+    Console.WriteLine($"fair_branch score={summary.Score:F2} branches={summary.BranchCount} expected={summary.ExpectedNextShanten:F2}/{summary.ExpectedNextLiveUkeire:F2} worst={summary.WorstNextShanten}/{summary.WorstNextLiveUkeire}");
+    return summary.BranchCount > 0
+        && double.IsFinite(summary.Score)
+        && summary.WorstNextShanten >= summary.ExpectedNextShanten
+        && summary.Reasons.Any(reason => reason.Contains("智能两步", StringComparison.Ordinal))
+        && summary.Reasons.All(reason => !reason.Contains("透视", StringComparison.Ordinal));
 }
 
 static bool SmokeHellOracleRejectsExactDealIn()

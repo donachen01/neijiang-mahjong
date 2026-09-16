@@ -17,6 +17,7 @@ public sealed class NeijiangDecisionEngine
     private readonly NeijiangHandShapeEngine _shape = new();
     private readonly NeijiangWaitShapeEngine _waitShape = new();
     private readonly NeijiangLimitedLookaheadEngine _limitedLookahead = new();
+    private readonly NeijiangFairBranchEngine _fairBranch = new();
     private readonly NeijiangBaoJiaoActionEngine _baoJiaoAction = new();
     private readonly NeijiangRoutePlanEngine _routePlan = new();
     private readonly NeijiangAiContextCache[] _contextCaches = Enumerable.Range(0, 4)
@@ -72,6 +73,7 @@ public sealed class NeijiangDecisionEngine
         var routePlanMs = 0.0;
         var handShapeMs = 0.0;
         var limitedLookaheadMs = 0.0;
+        var fairBranchMs = 0.0;
         for (var tileType = 0; tileType < 18; tileType++)
         {
             if (state.Hand18[tileType] <= 0) continue;
@@ -118,6 +120,15 @@ public sealed class NeijiangDecisionEngine
                 effectiveLiveUkeire,
                 ResolveLookaheadDrawTypes(state.WallCount, effectiveShanten));
             limitedLookaheadMs += Stopwatch.GetElapsedTime(moduleStarted).TotalMilliseconds;
+            moduleStarted = Stopwatch.GetTimestamp();
+            var fairBranch = _fairBranch.Evaluate(
+                remainingHand,
+                belief.Unknown18,
+                belief.TileWallPosterior,
+                meldCount,
+                effectiveShanten,
+                effectiveLiveUkeire);
+            fairBranchMs += Stopwatch.GetElapsedTime(moduleStarted).TotalMilliseconds;
             var dangerEval = _danger.EvaluateDetail(tileType, state, belief);
             var danger = dangerEval.Risk;
             var fastTingPriority = EvaluateFastTingPriorityAdjustment(currentShanten, effectiveShanten, effectiveLiveUkeire, waitCount, roundStage, danger);
@@ -157,6 +168,7 @@ public sealed class NeijiangDecisionEngine
                 + shapeSummary.ShapeScore
                 + waitShapeSummary.WaitShapeScore
                 + limitedLookahead.Score
+                + fairBranch.Score
                 + fastTingPriority.Score
                 + routePlanAdjustment.Score
                 + bigHandRoute.Score
@@ -182,6 +194,7 @@ public sealed class NeijiangDecisionEngine
                 .Concat(waitCount > 0 ? waitShapeSummary.Reasons : Array.Empty<string>())
                 .Concat(shapeSummary.Reasons)
                 .Concat(limitedLookahead.Reasons)
+                .Concat(fairBranch.Reasons)
                 .Concat(fastTingPriority.Reasons)
                 .Concat(routePlanAdjustment.Reasons)
                 .Concat(bigHandRoute.Reasons)
@@ -247,6 +260,12 @@ public sealed class NeijiangDecisionEngine
                 LimitedLookaheadSamples = limitedLookahead.SampledDrawCount,
                 LimitedLookaheadBestShanten = limitedLookahead.BestNextShanten,
                 LimitedLookaheadBestLiveUkeire = limitedLookahead.BestNextLiveUkeire,
+                FairBranchScore = fairBranch.Score,
+                FairBranchCount = fairBranch.BranchCount,
+                FairBranchExpectedShanten = fairBranch.ExpectedNextShanten,
+                FairBranchExpectedLiveUkeire = fairBranch.ExpectedNextLiveUkeire,
+                FairBranchWorstShanten = fairBranch.WorstNextShanten,
+                FairBranchWorstLiveUkeire = fairBranch.WorstNextLiveUkeire,
                 SearchBonus = 0.0,
                 SearchSimulations = 0,
                 SearchUsed = false,
@@ -314,7 +333,8 @@ public sealed class NeijiangDecisionEngine
             BuildPerfSample("ExactReadyEvaluation", exactReadyMs, 18.0),
             BuildPerfSample("RoutePlanCandidates", routePlanMs, 12.0),
             BuildPerfSample("HandShapeCandidates", handShapeMs, 12.0),
-            BuildPerfSample("LimitedLookaheadCandidates", limitedLookaheadMs, 20.0)
+            BuildPerfSample("LimitedLookaheadCandidates", limitedLookaheadMs, 20.0),
+            BuildPerfSample("FairTwoPlyCandidates", fairBranchMs, 35.0)
         }).ToArray();
         var performance = BuildPerformanceReport(decisionStopwatch.Elapsed.TotalMilliseconds, decisionModules);
         var explain = BuildExplain(bestTile, bestScore, aiContext, reasons);
@@ -1331,6 +1351,12 @@ public sealed class NeijiangDecisionEngine
                 LimitedLookaheadSamples = candidate.LimitedLookaheadSamples,
                 LimitedLookaheadBestShanten = candidate.LimitedLookaheadBestShanten,
                 LimitedLookaheadBestLiveUkeire = candidate.LimitedLookaheadBestLiveUkeire,
+                FairBranchScore = candidate.FairBranchScore,
+                FairBranchCount = candidate.FairBranchCount,
+                FairBranchExpectedShanten = candidate.FairBranchExpectedShanten,
+                FairBranchExpectedLiveUkeire = candidate.FairBranchExpectedLiveUkeire,
+                FairBranchWorstShanten = candidate.FairBranchWorstShanten,
+                FairBranchWorstLiveUkeire = candidate.FairBranchWorstLiveUkeire,
                 SearchBonus = bonus,
                 SearchSimulations = searchResult.Simulations,
                 SearchUsed = searchResult.Used,

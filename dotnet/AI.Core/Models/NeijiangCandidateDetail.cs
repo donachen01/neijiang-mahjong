@@ -53,6 +53,12 @@ public sealed class NeijiangCandidateDetail
     public int LimitedLookaheadSamples { get; init; }
     public int LimitedLookaheadBestShanten { get; init; }
     public int LimitedLookaheadBestLiveUkeire { get; init; }
+    public double FairBranchScore { get; init; }
+    public int FairBranchCount { get; init; }
+    public double FairBranchExpectedShanten { get; init; }
+    public double FairBranchExpectedLiveUkeire { get; init; }
+    public int FairBranchWorstShanten { get; init; }
+    public int FairBranchWorstLiveUkeire { get; init; }
     public double SearchBonus { get; init; }
     public int SearchSimulations { get; init; }
     public bool SearchUsed { get; init; }

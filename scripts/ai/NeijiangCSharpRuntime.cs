@@ -420,7 +420,7 @@ public partial class NeijiangCSharpRuntime : Node
             currentRoutes = Array.Empty<string>(),
             strategyProfile = new
             {
-                mode_label = "地狱挑战",
+                mode_label = "透视模式",
                 round_stage = 0,
                 round_stage_label = "明牌压制",
                 threat_level = result.HumanPressureLevel,
@@ -495,7 +495,7 @@ public partial class NeijiangCSharpRuntime : Node
                         ? "给碰"
                         : "明牌",
             strategyTag = "hell_challenge",
-            strategyMode = "地狱挑战",
+            strategyMode = "透视模式",
             explanationHint = item.Reasons.FirstOrDefault() ?? "",
             exactDealIn = item.ExactDealIn,
             feedsHumanHu = item.FeedsHumanHu,
@@ -651,7 +651,7 @@ public partial class NeijiangCSharpRuntime : Node
         sb.Append(",\"dealInProbability\":").Append(result.OracleExactDealIn ? "1.0" : "0.0");
         sb.Append(",\"searchUsed\":false,\"searchSimulations\":0");
         sb.Append(",\"currentRoutes\":[]");
-        sb.Append(",\"strategyProfile\":{\"mode_label\":\"地狱挑战\",\"round_stage\":0,\"round_stage_label\":\"明牌压制\",\"threat_level\":")
+        sb.Append(",\"strategyProfile\":{\"mode_label\":\"透视模式\",\"round_stage\":0,\"round_stage_label\":\"明牌压制\",\"threat_level\":")
             .Append(result.HumanPressureLevel)
             .Append(",\"reasons\":");
         AppendJsonStringArray(sb, result.Reasons);
@@ -708,7 +708,7 @@ public partial class NeijiangCSharpRuntime : Node
         sb.Append(",\"waitCount\":").Append(item.WaitCount);
         var riskLabel = item.FeedsHumanHu || item.ExactDealIn ? "点炮" : item.FeedsHumanGang ? "给杠" : item.FeedsHumanPeng ? "给碰" : "明牌";
         sb.Append(",\"riskLabel\":\"").Append(EscapeJsonString(riskLabel)).Append('"');
-        sb.Append(",\"strategyTag\":\"hell_challenge\",\"strategyMode\":\"地狱挑战\"");
+        sb.Append(",\"strategyTag\":\"hell_challenge\",\"strategyMode\":\"透视模式\"");
         sb.Append(",\"explanationHint\":\"").Append(EscapeJsonString(item.Reasons.FirstOrDefault() ?? "")).Append('"');
         sb.Append(",\"exactDealIn\":").Append(JsonBool(item.ExactDealIn));
         sb.Append(",\"feedsHumanHu\":").Append(JsonBool(item.FeedsHumanHu));
@@ -1439,6 +1439,12 @@ public partial class NeijiangCSharpRuntime : Node
             limitedLookaheadSamples = item.LimitedLookaheadSamples,
             limitedLookaheadBestShanten = item.LimitedLookaheadBestShanten,
             limitedLookaheadBestLiveUkeire = item.LimitedLookaheadBestLiveUkeire,
+            fairBranchScore = item.FairBranchScore,
+            fairBranchCount = item.FairBranchCount,
+            fairBranchExpectedShanten = item.FairBranchExpectedShanten,
+            fairBranchExpectedLiveUkeire = item.FairBranchExpectedLiveUkeire,
+            fairBranchWorstShanten = item.FairBranchWorstShanten,
+            fairBranchWorstLiveUkeire = item.FairBranchWorstLiveUkeire,
             searchBonus = item.SearchBonus,
             searchSimulations = item.SearchSimulations,
             searchUsed = item.SearchUsed,
@@ -1503,6 +1509,12 @@ public partial class NeijiangCSharpRuntime : Node
             limitedLookaheadSamples = item.LimitedLookaheadSamples,
             limitedLookaheadBestShanten = item.LimitedLookaheadBestShanten,
             limitedLookaheadBestLiveUkeire = item.LimitedLookaheadBestLiveUkeire,
+            fairBranchScore = item.FairBranchScore,
+            fairBranchCount = item.FairBranchCount,
+            fairBranchExpectedShanten = item.FairBranchExpectedShanten,
+            fairBranchExpectedLiveUkeire = item.FairBranchExpectedLiveUkeire,
+            fairBranchWorstShanten = item.FairBranchWorstShanten,
+            fairBranchWorstLiveUkeire = item.FairBranchWorstLiveUkeire,
             posteriorReasons = item.PosteriorReasons,
             searchBonus = item.SearchBonus,
             searchSimulations = item.SearchSimulations,

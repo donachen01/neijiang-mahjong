@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.82`
+Current app version: `1.0.84`
 
-`1.0.82` fuses the proven Sichuan two-ply route comparison into Neijiang's v1.0.70 perspective policy. Exact-wall discard candidates now compare weighted draw, best follow-up discard, expected live waits, completion proxy, and worst branches; pass, peng, and gang reactions use the same branch depth, while normal late-wall play re-enables bounded lightweight lookahead. The 1.0.81 UI remains unchanged.
+`1.0.84` presents two clear AI modes: Intelligent Mode uses only fair public information and a Sichuan-derived posterior two-ply route comparison, while Perspective Mode retains the complete-information v1.0.70/1.0.82 policy. Legacy intermediate and bone-ash presets remain load-compatible but are presented as Intelligent Mode. The 1.0.83 gang-transfer settlement correction remains unchanged.
 
 ## Versioning Workflow
 

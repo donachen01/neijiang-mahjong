@@ -15,7 +15,7 @@ const PARAMETER_LABELS := {
 	"lookahead_draw_samples": "前瞻样本数",
 	"add_gang_min_score": "补杠阈值",
 	"an_gang_min_score": "暗杠阈值",
-	"intermediate_top_pick_count": "中级随机池",
+	"intermediate_top_pick_count": "智能候选池",
 	"attack_tendency": "进攻倾向",
 	"defense_tendency": "防守倾向",
 	"fast_ting_priority": "快速听牌",
@@ -350,7 +350,7 @@ func _recalculate_parameter_bias() -> void:
 		_bump_adjustment(adjustments, "defense_tendency", 1)
 		reasons.append("AI 已能稳定压制真人，适度提高归收益追求与稳守质量。")
 	if reasons.is_empty():
-		reasons.append("数据量仍在积累，当前以内江骨灰级基准做小步微调。")
+		reasons.append("数据量仍在积累，当前以内江智能模式基准做小步微调。")
 
 	profile["parameter_bias"] = {
 		"risk_bias": clampi(risk_bias, 0, 5),

@@ -108,7 +108,7 @@ const ACTION_PRIMARY_SIZE := Vector2(236.0, 236.0)
 const ACTION_SECONDARY_SIZE := Vector2(204.0, 204.0)
 const ACTION_PRIMARY_FONT_SIZE := 172
 const ACTION_SECONDARY_FONT_SIZE := 148
-const AI_PRESET_ORDER := ["intermediate", "bone_ash", "hell"]
+const AI_PRESET_ORDER := ["bone_ash", "hell"]
 const BAO_GANG_DIALOG_MIN_SIZE := Vector2(900.0, 430.0)
 const BAO_GANG_DIALOG_CONTENT_MIN_SIZE := Vector2(840.0, 330.0)
 const BAO_GANG_DIALOG_POPUP_MAX_HEIGHT := 720.0
@@ -117,9 +117,9 @@ const BAO_GANG_DIALOG_OPTION_FONT_SIZE := 32
 const BAO_GANG_DIALOG_OPTION_HEIGHT := 210.0
 const BAO_GANG_DIALOG_OPTION_SEPARATION := 24
 const AI_PRESET_LABELS := {
-	"intermediate": "中级",
-	"bone_ash": "骨灰",
-	"hell": "地狱",
+	"intermediate": "智能模式",
+	"bone_ash": "智能模式",
+	"hell": "透视模式",
 }
 
 enum SeatDock {
@@ -2633,7 +2633,7 @@ func _update_floating_button_texts() -> void:
 	if floating_left_toggle_button != null:
 		floating_left_toggle_button.text = "AI"
 	if floating_preset_button != null:
-		floating_preset_button.text = "难度 %s" % _current_ai_preset_short_label()
+		floating_preset_button.text = "模式 %s" % _current_ai_preset_short_label()
 		floating_preset_button.visible = not floating_left_buttons_collapsed
 	if floating_ai_tuning_button != null:
 		floating_ai_tuning_button.text = "调参"
@@ -2658,10 +2658,10 @@ func _update_floating_button_texts() -> void:
 
 func _current_ai_preset_short_label() -> String:
 	if game_manager == null:
-		return "骨灰"
+		return "智能模式"
 	var snapshot := game_manager.get_snapshot()
 	var preset_name := str(snapshot.get("ai_tuning_config", {}).get("preset_name", "bone_ash"))
-	return str(AI_PRESET_LABELS.get(preset_name, "骨灰"))
+	return str(AI_PRESET_LABELS.get(preset_name, "智能模式"))
 
 
 func _update_board_core_hud(snapshot: Dictionary) -> void:
@@ -3035,7 +3035,7 @@ func _setup_left_floating_buttons() -> void:
 
 	floating_left_toggle_button = _create_floating_circle_button("➕")
 	floating_left_button_bar.add_child(floating_left_toggle_button)
-	floating_preset_button = _create_floating_circle_button("难度")
+	floating_preset_button = _create_floating_circle_button("模式")
 	floating_ai_tuning_button = _create_floating_circle_button("调")
 	floating_ai_helper_button = _create_floating_circle_button("辅")
 	floating_opponent_hand_button = _create_floating_circle_button("明")
@@ -3763,7 +3763,7 @@ func _update_top_bar(snapshot: Dictionary) -> void:
 	info_card.visible = false
 	var preset_name := str(snapshot.get("ai_tuning_config", {}).get("preset_name", "bone_ash"))
 	top_bar_button.visible = true
-	top_bar_button.text = str(AI_PRESET_LABELS.get(preset_name, "骨灰"))
+	top_bar_button.text = str(AI_PRESET_LABELS.get(preset_name, "智能模式"))
 	top_bar_button.visible = false
 	top_ai_tuning_button.visible = false
 	top_ai_helper_button.visible = false
@@ -7446,21 +7446,21 @@ func _apply_ai_preset_button_style(preset_name: String) -> void:
 func _ai_preset_hint_text(preset_name: String) -> String:
 	match preset_name:
 		"intermediate":
-			return "当前 AI 预设：中级 · 稳健成叫"
+			return "当前 AI 模式：智能模式 · 公平信息推断"
 		"hell":
-			return "当前 AI 预设：地狱挑战 · 透视压分"
+			return "当前 AI 模式：透视模式 · 全牌局信息"
 		_:
-			return "当前 AI 预设：骨灰 · 内江老手"
+			return "当前 AI 模式：智能模式 · 公平信息推断"
 
 
 func _ai_preset_short_text(preset_name: String) -> String:
 	match preset_name:
 		"intermediate":
-			return "中级"
+			return "智能"
 		"hell":
-			return "地狱"
+			return "透视"
 		_:
-			return "老手"
+			return "智能"
 
 
 func _apply_ai_helper_button_style() -> void:
@@ -7625,7 +7625,7 @@ func _setup_ai_tuning_overlay() -> void:
 	vbox.add_child(ai_tuning_status_label)
 
 	var preset_label := Label.new()
-	preset_label.text = "难度预设"
+	preset_label.text = "AI 模式"
 	_apply_settlement_label_style(preset_label, false, true)
 	preset_label.add_theme_font_size_override("font_size", 28)
 	preset_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -7636,9 +7636,8 @@ func _setup_ai_tuning_overlay() -> void:
 	preset_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_child(preset_row)
 	for item in [
-		{"key": "intermediate", "label": "中级"},
-		{"key": "bone_ash", "label": "骨灰"},
-		{"key": "hell", "label": "地狱"}
+		{"key": "bone_ash", "label": "智能模式"},
+		{"key": "hell", "label": "透视模式"}
 	]:
 		var preset_button := Button.new()
 		preset_button.text = str(item["label"])
@@ -7675,7 +7674,7 @@ func _setup_ai_tuning_overlay() -> void:
 				{"key": "lookahead_draw_samples", "label": "前瞻样本数", "step": 1},
 				{"key": "add_gang_min_score", "label": "补杠阈值", "step": 2},
 				{"key": "an_gang_min_score", "label": "暗杠阈值", "step": 2},
-				{"key": "intermediate_top_pick_count", "label": "中级容错池", "step": 1},
+				{"key": "intermediate_top_pick_count", "label": "智能候选池", "step": 1},
 			],
 		},
 	]
@@ -7803,7 +7802,7 @@ func _setup_ai_tuning_overlay() -> void:
 	footer.add_child(reset_button)
 
 	var bone_button := Button.new()
-	bone_button.text = "一键套用内江骨灰"
+	bone_button.text = "一键套用智能模式"
 	bone_button.add_theme_stylebox_override("normal", _build_settlement_primary_button_style())
 	bone_button.add_theme_stylebox_override("hover", _build_settlement_primary_button_hover_style())
 	bone_button.add_theme_stylebox_override("pressed", _build_settlement_primary_button_pressed_style())
@@ -7913,7 +7912,7 @@ func _refresh_ai_tuning_panel(snapshot: Dictionary) -> void:
 		"最近一次电脑读牌：",
 		"\n".join(live_readout_lines),
 	])
-	ai_tuning_status_label.text = "当前预设：%s。面板中的默认值已切换为内江麻将权重，改动会即时同步到电脑 AI 与辅助建议。" % str(AI_PRESET_LABELS.get(preset_name, "骨灰"))
+	ai_tuning_status_label.text = "当前模式：%s。智能模式只使用公平信息与后验推断；透视模式可读取完整牌局信息。" % str(AI_PRESET_LABELS.get(preset_name, "智能模式"))
 	ai_tuning_learning_label.scroll_to_line(0)
 
 

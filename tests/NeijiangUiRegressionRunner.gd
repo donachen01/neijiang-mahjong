@@ -432,8 +432,8 @@ func _test_main_controls_are_layered_by_purpose(root_node: Node):
 		return "expected helper toggle label to include status, got %s" % helper.text
 	if not str(opponent.text).begins_with("明牌"):
 		return "expected open-hand toggle label to include status, got %s" % opponent.text
-	if not str(preset.text).begins_with("难度"):
-		return "expected preset control to be shown as difficulty status, got %s" % preset.text
+	if not str(preset.text).begins_with("模式"):
+		return "expected preset control to be shown as AI mode status, got %s" % preset.text
 	if helper.custom_minimum_size.x > 190.0 or helper.custom_minimum_size.y > 64.0:
 		return "expected AI drawer buttons to be compact pills, got %.1fx%.1f" % [helper.custom_minimum_size.x, helper.custom_minimum_size.y]
 	return true

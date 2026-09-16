@@ -24,7 +24,7 @@ func _ready() -> void:
 func render(snapshot: Dictionary, ai_helper_enabled: bool, opponent_hands_enabled: bool, voice_language: String = "mandarin") -> void:
 	if button_column == null:
 		_build_ui()
-	_set_button_text("difficulty", "难度 · %s" % _difficulty_label(snapshot))
+	_set_button_text("difficulty", "AI · %s" % _difficulty_label(snapshot))
 	_set_button_text("helper", "AI提示 · %s" % ("开" if ai_helper_enabled else "关"))
 	_set_button_text("opponents", "明牌 · %s" % ("开" if opponent_hands_enabled else "关"))
 	_set_button_text("voice", "语音 · %s" % ("四川话" if voice_language == "sichuan" else "普通话"))
@@ -131,7 +131,7 @@ func _build_ui() -> void:
 	button_column.add_theme_constant_override("v_separation", BUTTON_GAP)
 	margin.add_child(button_column)
 	for entry in [
-		{"id": "difficulty", "label": "难度"},
+		{"id": "difficulty", "label": "AI 模式"},
 		{"id": "tuning", "label": "调参"},
 		{"id": "helper", "label": "辅助"},
 		{"id": "opponents", "label": "明牌"},
@@ -215,11 +215,11 @@ func _set_button_visible(action: String, shown: bool) -> void:
 func _difficulty_label(snapshot: Dictionary) -> String:
 	match str(snapshot.get("ai_tuning_config", {}).get("preset_name", "bone_ash")):
 		"intermediate":
-			return "中级"
+			return "智能"
 		"hell":
-			return "地狱"
+			return "透视"
 		_:
-			return "骨灰"
+			return "智能"
 
 
 func _apply_focus_navigation() -> void:

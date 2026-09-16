@@ -68,6 +68,7 @@ func _run() -> void:
 	_run_test("ai_manager_sync_compat_turn_does_not_call_native_start", _test_ai_manager_sync_compat_turn_does_not_call_native_start, failures)
 	_run_test("transport_payload_preserves_exact_meld_group_counts", _test_transport_payload_preserves_exact_meld_group_counts, failures)
 	_run_test("transport_payload_preserves_policy_profile", _test_transport_payload_preserves_policy_profile, failures)
+	_run_test("fair_transport_excludes_hidden_hands_and_exact_wall", _test_fair_transport_excludes_hidden_hands_and_exact_wall, failures)
 	if failures.is_empty():
 		print("NEIJIANG CSHARP CONTRACT OK")
 		quit(0)
@@ -138,6 +139,29 @@ func _test_transport_payload_preserves_policy_profile():
 	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
 	var payload: Dictionary = ai_manager.csharp_bridge.build_discard_transport_payload(player_state, table_state, rules)
 	return true if str(payload.get("policyProfile", "")) == "baseline_v1" else "policy profile missing from payload"
+
+
+func _test_fair_transport_excludes_hidden_hands_and_exact_wall():
+	var ai_manager = AI_MANAGER_SCRIPT.new()
+	var players: Array = []
+	for seat in range(4):
+		players.append({
+			"seat": seat,
+			"hand_tiles": _tiles_from_types([seat, seat + 1], 800 + seat * 10),
+			"discards": [],
+			"melds": [],
+			"score": 0,
+		})
+	var player_state: Dictionary = players[1].duplicate(true)
+	var table_state := {"players": players, "wall_count": 12, "current_turn_seat": 1}
+	var rules = RULE_CONFIG_SCRIPT.new(RULE_CONFIG_SCRIPT.MODE_NEIJIANG_CLASSIC)
+	var payload: Dictionary = ai_manager.csharp_bridge.build_discard_transport_payload(player_state, table_state, rules)
+	for forbidden_key in ["allHands18", "exactWall18", "hiddenState", "wallTiles"]:
+		if payload.has(forbidden_key):
+			return "fair payload leaked hidden key %s" % forbidden_key
+	if payload.has("hands18"):
+		return "fair payload leaked opponent hands"
+	return true
 
 
 func _test_csharp_action_tile_matches_godot_recommended_tile():
