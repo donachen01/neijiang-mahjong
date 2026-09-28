@@ -209,14 +209,28 @@ public sealed class NeijiangLearningEngine
         if (reasons.Count == 0)
             reasons.Add("数据量仍在积累，当前以内江骨灰级基准做小步微调。");
 
-        profile.ParameterBias = new ParameterBias
+        var proposedBias = new ParameterBias
         {
             RiskBias = Math.Clamp(riskBias, 0, 5),
             AttackBias = Math.Clamp(attackBias, 0, 5),
             GangBias = Math.Clamp(gangBias, 0, 5),
             LookaheadBias = Math.Clamp(lookaheadBias, 0, 6)
         };
-        profile.ParameterAdjustments = adjustments.Clamp();
+        var proposedAdjustments = adjustments.Clamp();
+        profile.ProposedParameterBias = proposedBias;
+        profile.ProposedParameterAdjustments = proposedAdjustments;
+        profile.LearningMode = profile.OutcomeOnlyAutoApply
+            ? "legacy_outcome_auto_apply"
+            : "outcome_diagnostic_decision_calibration_required";
+        if (profile.OutcomeOnlyAutoApply)
+        {
+            profile.ParameterBias = proposedBias;
+            profile.ParameterAdjustments = proposedAdjustments;
+        }
+        else
+        {
+            reasons.Insert(0, "整局输赢仅作诊断，不自动改写正式参数；等待决策节点反事实与概率校准通过晋升门槛。");
+        }
         profile.SummaryStats = new SummaryStats
         {
             HumanAverageDelta = humanAvgDelta,
@@ -281,6 +295,9 @@ public sealed class NeijiangLearningEngine
             ["total_human_rounds"] = profile.TotalHumanRounds,
             ["latest_reasons"] = profile.LastAdjustmentReasons,
             ["current_parameter_adjustments"] = profile.ParameterAdjustments,
+            ["proposed_parameter_adjustments"] = profile.ProposedParameterAdjustments,
+            ["learning_mode"] = profile.LearningMode,
+            ["outcome_only_auto_apply"] = profile.OutcomeOnlyAutoApply,
             ["current_parameter_adjustments_text"] = BuildCurrentAdjustmentTextLines(profile),
             ["latest_reasons_text"] = string.Join(" / ", profile.LastAdjustmentReasons),
             ["latest_summary_text"] = BuildLatestAdjustmentSummaryText(profile),
@@ -319,12 +336,16 @@ public sealed class NeijiangLearningEngine
 
 public sealed class LearningProfile
 {
-    [JsonPropertyName("version")] public int Version { get; set; } = 1;
+    [JsonPropertyName("version")] public int Version { get; set; } = 2;
     [JsonPropertyName("total_human_rounds")] public int TotalHumanRounds { get; set; }
     [JsonPropertyName("last_updated_unix")] public long LastUpdatedUnix { get; set; }
     [JsonPropertyName("rolling")] public RollingStats Rolling { get; set; } = new();
     [JsonPropertyName("parameter_bias")] public ParameterBias ParameterBias { get; set; } = new();
     [JsonPropertyName("parameter_adjustments")] public ParameterAdjustmentSet ParameterAdjustments { get; set; } = ParameterAdjustmentSet.CreateEmpty();
+    [JsonPropertyName("proposed_parameter_bias")] public ParameterBias ProposedParameterBias { get; set; } = new();
+    [JsonPropertyName("proposed_parameter_adjustments")] public ParameterAdjustmentSet ProposedParameterAdjustments { get; set; } = ParameterAdjustmentSet.CreateEmpty();
+    [JsonPropertyName("learning_mode")] public string LearningMode { get; set; } = "outcome_diagnostic_decision_calibration_required";
+    [JsonPropertyName("outcome_only_auto_apply")] public bool OutcomeOnlyAutoApply { get; set; }
     [JsonPropertyName("summary_stats")] public SummaryStats SummaryStats { get; set; } = new();
     [JsonPropertyName("last_adjustment_reasons")] public List<string> LastAdjustmentReasons { get; set; } = new();
     [JsonPropertyName("recent_rounds")] public List<RecentRoundEntry> RecentRounds { get; set; } = new();

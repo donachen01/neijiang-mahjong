@@ -1,6 +1,7 @@
 using NeijiangMahjong.AI.Core.Codec;
 using NeijiangMahjong.AI.Core.Engines;
 using NeijiangMahjong.AI.Core.Entry;
+using NeijiangMahjong.AI.Core.Learning;
 using NeijiangMahjong.AI.Core.Models;
 
 var hand = new[]
@@ -113,6 +114,12 @@ if (!SmokeReasonableAnGang(facade))
     return 5;
 }
 
+if (!SmokeGangReplacementDrawPrecedesDiscard())
+{
+    Console.Error.WriteLine("gang_replacement_timeline_smoke_failed");
+    return 501;
+}
+
 if (!SmokeBaoJiaoSelfHuOverridesMandatoryGang(facade))
 {
     Console.Error.WriteLine("bao_jiao_self_hu_route_smoke_failed");
@@ -179,10 +186,40 @@ if (!SmokeHandShapeDetails(facade))
     return 8;
 }
 
+if (!SmokeExactStructureUsesMutuallyExclusiveBlocks())
+{
+    Console.Error.WriteLine("exact_structure_mutual_exclusion_smoke_failed");
+    return 801;
+}
+
+if (!SmokeExactWaitAnalyzerHandlesSevenPairsQuad())
+{
+    Console.Error.WriteLine("exact_wait_seven_pairs_quad_smoke_failed");
+    return 802;
+}
+
 if (!SmokeEvidenceSnapshot())
 {
     Console.Error.WriteLine("evidence_snapshot_smoke_failed");
     return 9;
+}
+
+if (!SmokeOrderedDiscardEvidenceChangesPosterior())
+{
+    Console.Error.WriteLine("ordered_discard_evidence_smoke_failed");
+    return 901;
+}
+
+if (!SmokeOutcomeOnlyLearningStaysDiagnostic())
+{
+    Console.Error.WriteLine("outcome_only_learning_gate_smoke_failed");
+    return 902;
+}
+
+if (!SmokeDecisionCalibrationPromotionGate())
+{
+    Console.Error.WriteLine("decision_calibration_gate_smoke_failed");
+    return 903;
 }
 
 if (!SmokeOpponentRangeUsesNoHuEvidence())
@@ -619,7 +656,7 @@ static bool SmokeAiContextStageExplainAndPerf(NeijiangAiFacade facade)
     state.IsReady[1] = true;
 
     var result = facade.DecideDiscard(state);
-    Console.WriteLine($"ai_context_stage={result.AiContext?.Stage.Stage} mode={result.AiContext?.StrategyMode.Mode} explain={string.Join('|', result.Explain.ReasonCodes)} perf={result.Performance.TotalMs:F2}");
+    Console.WriteLine($"ai_context_stage={result.AiContext?.Stage.Stage} mode={result.AiContext?.StrategyMode.Mode} explain={string.Join('|', result.Explain.ReasonCodes)} perf={result.Performance.TotalMs:F2} modules={string.Join(',', result.Performance.Modules.Select(item => $"{item.Module}:{item.ElapsedMs:F2}"))}");
     return result.AiContext is not null
         && result.AiContext.Stage.Stage == "late"
         && result.AiContext.Stage.ReasonCode == "STAGE_LATE_BY_REMAINING_TILES"
@@ -738,6 +775,21 @@ static bool SmokeReasonableAnGang(NeijiangAiFacade facade)
     var result = facade.DecideSelfAction(state, false, new[] { gangTile }, Array.Empty<int>());
     Console.WriteLine($"an_gang_smoke_action={result.Action.ActionType} score={result.Action.Score} pass={result.ActionScores.GetValueOrDefault("pass")}");
     return result.Action.ActionType == NeijiangActionType.Gang;
+}
+
+static bool SmokeGangReplacementDrawPrecedesDiscard()
+{
+    var handAfterGang = new int[18];
+    foreach (var tile in new[] { 0, 1, 2, 3, 4, 5, 9, 10, 11, 12 })
+        handAfterGang[tile]++;
+    var remaining = Enumerable.Repeat(1, 18).ToArray();
+    remaining[12] = 4;
+    var summary = new NeijiangGangReplacementEvaluator().Evaluate(handAfterGang, remaining, meldCountAfter: 1);
+    Console.WriteLine($"gang_replacement branches={summary.BranchCount} win={summary.ReplacementWinProbability:F3} expected={summary.ExpectedShanten:F2}/{summary.ExpectedLiveUkeire:F2} worst={summary.WorstShanten}/{summary.WorstLiveUkeire}");
+    return summary.BranchCount > 0
+        && summary.ReplacementWinProbability > 0.0
+        && summary.ExpectedShanten < summary.WorstShanten
+        && summary.Reasons.Any(reason => reason.Contains("杠后补张", StringComparison.Ordinal));
 }
 
 static bool SmokeBaoJiaoSelfHuOverridesMandatoryGang(NeijiangAiFacade facade)
@@ -2229,6 +2281,42 @@ static bool SmokeHandShapeDetails(NeijiangAiFacade facade)
         && result.Candidates.Any(item => item.Reasons.Any(reason => reason.Contains("手形", StringComparison.Ordinal)));
 }
 
+static bool SmokeExactStructureUsesMutuallyExclusiveBlocks()
+{
+    var hand = new int[18];
+    foreach (var tile in new[] { 1, 1, 2, 3, 4, 5, 6 })
+        hand[tile]++;
+    var before = (int[])hand.Clone();
+    var summary = new NeijiangExactStructureEngine().Evaluate(hand, meldCount: 2);
+    var unchanged = hand.SequenceEqual(before);
+    Console.WriteLine($"exact_structure blocks={summary.BlockCount} redundant={summary.RedundantBlockCount} weakest={summary.WeakestBlockQuality:F2} decompositions={summary.DecompositionCount} score={summary.Score:F2}");
+    return unchanged
+        && summary.DecompositionCount > 1
+        && summary.BlockCount >= 2
+        && summary.WeakestBlockQuality is >= 0.0 and <= 1.0
+        && double.IsFinite(summary.Score)
+        && summary.Reasons.Any(reason => reason.Contains("互斥结构", StringComparison.Ordinal));
+}
+
+static bool SmokeExactWaitAnalyzerHandlesSevenPairsQuad()
+{
+    var hand = new int[18];
+    hand[0] = 4;
+    hand[2] = 2;
+    hand[4] = 2;
+    hand[6] = 2;
+    hand[8] = 2;
+    hand[10] = 1;
+    var analyzer = new NeijiangExactHandAnalyzer();
+    var waits = analyzer.EnumerateWaits(hand, meldCount: 0, allowSevenPairs: true);
+    var winning = (int[])hand.Clone();
+    winning[10]++;
+    Console.WriteLine($"exact_waits={string.Join(',', waits)} seven_pairs_quad_win={analyzer.IsWinning(winning, 0, true)}");
+    return waits.Contains(10)
+        && analyzer.IsWinning(winning, 0, true)
+        && !analyzer.IsWinning(winning, 0, false);
+}
+
 static bool SmokeEvidenceSnapshot()
 {
     var discards = new[]
@@ -2252,6 +2340,83 @@ static bool SmokeEvidenceSnapshot()
     return evidence.SeatExactSafeTiles[0].Contains(1)
         && evidence.SeatNoHuEvidence[0][1] >= 0.80
         && evidence.SeatRecentDiscardTrend[0].Count > 0;
+}
+
+static bool SmokeOrderedDiscardEvidenceChangesPosterior()
+{
+    var oldNeighbor = new[]
+    {
+        new[] { 3, 9, 10, 11 },
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+        Array.Empty<int>()
+    };
+    var recentNeighbor = new[]
+    {
+        new[] { 9, 10, 11, 3 },
+        Array.Empty<int>(),
+        Array.Empty<int>(),
+        Array.Empty<int>()
+    };
+    var a = NeijiangStateCodec.FromRaw(1, 0, 1, 20, new int[18], new int[18], null, oldNeighbor);
+    var b = NeijiangStateCodec.FromRaw(1, 0, 1, 20, new int[18], new int[18], null, recentNeighbor);
+    var evidenceEngine = new NeijiangEvidenceEngine();
+    var evidenceA = evidenceEngine.Build(a);
+    var evidenceB = evidenceEngine.Build(b);
+    var rangeEngine = new NeijiangOpponentRangeEngine();
+    var rangeA = rangeEngine.BuildSeatRange(a, evidenceA, 0);
+    var rangeB = rangeEngine.BuildSeatRange(b, evidenceB, 0);
+    Console.WriteLine($"ordered_release old={evidenceA.SeatTileReleaseEvidence[0][4]:F3}/{rangeA.HoldProbability18[4]:F3} recent={evidenceB.SeatTileReleaseEvidence[0][4]:F3}/{rangeB.HoldProbability18[4]:F3}");
+    return evidenceB.SeatTileReleaseEvidence[0][4] > evidenceA.SeatTileReleaseEvidence[0][4]
+        && rangeB.HoldProbability18[4] < rangeA.HoldProbability18[4];
+}
+
+static bool SmokeOutcomeOnlyLearningStaysDiagnostic()
+{
+    var tempRoot = Path.Combine(Path.GetTempPath(), $"neijiang-learning-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(tempRoot);
+    try
+    {
+        var profilePath = Path.Combine(tempRoot, "profile.json");
+        var historyPath = Path.Combine(tempRoot, "history.json");
+        var engine = new NeijiangLearningEngine();
+        var profile = engine.RecordHumanRound(profilePath, historyPath, new LearningRoundResult
+        {
+            RoundIndex = 1,
+            ScoreChanges = new Dictionary<string, int> { ["0"] = 8 },
+            EndReason = "win"
+        });
+        Console.WriteLine($"learning_mode={profile.LearningMode} applied_attack={profile.ParameterAdjustments.AttackTendency} proposed_attack={profile.ProposedParameterAdjustments.AttackTendency}");
+        return !profile.OutcomeOnlyAutoApply
+            && profile.ParameterAdjustments.AttackTendency == 0
+            && profile.ProposedParameterAdjustments.AttackTendency != 0
+            && profile.LastAdjustmentReasons.Any(reason => reason.Contains("不自动改写正式参数", StringComparison.Ordinal));
+    }
+    finally
+    {
+        if (Directory.Exists(tempRoot))
+            Directory.Delete(tempRoot, recursive: true);
+    }
+}
+
+static bool SmokeDecisionCalibrationPromotionGate()
+{
+    var samples = Enumerable.Range(0, 10_000)
+        .Select(index => new NeijiangDecisionLearningSample(
+            index % 5 == 0 ? "blind" : "train",
+            0.80,
+            index % 5 != 0,
+            1.00,
+            1.05,
+            index % 10 < 7))
+        .ToArray();
+    var engine = new NeijiangDecisionCalibrationEngine();
+    var report = engine.Evaluate(samples);
+    var hiddenReport = engine.Evaluate(samples.Take(9_999).Append(samples[0] with { UsedHiddenInformation = true }));
+    Console.WriteLine($"decision_calibration stage={report.Stage} brier={report.BrierScore:F3} regret={report.MeanRegret:F3} accuracy={report.TopRankAccuracy:F3} eligible={report.EligibleForFormalPromotion} hidden_eligible={hiddenReport.EligibleForFormalPromotion}");
+    return report.EligibleForFormalPromotion
+        && report.BlindSampleCount == 2_000
+        && !hiddenReport.EligibleForFormalPromotion;
 }
 
 static bool SmokeOpponentRangeUsesNoHuEvidence()
@@ -2420,6 +2585,9 @@ static bool SmokeFairBranchUsesPosteriorWithoutExactWall()
     Console.WriteLine($"fair_branch score={summary.Score:F2} branches={summary.BranchCount} expected={summary.ExpectedNextShanten:F2}/{summary.ExpectedNextLiveUkeire:F2} worst={summary.WorstNextShanten}/{summary.WorstNextLiveUkeire}");
     return summary.BranchCount > 0
         && double.IsFinite(summary.Score)
+        && summary.DeadBranchProbability is >= 0.0 and <= 1.0
+        && summary.TailExpectedLiveUkeire >= 0.0
+        && summary.TailExpectedLiveUkeire <= summary.ExpectedNextLiveUkeire + 0.000001
         && summary.WorstNextShanten >= summary.ExpectedNextShanten
         && summary.Reasons.Any(reason => reason.Contains("智能两步", StringComparison.Ordinal))
         && summary.Reasons.All(reason => !reason.Contains("透视", StringComparison.Ordinal));

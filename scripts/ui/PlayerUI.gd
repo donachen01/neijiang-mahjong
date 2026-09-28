@@ -793,14 +793,7 @@ func _create_hu_display_wrapper(player: Dictionary) -> Control:
 		var source_seat: int = int(player.get("winning_source_seat", viewer_seat))
 		if win_type in ["self_draw", "gang_self_draw"] or source_seat == viewer_seat:
 			return _create_side_hand_tile(false, winning_tile, true, _meld_tile_scale())
-		return _create_claim_tile_stack(
-			winning_tile,
-			_meld_tile_scale(),
-			_side_hand_tile_rotation_degrees(),
-			_claim_arrow_text(viewer_seat, source_seat),
-			false,
-			true
-		)
+		return _create_plain_meld_tile(winning_tile, _meld_tile_scale(), _side_hand_tile_rotation_degrees(), false, true)
 	var wrapper: BoxContainer = VBoxContainer.new() if seat_dock in [SeatDock.LEFT, SeatDock.RIGHT] else VBoxContainer.new()
 	wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	wrapper.add_theme_constant_override("separation", 4)
@@ -904,25 +897,11 @@ func _render_hu_group(group: BoxContainer, player: Dictionary) -> void:
 		if win_type in ["self_draw", "gang_self_draw"] or source_seat == viewer_seat:
 			winning_wrapper = _create_plain_meld_tile(winning_tile, _meld_tile_scale(), _side_hand_tile_rotation_degrees(), false, true)
 		else:
-			winning_wrapper = _create_claim_tile_stack(
-				winning_tile,
-				_meld_tile_scale(),
-				_side_hand_tile_rotation_degrees(),
-				_claim_arrow_text(viewer_seat, source_seat),
-				false,
-				true
-			)
+			winning_wrapper = _create_plain_meld_tile(winning_tile, _meld_tile_scale(), _side_hand_tile_rotation_degrees(), false, true)
 	elif win_type in ["self_draw", "gang_self_draw"]:
-		winning_wrapper = _create_plain_meld_tile(winning_tile, scale * 1.08, 90.0 if seat_dock in [SeatDock.SELF, SeatDock.TOP] else 0.0, false, true)
+		winning_wrapper = _create_plain_meld_tile(winning_tile, scale, 90.0 if seat_dock in [SeatDock.SELF, SeatDock.TOP] else 0.0, false, true)
 	else:
-		winning_wrapper = _create_claim_tile_stack(
-			winning_tile,
-			scale * 1.08,
-			0.0,
-			_claim_arrow_text(viewer_seat, source_seat),
-			false,
-			true
-		)
+		winning_wrapper = _create_plain_meld_tile(winning_tile, scale, 0.0, false, true)
 	group.add_child(winning_wrapper)
 
 

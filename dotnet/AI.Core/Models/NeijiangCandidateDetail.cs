@@ -39,6 +39,11 @@ public sealed class NeijiangCandidateDetail
     public int SameShantenImprovementCount { get; init; }
     public int MiddleTileFlexibility { get; init; }
     public double ShapeScore { get; init; }
+    public double ExactStructureScore { get; init; }
+    public int ExactStructureBlockCount { get; init; }
+    public int ExactStructureRedundantBlockCount { get; init; }
+    public int ExactStructureDecompositionCount { get; init; }
+    public double ExactStructureWeakestBlockQuality { get; init; }
     public bool BreaksPair { get; init; }
     public bool BreaksTriplet { get; init; }
     public double SetPreservationScore { get; init; }
@@ -59,6 +64,8 @@ public sealed class NeijiangCandidateDetail
     public double FairBranchExpectedLiveUkeire { get; init; }
     public int FairBranchWorstShanten { get; init; }
     public int FairBranchWorstLiveUkeire { get; init; }
+    public double FairBranchDeadProbability { get; init; }
+    public double FairBranchTailLiveUkeire { get; init; }
     public double SearchBonus { get; init; }
     public int SearchSimulations { get; init; }
     public bool SearchUsed { get; init; }

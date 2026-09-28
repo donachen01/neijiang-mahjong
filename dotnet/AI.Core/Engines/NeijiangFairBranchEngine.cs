@@ -12,6 +12,7 @@ public sealed class NeijiangFairBranchEngine
     private readonly NeijiangShantenEngine _shanten = new();
     private readonly NeijiangUkeireEngine _ukeire = new();
     private readonly NeijiangWaitShapeEngine _waitShape = new();
+    private readonly NeijiangExactHandAnalyzer _exactHands = new();
 
     public NeijiangFairBranchSummary Evaluate(
         IReadOnlyList<int> handAfterDiscard,
@@ -53,6 +54,8 @@ public sealed class NeijiangFairBranchEngine
         var completionProxy = 0.0;
         var worstShanten = int.MinValue;
         var worstLive = int.MaxValue;
+        var deadBranchProbability = 0.0;
+        var weightedBranches = new List<(double Probability, int Live)>();
 
         foreach (var drawTile in selectedDraws)
         {
@@ -65,33 +68,48 @@ public sealed class NeijiangFairBranchEngine
             var adjustedUnknown = unknown18.Take(18).ToArray();
             adjustedUnknown[drawTile] = Math.Max(0, adjustedUnknown[drawTile] - 1);
 
-            var bestShanten = int.MaxValue;
-            var bestLive = -1;
-            var bestWaitCount = -1;
-            var bestShape = double.NegativeInfinity;
+            var outcomes = new List<BranchDiscardOutcome>();
             for (var discardTile = 0; discardTile < 18; discardTile++)
             {
                 if (drawnHand[discardTile] <= 0)
                     continue;
                 var nextShanten = _shanten.CalcShantenAfterDiscard(drawnHand, discardTile, meldCount);
-                var (_, nextLive, improvingTiles) = _ukeire.CalcUkeire(drawnHand, adjustedUnknown, discardTile, meldCount);
+                var (_, nextLive, _) = _ukeire.CalcUkeire(drawnHand, adjustedUnknown, discardTile, meldCount);
                 var nextHand = (int[])drawnHand.Clone();
                 nextHand[discardTile]--;
-                var waitCount = nextShanten <= 0 ? improvingTiles.Distinct().Count() : 0;
-                var shape = nextShanten <= 0
-                    ? _waitShape.Evaluate(nextHand, improvingTiles).WaitShapeScore
-                    : 0.0;
-                if (nextShanten < bestShanten
-                    || nextShanten == bestShanten && nextLive > bestLive
-                    || nextShanten == bestShanten && nextLive == bestLive && waitCount > bestWaitCount
-                    || nextShanten == bestShanten && nextLive == bestLive && waitCount == bestWaitCount && shape > bestShape)
-                {
-                    bestShanten = nextShanten;
-                    bestLive = nextLive;
-                    bestWaitCount = waitCount;
-                    bestShape = shape;
-                }
+                outcomes.Add(new BranchDiscardOutcome(nextHand, nextShanten, nextLive, 0, 0.0));
             }
+
+            // Refine only the strongest routes with exact wait enumeration.
+            // Enumerating every legal discard multiplied the two-ply cost and
+            // caused mobile-sized turns to exceed the decision budget.
+            foreach (var outcome in outcomes
+                         .OrderBy(item => item.Shanten)
+                         .ThenByDescending(item => item.Live)
+                         .Take(3))
+            {
+                if (outcome.Shanten > 0)
+                    continue;
+                var exactWaits = _exactHands.EnumerateWaits(outcome.Hand, meldCount);
+                outcome.WaitCount = exactWaits.Count;
+                if (exactWaits.Count == 0)
+                    continue;
+                outcome.Shanten = 0;
+                outcome.Live = exactWaits.Sum(tile => Math.Max(0, adjustedUnknown[tile]));
+                outcome.Shape = _waitShape.Evaluate(outcome.Hand, exactWaits).WaitShapeScore;
+            }
+
+            var best = outcomes
+                .OrderBy(item => item.Shanten)
+                .ThenByDescending(item => item.Live)
+                .ThenByDescending(item => item.WaitCount)
+                .ThenByDescending(item => item.Shape)
+                .FirstOrDefault();
+            if (best is null)
+                continue;
+            var bestShanten = best.Shanten;
+            var bestLive = best.Live;
+            var bestShape = best.Shape;
 
             if (bestShanten == int.MaxValue)
                 continue;
@@ -102,6 +120,9 @@ public sealed class NeijiangFairBranchEngine
             expectedShape += (double.IsFinite(bestShape) ? bestShape : 0.0) * probability;
             worstShanten = Math.Max(worstShanten, bestShanten);
             worstLive = Math.Min(worstLive, Math.Max(0, bestLive));
+            weightedBranches.Add((probability, Math.Max(0, bestLive)));
+            if (bestLive <= 0)
+                deadBranchProbability += probability;
             if (bestShanten <= 0)
                 completionProxy += probability * Math.Max(0, bestLive) / Math.Max(1.0, unknown18.Sum() - 1.0);
         }
@@ -110,7 +131,8 @@ public sealed class NeijiangFairBranchEngine
             return new NeijiangFairBranchSummary();
 
         var worstShantenPenalty = Math.Max(0.0, worstShanten - currentShanten) * 2.60;
-        var deadBranchPenalty = currentShanten <= 1 && worstLive == 0 ? 2.40 : 0.0;
+        var tailLive = CalculateLowerTailMean(weightedBranches, 0.25);
+        var deadBranchPenalty = currentShanten <= 1 ? deadBranchProbability * 3.20 : 0.0;
         var score = (currentShanten - expectedShanten) * 3.20
             + (expectedLive - currentLiveUkeire) * 0.075
             + expectedShape * 0.010
@@ -127,11 +149,46 @@ public sealed class NeijiangFairBranchEngine
             OrderedTwoDrawCompletionProxy = completionProxy,
             WorstNextShanten = worstShanten,
             WorstNextLiveUkeire = worstLive == int.MaxValue ? 0 : worstLive,
+            DeadBranchProbability = Math.Clamp(deadBranchProbability, 0.0, 1.0),
+            TailExpectedLiveUkeire = tailLive,
             Reasons = new[]
             {
                 $"智能两步：{branchCount}种后验摸牌，期望向听 {expectedShanten:0.00}",
-                $"智能两步：期望活张 {expectedLive:0.0}，最差分支 {worstShanten}/{(worstLive == int.MaxValue ? 0 : worstLive)}"
+                $"智能两步：期望活张 {expectedLive:0.0}，尾部活张 {tailLive:0.0}，死分支 {deadBranchProbability:P0}"
             }
         };
+    }
+
+    private static double CalculateLowerTailMean(
+        IEnumerable<(double Probability, int Live)> branches,
+        double tailMass)
+    {
+        var remaining = Math.Clamp(tailMass, 0.01, 1.0);
+        var weighted = 0.0;
+        var consumed = 0.0;
+        foreach (var branch in branches.OrderBy(item => item.Live))
+        {
+            var take = Math.Min(remaining, branch.Probability);
+            weighted += take * branch.Live;
+            consumed += take;
+            remaining -= take;
+            if (remaining <= 0.000001)
+                break;
+        }
+        return consumed <= 0.000001 ? 0.0 : weighted / consumed;
+    }
+
+    private sealed class BranchDiscardOutcome(
+        int[] hand,
+        int shanten,
+        int live,
+        int waitCount,
+        double shape)
+    {
+        public int[] Hand { get; } = hand;
+        public int Shanten { get; set; } = shanten;
+        public int Live { get; set; } = live;
+        public int WaitCount { get; set; } = waitCount;
+        public double Shape { get; set; } = shape;
     }
 }

@@ -1,12 +1,36 @@
 class_name NeijiangTableSkinCatalog
 extends RefCounted
 
-# The default is intentionally a quiet short-nap cloth.  Decorative jacquard
-# remains available as an optional skin, but must not be the first impression.
-const DEFAULT_SKIN_ID := "warm_caban_velvet"
+const DEFAULT_SKIN_ID := "blue_glass"
 const TEXTURE_ROOT := "res://res/art/materials/table_skins"
 
 const SKINS: Array[Dictionary] = [
+	{
+		"id": "blue_glass",
+		"name": "玻璃特效",
+		"subtitle": "深青桌布·蓝漆玻璃桌框",
+		"source": "blender_authored_launch_lacquer_and_glass_table",
+		"albedo_filename": "albedo_2k.png",
+		"albedo_tint": Color("D8FFE8"),
+		"uv_scale": Vector3.ONE,
+		"normal_scale": 0.24,
+		"roughness": 0.82,
+		"anisotropy": 0.04,
+		"preserve_microtexture": true,
+		"light_color": Color("EEF9FF"),
+		"ambient_light_color": Color("D7E8EC"),
+		"ambient_light_energy": 0.40,
+		"key_light_energy": 0.50,
+		"rake_energy": 0.50,
+		"overhead_energy": 0.42,
+		"bounce_energy": 0.48,
+		"glass_theme": true,
+		"background_top": Color("248BD2"),
+		"background_horizon": Color("72BBE7"),
+		"background_bottom": Color("1254AE"),
+		"frame_color": Color("051D4F"),
+		"frame_glass_opacity": 0.08,
+	},
 	{
 		"id": "deep_emerald_crepe",
 		"name": "深翡翠绉绒",

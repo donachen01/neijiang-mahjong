@@ -11,6 +11,9 @@ public sealed class NeijiangSelfActionDecisionEngine
     private readonly NeijiangBaoJiaoActionEngine _baoJiaoAction = new();
     private readonly NeijiangRoutePlanEngine _routePlan = new();
     private readonly NeijiangStageEvaluator _stage = new();
+    private readonly NeijiangExactHandAnalyzer _exactHands = new();
+    private readonly NeijiangExactStructureEngine _exactStructure = new();
+    private readonly NeijiangGangReplacementEvaluator _gangReplacement = new();
 
     public NeijiangSelfActionDecisionResult DecideSelfAction(
         NeijiangStateView state,
@@ -171,7 +174,14 @@ public sealed class NeijiangSelfActionDecisionEngine
     {
         var removeCount = subtype == "an_gang" ? 4 : 1;
         var handAfter = RemoveCopies(state.Hand18, tileType, removeCount);
-        var followUp = EvaluateBestFollowUp(handAfter, state.Remaining18, meldCount + 1);
+        var meldCountAfter = subtype == "an_gang" ? meldCount + 1 : meldCount;
+        var replacement = _gangReplacement.Evaluate(handAfter, state.Remaining18, meldCountAfter);
+        var followUp = new FollowUpSummary(
+            (int)Math.Ceiling(replacement.ExpectedShanten),
+            replacement.RepresentativeImprovingTiles.Count,
+            (int)Math.Round(replacement.ExpectedLiveUkeire),
+            replacement.RepresentativeDiscardTile,
+            replacement.RepresentativeImprovingTiles.ToArray());
         var discardRisk = followUp.BestDiscardTile >= 0
             ? _danger.EvaluateDetail(followUp.BestDiscardTile, state, belief).Risk
             : 0;
@@ -183,7 +193,9 @@ public sealed class NeijiangSelfActionDecisionEngine
             + (followUp.LiveUkeire - current.LiveUkeire) * 7
             - (int)Math.Round(discardRisk * 0.76)
             - threatLevel * 10
-            - roundStage * 8;
+            - roundStage * 8
+            + (int)Math.Round(replacement.ReplacementWinProbability * 420.0)
+            - Math.Max(0, replacement.WorstShanten - current.Shanten) * 92;
 
         if (followUp.Shanten <= current.Shanten) score += 76;
         if (followUp.Shanten == 0) score += 176;
@@ -210,6 +222,7 @@ public sealed class NeijiangSelfActionDecisionEngine
             $"{label}后首打危险 {discardRisk}",
             $"{label}税收益纳入 C# 决策"
         };
+        reasons.AddRange(replacement.Reasons);
         if (currentPlan.ForbidsGangs)
             reasons.Add($"七对路线：{currentPlan.PrimaryRoute} 禁止{label}，杠牌会破坏七对");
         if (followUp.Shanten <= current.Shanten) reasons.Add("杠后不拖慢成叫");
@@ -243,25 +256,39 @@ public sealed class NeijiangSelfActionDecisionEngine
         var bestUkeire = 0;
         var bestLive = 0;
         var bestTile = -1;
+        var bestStructure = double.NegativeInfinity;
+        var bestImproving = Array.Empty<int>();
         for (var tileType = 0; tileType < hand18.Length; tileType++)
         {
             if (hand18[tileType] <= 0) continue;
             var shanten = _shanten.CalcShantenAfterDiscard(hand18, tileType, meldCount);
-            var (ukeire, liveUkeire, _) = _ukeire.CalcUkeire(hand18, remaining18, tileType, meldCount);
+            var (ukeire, liveUkeire, improvingTiles) = _ukeire.CalcUkeire(hand18, remaining18, tileType, meldCount);
+            var afterDiscard = RemoveCopies(hand18, tileType, 1);
+            var exactWaits = _exactHands.EnumerateWaits(afterDiscard, meldCount);
+            if (exactWaits.Count > 0)
+            {
+                shanten = 0;
+                ukeire = exactWaits.Count;
+                liveUkeire = exactWaits.Sum(wait => Math.Max(0, remaining18[wait]));
+                improvingTiles = exactWaits.ToList();
+            }
+            var structureScore = _exactStructure.Evaluate(afterDiscard, meldCount).Score;
             if (shanten < bestShanten
                 || (shanten == bestShanten && liveUkeire > bestLive)
-                || (shanten == bestShanten && liveUkeire == bestLive && ukeire > bestUkeire))
+                || (shanten == bestShanten && liveUkeire == bestLive && ukeire > bestUkeire)
+                || (shanten == bestShanten && liveUkeire == bestLive && ukeire == bestUkeire && structureScore > bestStructure))
             {
                 bestShanten = shanten;
                 bestUkeire = ukeire;
                 bestLive = liveUkeire;
                 bestTile = tileType;
+                bestStructure = structureScore;
+                bestImproving = improvingTiles.ToArray();
             }
         }
         if (bestTile < 0)
             return new FollowUpSummary(currentShanten, 0, 0, -1, Array.Empty<int>());
-        var (_, _, improvingTiles) = _ukeire.CalcUkeire(hand18, remaining18, bestTile, meldCount);
-        return new FollowUpSummary(bestShanten, bestUkeire, bestLive, bestTile, improvingTiles.ToArray());
+        return new FollowUpSummary(bestShanten, bestUkeire, bestLive, bestTile, bestImproving);
     }
 
     private int ResolveThreatLevel(NeijiangStateView state, NeijiangBeliefSnapshot belief)

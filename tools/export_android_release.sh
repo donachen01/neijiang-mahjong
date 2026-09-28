@@ -163,6 +163,7 @@ zip -q -d "$PRUNED_APK" \
   'assets/tests/*' \
   'assets/tools/*' \
   'assets/evidence/*' \
+	'assets/test-data/*' \
   'assets/build/*' \
   'assets/.godot/mono/publish/arm64/*.pdb' \
   'assets/.godot/mono/publish/arm64/*.xml' \
@@ -179,6 +180,23 @@ zip -q -d "$PRUNED_APK" \
   'assets/.godot/imported/table_scheme_b_v3*' \
   'assets/.godot/imported/sichuan_mahjong_splash*' \
   'assets/.godot/imported/neijiang_mahjong_splash.backup_20260501*' \
+	'assets/.godot/imported/felt_basecolor.png-*' \
+	'assets/.godot/imported/felt_normal.png-*' \
+	'assets/.godot/imported/felt_orm.png-*' \
+	'assets/.godot/imported/walnut_basecolor.png-*' \
+	'assets/.godot/imported/walnut_normal.png-*' \
+	'assets/.godot/imported/walnut_orm.png-*' \
+	'assets/.godot/imported/leather_basecolor.png-*' \
+	'assets/.godot/imported/leather_normal.png-*' \
+	'assets/.godot/imported/leather_orm.png-*' \
+	'assets/.godot/imported/frame_basecolor.png-*' \
+	'assets/.godot/imported/frame_normal.png-*' \
+	'assets/.godot/imported/frame_orm.png-*' \
+	'assets/.godot/imported/brocade_mask.png-*' \
+	'assets/.godot/imported/*-eeac85da2748154ebf09c709ca63abec.ctex' \
+	'assets/.godot/imported/*-12703c54582e25292f77b59eee17ff3e.ctex' \
+	'assets/res/art/materials/table_v2/*' \
+	'assets/res/source/tiles/*' \
   'assets/res/art/splash/sichuan_mahjong_splash.png.import' \
   'assets/res/art/splash/neijiang_mahjong_splash.backup_20260501.png.import' \
   'assets/res/art/splash/sichuan_mahjong_splash.png' \

@@ -37,8 +37,24 @@ func _wait_for_editor_filesystem() -> void:
 
 func _prune_non_runtime_import_cache() -> void:
 	var removed := 0
-	for import_path in _collect_import_sidecars("res://docs"):
-		removed += _remove_import_artifacts(import_path)
+	# `all_resources` also sweeps imported cache artifacts. Excluding the source
+	# directory in the preset is therefore not enough: screenshots under evidence
+	# and test fixtures had already produced .ctex/.fontdata files and inflated the
+	# signed APK by more than 150 MB. Remove only generated import sidecars/cache
+	# for directories that can never be used by the shipped game. Source evidence
+	# and tests themselves remain untouched and can be re-imported by the editor.
+	for root_path in [
+		"res://docs",
+		"res://tests",
+		"res://tools",
+		"res://evidence",
+		"res://test-data",
+		"res://build",
+		"res://backups",
+		"res://测试数据统计",
+	]:
+		for import_path in _collect_import_sidecars(root_path):
+			removed += _remove_import_artifacts(import_path)
 	print("pruned_non_runtime_import_cache=", removed)
 
 
@@ -104,7 +120,7 @@ func _export_android() -> void:
 	preset.set("custom_features", "C#")
 	preset.set("export_filter", "all_resources")
 	preset.set("include_filter", "")
-	preset.set("exclude_filter", "docs/*,tests/*,tools/*,build/*,evidence/*,backups/*,测试数据统计/*,.tmp_tts/*,.venv_tts/*,.git/*,.godot/*")
+	preset.set("exclude_filter", "docs/*,tests/*,tools/*,build/*,evidence/*,test-data/*,backups/*,测试数据统计/*,.tmp_tts/*,.venv_tts/*,.git/*,.godot/*")
 	preset.set("script_export_mode", 2)
 	preset.set("gradle_build/use_gradle_build", true)
 	var gradle_build_dir := OS.get_environment("GODOT_ANDROID_GRADLE_BUILD_DIR")
@@ -146,7 +162,9 @@ func _export_android() -> void:
 	preset.set("user_data_backup/allow", false)
 	preset.set("shader_baker/enabled", false)
 	preset.set("xr_features/xr_mode", 0)
-	preset.set("permissions/internet", false)
+	preset.set("permissions/internet", true)
+	preset.set("permissions/access_network_state", true)
+	preset.set("permissions/access_wifi_state", true)
 	preset.set("permissions/read_external_storage", is_debug)
 	preset.set("permissions/write_external_storage", is_debug)
 	preset.set("permissions/manage_external_storage", is_debug)

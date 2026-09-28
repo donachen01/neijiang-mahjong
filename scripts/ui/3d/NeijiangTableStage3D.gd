@@ -4,11 +4,12 @@ extends Node3D
 signal tile_pressed(tile_id: int)
 
 const TILE_SCRIPT := preload("res://scripts/ui/3d/NeijiangTile3D.gd")
-const TABLE_SCENE := preload("res://res/art/3d/neijiang_table_v2.glb")
+const TABLE_SCENE := preload("res://res/art/3d/neijiang_table_blue_glass.glb")
 const CENTER_COMPASS_SCENE := preload("res://res/art/3d/neijiang_center_compass_v2.glb")
 const FALLBACK_TABLE_SCENE := preload("res://res/art/3d/neijiang_table.glb")
 const CENTER_NUMBER_FONT := preload("res://res/fonts/app_cjk.ttc")
 const TABLE_SKIN_CATALOG := preload("res://scripts/ui/table/NeijiangTableSkinCatalog.gd")
+const CLASSIC_WALNUT_ALBEDO := preload("res://res/art/materials/table_v2/walnut_basecolor.png")
 
 # Keep the original compact self-hand rhythm while preserving a real physical
 # seam. At the normal 1.94 scale each tile is 0.8148 world units wide, so 0.80
@@ -122,6 +123,8 @@ var last_contract: Dictionary = {}
 var reduced_motion := false
 var interaction_enabled := false
 var self_meld_tile_count := 0
+var self_meld_layout_slot_count := 0
+var self_meld_extra_span_per_scale := 0.0
 var self_meld_group_count := 0
 var self_layout_hand_count := 0
 var self_layout_scale := SELF_HAND_SCALE
@@ -137,6 +140,9 @@ var last_desired_entries: Dictionary = {}
 var startup_status := "created"
 var active_table_skin_id := NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
 var table_felt_materials: Array[StandardMaterial3D] = []
+var table_frame_surfaces: Array[Dictionary] = []
+var world_environment_resource: Environment
+var table_key_light: DirectionalLight3D
 var tabletop_dark_seam: MeshInstance3D
 var tabletop_dark_seam_material: StandardMaterial3D
 var table_skin_texture_cache: Dictionary = {}
@@ -217,11 +223,25 @@ func render_snapshot(
 	var danger_ids: Array = markers.get("danger_tile_ids", [])
 	var self_player := _player_by_seat(players, 0)
 	self_meld_tile_count = _meld_tile_count(self_player.get("melds", []))
+	self_meld_layout_slot_count = _meld_layout_slot_count(self_player.get("melds", []))
+	self_meld_extra_span_per_scale = _meld_rotated_extra_span_per_scale(self_player.get("melds", []), 0)
+	var self_hand: Array = all_hands[0] if not all_hands.is_empty() else []
+	var self_winning_tile: Dictionary = self_player.get("winning_tile", {})
+	var reserve_external_winning_tile := bool(self_player.get("has_won", false)) \
+		and not self_winning_tile.is_empty() \
+		and int(self_player.get("winning_source_seat", 0)) != 0
+	var winning_tile_already_in_hand := false
+	if reserve_external_winning_tile:
+		var winning_id := int(self_winning_tile.get("id", -1))
+		for tile_value in self_hand:
+			if int((tile_value as Dictionary).get("id", -2)) == winning_id:
+				winning_tile_already_in_hand = true
+				break
 	var has_detached_draw := _has_detached_human_draw(
-		all_hands[0] if not all_hands.is_empty() else [], self_player, new_draw_id
+		self_hand, self_player, new_draw_id
 	)
 	_configure_self_row_layout(
-		all_hands[0].size() if not all_hands.is_empty() else 0,
+		self_hand.size() + (1 if reserve_external_winning_tile and not winning_tile_already_in_hand else 0),
 		self_player,
 		has_detached_draw
 	)
@@ -353,7 +373,7 @@ func apply_table_skin(skin_id: String) -> bool:
 		return false
 	active_table_skin_id = skin_id
 	var skin: Dictionary = TABLE_SKIN_CATALOG.get_skin(skin_id)
-	var albedo := _load_table_skin_texture(skin_id, "albedo_2k.jpg")
+	var albedo := _load_table_skin_texture(skin_id, str(skin.get("albedo_filename", "albedo_2k.jpg")))
 	var normal := _load_table_skin_texture(skin_id, "normal_2k.png")
 	var roughness_map := _load_table_skin_texture(skin_id, "roughness_2k.png")
 	if albedo == null or normal == null or roughness_map == null:
@@ -364,21 +384,117 @@ func apply_table_skin(skin_id: String) -> bool:
 			continue
 		felt_material.albedo_color = skin.get("albedo_tint", Color.WHITE)
 		felt_material.albedo_texture = albedo
-		felt_material.normal_enabled = true
-		felt_material.normal_texture = normal
+		var use_detail_maps := bool(skin.get("use_detail_maps", true))
+		felt_material.normal_enabled = use_detail_maps
+		felt_material.normal_texture = normal if use_detail_maps else null
 		felt_material.normal_scale = float(skin.get("normal_scale", 0.30))
 		felt_material.roughness = float(skin.get("roughness", 0.92))
-		felt_material.roughness_texture = roughness_map
+		felt_material.roughness_texture = roughness_map if use_detail_maps else null
 		felt_material.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 		felt_material.metallic = 0.0
+		felt_material.clearcoat_enabled = false
 		felt_material.uv1_scale = skin.get("uv_scale", Vector3(2.8, 2.8, 1.0))
-		felt_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+		felt_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR if bool(skin.get("preserve_microtexture", false)) else BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 		felt_material.anisotropy_enabled = true
 		felt_material.anisotropy = float(skin.get("anisotropy", 0.12))
 		felt_material.rim_enabled = false
 	_apply_tabletop_dark_seam_skin(skin)
 	_apply_table_skin_lighting(skin)
+	_apply_table_frame_theme(skin)
+	_apply_world_theme(skin)
 	return true
+
+
+func _apply_table_frame_theme(skin: Dictionary) -> void:
+	var use_glass := bool(skin.get("glass_theme", false))
+	for surface in table_frame_surfaces:
+		var mesh := surface.get("mesh") as MeshInstance3D
+		var index := int(surface.get("surface_index", 0))
+		var base := surface.get("base_material") as StandardMaterial3D
+		if mesh == null or base == null:
+			continue
+		var glass_detail := mesh.name in ["SingleClearGlassCap", "InnerGlassEdge", "RaisedTransparentGlassLip"]
+		mesh.visible = use_glass or not glass_detail
+		if not use_glass:
+			var restored := base.duplicate() as StandardMaterial3D
+			restored.resource_local_to_scene = true
+			if mesh.name in ["TableWalnutBase", "WalnutApronRing"]:
+				restored.albedo_color = Color.WHITE
+				restored.albedo_texture = CLASSIC_WALNUT_ALBEDO
+				restored.metallic = 0.0
+				restored.roughness = 0.58
+				restored.clearcoat_enabled = false
+			mesh.set_surface_override_material(index, restored)
+			continue
+		var finish := StandardMaterial3D.new()
+		finish.resource_local_to_scene = true
+		finish.cull_mode = BaseMaterial3D.CULL_BACK
+		finish.metallic_specular = 0.96
+		finish.clearcoat_enabled = true
+		finish.clearcoat = 0.88
+		finish.clearcoat_roughness = 0.04
+		match mesh.name:
+			"TableWalnutBase":
+				finish.albedo_color = Color("02091E")
+				finish.metallic = 0.32
+				finish.roughness = 0.19
+			"WalnutApronRing":
+				finish.albedo_color = Color(skin.get("frame_color", Color("155AA8")))
+				finish.metallic = 0.10
+				finish.roughness = 0.085
+			"InnerGlassEdge":
+				finish.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				finish.albedo_color = Color(0.59, 0.84, 0.93, 0.38)
+				finish.roughness = 0.055
+			"RaisedTransparentGlassLip":
+				finish.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				finish.albedo_color = Color(0.76, 0.91, 1.0, 0.12)
+				finish.roughness = 0.045
+			"SingleClearGlassCap":
+				finish.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				finish.albedo_color = Color(0.86, 0.97, 1.0, float(skin.get("frame_glass_opacity", 0.08)))
+				finish.roughness = 0.055
+			_:
+				finish.albedo_color = Color("122E58")
+				finish.roughness = 0.12
+		mesh.set_surface_override_material(index, finish)
+	var table_root := get_node_or_null("ManufacturedClubTable") as Node3D
+	if table_root != null:
+		for mesh_node in table_root.find_children("*", "MeshInstance3D", true, false):
+			var detail := mesh_node as MeshInstance3D
+			if detail.name.begins_with("PlayfieldGroove") or detail.name.begins_with("CenterCorner"):
+				detail.visible = not use_glass
+
+
+func _apply_world_theme(skin: Dictionary) -> void:
+	if world_environment_resource == null:
+		return
+	if bool(skin.get("glass_theme", false)):
+		var sky_material := ProceduralSkyMaterial.new()
+		sky_material.sky_top_color = Color(skin.get("background_top", Color("248BD2")))
+		sky_material.sky_horizon_color = Color(skin.get("background_horizon", Color("72BBE7")))
+		sky_material.ground_horizon_color = Color("8ABEFF")
+		sky_material.ground_bottom_color = Color(skin.get("background_bottom", Color("1254AE")))
+		var sky := Sky.new()
+		sky.sky_material = sky_material
+		world_environment_resource.background_mode = Environment.BG_SKY
+		world_environment_resource.sky = sky
+		world_environment_resource.reflected_light_source = Environment.REFLECTION_SOURCE_BG
+		world_environment_resource.ambient_light_color = Color(skin.get("ambient_light_color", Color("D7E8EC")))
+		world_environment_resource.ambient_light_energy = float(skin.get("ambient_light_energy", 0.40))
+		if table_key_light != null:
+			table_key_light.light_color = Color("EEF8FF")
+			table_key_light.light_energy = float(skin.get("key_light_energy", 0.50))
+		return
+	world_environment_resource.background_mode = Environment.BG_COLOR
+	world_environment_resource.background_color = Color("202A43")
+	world_environment_resource.sky = null
+	world_environment_resource.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	world_environment_resource.ambient_light_color = Color("A9B79C")
+	world_environment_resource.ambient_light_energy = 0.22
+	if table_key_light != null:
+		table_key_light.light_color = Color("FFF1E1")
+		table_key_light.light_energy = 0.79
 
 
 func get_table_skin_id() -> String:
@@ -393,6 +509,8 @@ func get_table_skin_contract() -> Dictionary:
 		"active_skin_id": active_table_skin_id,
 		"skin_ids": ids,
 		"skin_count": ids.size(),
+		"glass_theme": active_table_skin_id == "blue_glass",
+		"frame_surface_count": table_frame_surfaces.size(),
 		"felt_material_count": table_felt_materials.size(),
 		"felt_inset_material_count": 1 if tabletop_dark_seam != null else 0,
 		"material_target": "TableFelt",
@@ -479,6 +597,7 @@ func _setup_world() -> void:
 		environment.ssao_sharpness = 0.82
 		environment.ssao_light_affect = 0.28
 	world_environment.environment = environment
+	world_environment_resource = environment
 	add_child(world_environment)
 
 	camera = Camera3D.new()
@@ -517,6 +636,7 @@ func _setup_world() -> void:
 	key_light.shadow_blur = 2.45
 	key_light.shadow_bias = 0.035
 	key_light.shadow_normal_bias = 0.82
+	table_key_light = key_light
 	add_child(key_light)
 
 	var fill_light := OmniLight3D.new()
@@ -639,6 +759,17 @@ func _configure_imported_table_meshes(node: Node) -> void:
 					felt_material.rim_enabled = false
 					table_mesh.set_surface_override_material(surface_index, felt_material)
 					table_felt_materials.append(felt_material)
+		elif table_mesh.name in ["TableWalnutBase", "WalnutApronRing", "LeatherGasketRing", "SingleClearGlassCap", "InnerGlassEdge", "RaisedTransparentGlassLip"]:
+			for surface_index in range(table_mesh.get_surface_override_material_count()):
+				var imported_frame_material := table_mesh.get_active_material(surface_index)
+				if imported_frame_material is StandardMaterial3D:
+					var base_frame := imported_frame_material.duplicate() as StandardMaterial3D
+					base_frame.resource_local_to_scene = true
+					table_frame_surfaces.append({
+						"mesh": table_mesh,
+						"surface_index": surface_index,
+						"base_material": base_frame,
+					})
 		elif table_mesh.name == "PlayfieldInsetOuter" or table_mesh.name == "PlayfieldInsetInner":
 			# The authored twin turquoise loops are intentionally retired. A single,
 			# wider dark seam is built below so it reads as a table-felt detail.
@@ -1014,7 +1145,7 @@ func _append_hand_entries(
 			false,
 			false,
 			Vector3.ONE * (_flat_concealed_result_scale_for_seat(seat) if ai_discard_win else scale_value),
-			source_seat if source_seat != seat else -1,
+			-1,
 			seat
 		)
 		desired[winning_key]["motion_kind"] = "win_transfer"
@@ -1033,7 +1164,9 @@ func _append_meld_entries(desired: Dictionary, seat: int, melds: Array) -> void:
 		var meld_type := str(meld.get("type", ""))
 		var gang_subtype := str(meld.get("gang_subtype", meld.get("gang_type", "melded_gang")))
 		var concealed_gang := _is_concealed_gang(meld)
-		var add_gang := meld_type == "gang" and gang_subtype in ["add_gang", "bu_gang"]
+		var add_gang := meld_type == "gang" and (bool(meld.get("gang_upgrade", false)) or gang_subtype in ["add_gang", "bu_gang"])
+		if add_gang:
+			gang_subtype = "add_gang"
 		var direct_gang := meld_type == "gang" and not concealed_gang and not add_gang
 		var exposes_source := (meld_type == "peng" or direct_gang) and source_seat != seat
 		var claim_index := _claim_tile_index_for_meld(meld_tiles.size(), seat, source_seat) if exposes_source else -1
@@ -1148,11 +1281,13 @@ func _claim_tile_index_for_meld(tile_count: int, owner_seat: int, source_seat: i
 	if source_seat == owner_seat:
 		return tile_count - 1
 	var relative_source := posmod(source_seat - owner_seat, 4)
+	if owner_seat == 3 and relative_source != 2:
+		relative_source = 4 - relative_source
 	match relative_source:
 		1:
 			return 0
 		2:
-			return mini(1, tile_count - 1)
+			return maxi(0, tile_count - 2) if owner_seat == 3 else mini(1, tile_count - 1)
 		3:
 			return tile_count - 1
 	return mini(1, tile_count - 1)
@@ -1490,17 +1625,18 @@ func _configure_self_row_layout(hand_count: int, player: Dictionary, has_detache
 	self_meld_group_count = melds.size()
 	self_layout_is_flat = bool(player.get("has_won", false))
 	var base_scale := SELF_HAND_SCALE * (SELF_FLAT_VISUAL_SCALE_FACTOR if self_layout_is_flat else 1.0)
-	var total_tile_count := self_layout_hand_count + self_meld_tile_count
+	var total_tile_count := self_layout_hand_count + self_meld_layout_slot_count
 	var group_gap_count := maxi(0, self_meld_group_count - 1)
 	var has_meld_hand_gap := self_meld_tile_count > 0 and self_layout_hand_count > 0
 	var span_per_scale := 0.0
 	if total_tile_count > 0:
-		var meld_pitch_count := mini(self_meld_tile_count, maxi(0, total_tile_count - 1))
-		var hand_pitch_count := maxi(0, total_tile_count - self_meld_tile_count - 1)
+		var meld_pitch_count := mini(self_meld_layout_slot_count, maxi(0, total_tile_count - 1))
+		var hand_pitch_count := maxi(0, total_tile_count - self_meld_layout_slot_count - 1)
 		span_per_scale = NeijiangTile3D.TILE_SIZE.x \
 			+ float(meld_pitch_count) * SELF_MELD_TILE_PITCH_PER_SCALE \
 			+ float(hand_pitch_count) * SELF_TILE_PITCH_PER_SCALE \
 			+ float(group_gap_count) * SELF_MELD_GROUP_GAP_PER_SCALE \
+			+ self_meld_extra_span_per_scale \
 			+ (SELF_MELD_HAND_GAP_PER_SCALE if has_meld_hand_gap else 0.0) \
 			+ (SELF_NEW_DRAW_GAP_PER_SCALE if self_layout_has_detached_draw else 0.0)
 	var available_width := SELF_LAYOUT_RIGHT_X - SELF_LAYOUT_LEFT_X
@@ -1525,8 +1661,9 @@ func _self_meld_tile_x(flat_index: int, meld_index: int) -> float:
 
 func _self_hand_tile_x(index: int) -> float:
 	var x := self_layout_start_x
-	if self_meld_tile_count > 0:
-		x += float(self_meld_tile_count) * SELF_MELD_TILE_PITCH_PER_SCALE * self_layout_scale
+	if self_meld_layout_slot_count > 0:
+		x += float(self_meld_layout_slot_count) * SELF_MELD_TILE_PITCH_PER_SCALE * self_layout_scale
+		x += self_meld_extra_span_per_scale * self_layout_scale
 		x += float(maxi(0, self_meld_group_count - 1)) * SELF_MELD_GROUP_GAP_PER_SCALE * self_layout_scale
 		if self_layout_hand_count > 0:
 			x += SELF_MELD_HAND_GAP_PER_SCALE * self_layout_scale
@@ -1632,6 +1769,30 @@ func _standing_basis_for_seat(seat: int) -> Basis:
 
 func _is_concealed_gang(meld: Dictionary) -> bool:
 	return str(meld.get("type", "")) == "gang" and str(meld.get("gang_subtype", "")) == "an_gang"
+
+
+func _meld_layout_slot_count(melds: Array) -> int:
+	var count := 0
+	for meld_value in melds:
+		var meld := meld_value as Dictionary
+		var tile_count := (meld.get("tiles", []) as Array).size()
+		var subtype := str(meld.get("gang_subtype", meld.get("gang_type", "")))
+		count += 3 if str(meld.get("type", "")) == "gang" and (bool(meld.get("gang_upgrade", false)) or subtype in ["add_gang", "bu_gang"]) else tile_count
+	return count
+
+
+func _meld_rotated_extra_span_per_scale(melds: Array, owner_seat: int) -> float:
+	var exposed_source_groups := 0
+	for meld_value in melds:
+		var meld := meld_value as Dictionary
+		var meld_type := str(meld.get("type", ""))
+		var subtype := str(meld.get("gang_subtype", meld.get("gang_type", "melded_gang")))
+		var direct_gang := meld_type == "gang" and not bool(meld.get("gang_upgrade", false)) and subtype not in ["an_gang", "add_gang", "bu_gang"]
+		if (meld_type == "peng" or direct_gang) and int(meld.get("from_seat", owner_seat)) != owner_seat:
+			exposed_source_groups += 1
+	return float(exposed_source_groups) \
+		* (NeijiangTile3D.TILE_SIZE.z - NeijiangTile3D.TILE_SIZE.x) \
+		* SELF_MELD_VISUAL_SCALE_FACTOR
 
 
 func _meld_tile_count(melds: Array) -> int:
@@ -1823,11 +1984,11 @@ func _build_contract(snapshot: Dictionary, all_hands: Array, players: Array, des
 		"winning_source_text": false,
 		"tile_back_color": NeijiangTile3D.NORMAL_TILE_BACK_COLOR.to_html(false),
 		"season_theme": "private_club_deep_emerald_champagne_gold",
-		"table_asset": "neijiang_table_v2_pbr",
+		"table_asset": "neijiang_table_blue_glass",
 		"table_material_pipeline": "blender_pbr_preserved_without_flat_overrides",
 		"table_surface_finish": "deep_emerald_dense_short_nap_felt_with_soft_center_lift_rich_edge_and_mobile_safe_microfibre",
 		"table_frame_finish": "thick_ebonized_furniture_base_with_deep_tailored_dark_emerald_padded_rail",
-		"table_trim_finish": "continuous_outer_and_inner_champagne_gold_inlay",
+		"table_trim_finish": "blue_lacquer_and_clear_glass" if active_table_skin_id == "blue_glass" else "walnut_frame",
 		"table_trim_construction": "recessed_shadow_bed_rounded_satin_body_and_continuous_highlight_glint",
 		"table_divider_finish": "none_clean_uninterrupted_felt",
 		"table_lighting_finish": "broad_uniform_warm_raking_furniture_softbox_with_restrained_opposing_cool_bounce",

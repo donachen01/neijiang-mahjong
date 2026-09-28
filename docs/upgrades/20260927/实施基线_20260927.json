@@ -1,0 +1,287 @@
+{
+  "created_utc": "2026-09-27T11:05:57.532018+00:00",
+  "head": "f25b9dcc34dd1fa773c99d5d632f4d95f2b9796c",
+  "branch_before": "codex/neijiang-ui-ai-migration-20260914",
+  "status": [
+    " M VERSION.md",
+    " M autoload/GameState.gd",
+    " M dotnet/AI.Core.Smoke/Program.cs",
+    " M dotnet/AI.Core/Engines/NeijiangDecisionEngine.cs",
+    " M dotnet/AI.Core/Engines/NeijiangEvidenceEngine.cs",
+    " M dotnet/AI.Core/Engines/NeijiangFairBranchEngine.cs",
+    " M dotnet/AI.Core/Engines/NeijiangOpponentRangeEngine.cs",
+    " M dotnet/AI.Core/Engines/NeijiangReactionDecisionEngine.cs",
+    " M dotnet/AI.Core/Engines/NeijiangSelfActionDecisionEngine.cs",
+    " M dotnet/AI.Core/Learning/NeijiangLearningEngine.cs",
+    " M dotnet/AI.Core/Models/NeijiangCandidateDetail.cs",
+    " M dotnet/AI.Core/Models/NeijiangEvidenceSnapshot.cs",
+    " M dotnet/AI.Core/Models/NeijiangFairBranchSummary.cs",
+    " M project.godot",
+    " M scripts/ai/NeijiangCSharpRuntime.cs",
+    " M scripts/game/MainSceneV2.gd",
+    " M scripts/ui/3d/NeijiangTableStage3D.gd",
+    " M scripts/ui/PlayerUI.gd",
+    " M scripts/ui/table/NeijiangSeatHUD.gd",
+    " M tests/current/Neijiang3DUiRunner.gd",
+    " M tests/current/NeijiangCSharpContractRunner.gd",
+    " M tests/current/NeijiangGangSettlementRegressionRunner.gd",
+    " M tools/export_android_direct.gd",
+    " M tools/export_android_release.sh",
+    " D 四川麻将开发规格书_v2.md",
+    " D 四川麻将规则对齐调整说明_v2.md",
+    " D 四川麻将规则补充遗漏清单_v1.md",
+    " D 四川麻将项目规则基线_最终版_v1.md",
+    "?? -",
+    "?? docs/research/",
+    "?? docs/testing/neijiang-intelligent-mode-relearning-implementation-20260917.md",
+    "?? docs/upgrades/",
+    "?? dotnet/AI.Core/Engines/NeijiangExactHandAnalyzer.cs",
+    "?? dotnet/AI.Core/Engines/NeijiangExactHandAnalyzer.cs.uid",
+    "?? dotnet/AI.Core/Engines/NeijiangExactStructureEngine.cs",
+    "?? dotnet/AI.Core/Engines/NeijiangExactStructureEngine.cs.uid",
+    "?? dotnet/AI.Core/Engines/NeijiangFairBranchEngine.cs.uid",
+    "?? dotnet/AI.Core/Engines/NeijiangGangReplacementEvaluator.cs",
+    "?? dotnet/AI.Core/Engines/NeijiangGangReplacementEvaluator.cs.uid",
+    "?? dotnet/AI.Core/Learning/NeijiangDecisionCalibrationEngine.cs",
+    "?? dotnet/AI.Core/Learning/NeijiangDecisionCalibrationEngine.cs.uid",
+    "?? dotnet/AI.Core/Models/NeijiangExactStructureSummary.cs",
+    "?? dotnet/AI.Core/Models/NeijiangExactStructureSummary.cs.uid",
+    "?? dotnet/AI.Core/Models/NeijiangFairBranchSummary.cs.uid",
+    "?? dotnet/AI.Core/Models/NeijiangGangReplacementSummary.cs",
+    "?? dotnet/AI.Core/Models/NeijiangGangReplacementSummary.cs.uid",
+    "?? evidence/neijiang_3d_ui_port_20260813/felt_target_match_20260817/",
+    "?? evidence/neijiang_3d_ui_port_20260813/premium_baize_v6/",
+    "?? evidence/neijiang_3d_ui_port_20260813/production_reference_20260815/production_godot_capture.log",
+    "?? evidence/neijiang_3d_ui_port_20260813/release_v1_0_72_20260815/desktop_mobile_release.log",
+    "?? evidence/neijiang_3d_ui_port_20260813/release_v1_0_72_20260815/godot_asset_import.log",
+    "?? evidence/neijiang_3d_ui_port_20260813/release_v1_0_73_20260815/",
+    "?? evidence/neijiang_3d_ui_port_20260813/release_v1_0_88_20260815/",
+    "?? evidence/neijiang_3d_ui_port_20260813/table_refinement_20260817/",
+    "?? evidence/neijiang_3d_ui_port_20260813/table_refinement_20260822/",
+    "?? evidence/neijiang_3d_ui_port_20260813/tabletop_design_preview_20260815/",
+    "?? evidence/neijiang_3d_ui_port_20260813/tabletop_redesign_20260815/",
+    "?? evidence/neijiang_3d_ui_port_20260813/v1_0_71_review/",
+    "?? evidence/neijiang_migration_20260914/",
+    "?? evidence/table_skin_gallery_20260820/",
+    "?? res/audio/tts_sichuan/",
+    "?? test-data/",
+    ""
+  ],
+  "changed_file_hashes": [
+    {
+      "path": "VERSION.md",
+      "sha256": "2d451c507fb16b2cae18e41aadd48bc8bfc123c038bf8dadf0001bfee5c88492",
+      "bytes": 1229
+    },
+    {
+      "path": "autoload/GameState.gd",
+      "sha256": "4ea9c94aa5df99eaf931ced05e1ca100cf6d9532217e2c4693247f77e9460036",
+      "bytes": 257939
+    },
+    {
+      "path": "dotnet/AI.Core.Smoke/Program.cs",
+      "sha256": "c12799ed0b171c8fe0f087d48a27e65c6b64620d46e0f5817dbcb5d516e2b159",
+      "bytes": 128496
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangDecisionEngine.cs",
+      "sha256": "01a52123226b57f6684ac5e0ed6c353a2a6ccb3abd4cddad5f6ffa209df94d3c",
+      "bytes": 64956
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangEvidenceEngine.cs",
+      "sha256": "f027f50c55c48d7d11fb6dba567d4fca02176d8168b0b1ccaff7224a86fe0b9b",
+      "bytes": 4977
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangFairBranchEngine.cs",
+      "sha256": "86da752e675f1d1eaee1a4753bf00b5cedc0747edc5526179180d54421912e80",
+      "bytes": 8024
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangOpponentRangeEngine.cs",
+      "sha256": "a8146cda887f708c9134ab29faef2655e5aa6be6b0fb0ed3f5ca8fa1456413eb",
+      "bytes": 6951
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangReactionDecisionEngine.cs",
+      "sha256": "92fa4f3f2cca24fb8c6efaca4a4a0fda0088f1af07a0bd6c88e34e52641f98ac",
+      "bytes": 46866
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangSelfActionDecisionEngine.cs",
+      "sha256": "a3174d9b5d017785856a0462378f0453fea0ac01467c4554622f767ea8b369ea",
+      "bytes": 15920
+    },
+    {
+      "path": "dotnet/AI.Core/Learning/NeijiangLearningEngine.cs",
+      "sha256": "02ff6643b386a28d454e1c9505744f8c80ba59294619c72084d3c5748b7cbe4a",
+      "bytes": 28112
+    },
+    {
+      "path": "dotnet/AI.Core/Models/NeijiangCandidateDetail.cs",
+      "sha256": "6b877fece66a8a1fe2dc137add45ec2b410ee052ff3ecb81e539ccbb2e3fdda0",
+      "bytes": 3855
+    },
+    {
+      "path": "dotnet/AI.Core/Models/NeijiangEvidenceSnapshot.cs",
+      "sha256": "c7e54befeec9c56f713a30cf25b075d9c72216778d6605ae75778798dd494bda",
+      "bytes": 1117
+    },
+    {
+      "path": "dotnet/AI.Core/Models/NeijiangFairBranchSummary.cs",
+      "sha256": "ee763004c3f25ff3f1d978c4c6dd4e34ccefbaa3b04a35e3a7446bce489bb9fd",
+      "bytes": 635
+    },
+    {
+      "path": "project.godot",
+      "sha256": "aa125833285caff604166dc447c5966f1f0b85c7389d87763957e4713ea8f9cb",
+      "bytes": 1337
+    },
+    {
+      "path": "scripts/ai/NeijiangCSharpRuntime.cs",
+      "sha256": "ee8425e9b0738388d1c77b30f0a61d922de2cfb5cf0217e6987e836b3c572a01",
+      "bytes": 91640
+    },
+    {
+      "path": "scripts/game/MainSceneV2.gd",
+      "sha256": "00aa0af70e58b53ab2c2c2c9f4888423ba122a9c83f8302de4d6deba38565df3",
+      "bytes": 385601
+    },
+    {
+      "path": "scripts/ui/3d/NeijiangTableStage3D.gd",
+      "sha256": "d6981c20404d4aea0d1431810395ce4b250b20d8d5ade2f256eff516dae098a8",
+      "bytes": 85778
+    },
+    {
+      "path": "scripts/ui/PlayerUI.gd",
+      "sha256": "53c26d894936ed6319e986fefb0dd3b0b76dcdc5c67bf4b423deb43948cba303",
+      "bytes": 78026
+    },
+    {
+      "path": "scripts/ui/table/NeijiangSeatHUD.gd",
+      "sha256": "5cf7d21a31918c9e2073810f74ef1313b06041b3a3358cf0f4a124a6e2de8d9a",
+      "bytes": 11013
+    },
+    {
+      "path": "tests/current/Neijiang3DUiRunner.gd",
+      "sha256": "7d1200a9a357efaa3c2a16f7a2a6d17194e622fa9b603df5f0554878ff427d66",
+      "bytes": 33956
+    },
+    {
+      "path": "tests/current/NeijiangCSharpContractRunner.gd",
+      "sha256": "c1786222af936919874ff02f1948d6bfc421e64451e92cce200787ac0162ae71",
+      "bytes": 44757
+    },
+    {
+      "path": "tests/current/NeijiangGangSettlementRegressionRunner.gd",
+      "sha256": "b6ae4298b636182a987e4c389c8ef1bd4bede029b0eaad8027df5d80e753b329",
+      "bytes": 9704
+    },
+    {
+      "path": "tools/export_android_direct.gd",
+      "sha256": "db1cee7be03fca57438f5cab0cbe4b0c2556957feb13ab59f0af33b94bd32cba",
+      "bytes": 9187
+    },
+    {
+      "path": "tools/export_android_release.sh",
+      "sha256": "5e1a1b8bd3f26e6b879364fc4e690a7d6ec88f648c0cbfb743d187c277298acc",
+      "bytes": 10986
+    },
+    {
+      "path": "-",
+      "sha256": "125b5c5680be9ae55a3166f9113f87edf7bdb731ef8c469f53715977c5a565ee",
+      "bytes": 278
+    },
+    {
+      "path": "docs/testing/neijiang-intelligent-mode-relearning-implementation-20260917.md",
+      "sha256": "e658fa29acdb0157d28adc4d2a0a90c347c34aa1ff1e8ffd884cdb5171d75723",
+      "bytes": 5436
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangExactHandAnalyzer.cs",
+      "sha256": "1f2cb51b545dcaa7e219e7c947a7587595664c973226db910b007ff2ae9601c2",
+      "bytes": 4305
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangExactHandAnalyzer.cs.uid",
+      "sha256": "4de7e38dac950a083386bf01b5a9b821beea47440a3f3437951a073a9feddae1",
+      "bytes": 20
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangExactStructureEngine.cs",
+      "sha256": "fcf25237075a5fe0da309c4f96672c78e64e25a6ab3664421f2b0845acfd5dfe",
+      "bytes": 7983
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangExactStructureEngine.cs.uid",
+      "sha256": "0c67f74ab3cc719f4341a73f44f0298cb29bcdbc62d281c67fe06d905c40685c",
+      "bytes": 19
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangFairBranchEngine.cs.uid",
+      "sha256": "68cb43c3693d20ca84eba465e3593829ba3db4e3c679df8d331c75effcdfd974",
+      "bytes": 19
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangGangReplacementEvaluator.cs",
+      "sha256": "b99fa72c546049ca7b852cb176b923d1c567d690f1ea0e3695b0076befc2ed98",
+      "bytes": 5782
+    },
+    {
+      "path": "dotnet/AI.Core/Engines/NeijiangGangReplacementEvaluator.cs.uid",
+      "sha256": "c302220e4b5f597e3c1fffecea6ed5217c28fcf7b0886d7fa93d2ff73507f85a",
+      "bytes": 20
+    },
+    {
+      "path": "dotnet/AI.Core/Learning/NeijiangDecisionCalibrationEngine.cs",
+      "sha256": "f6cfbc37e29bd9649be9946bd9dd7a8ba47f83a97fcc3343dfca9625e699d5a6",
+      "bytes": 3939
+    },
+    {
+      "path": "dotnet/AI.Core/Learning/NeijiangDecisionCalibrationEngine.cs.uid",
+      "sha256": "4b7255e2bb6fe23e46c3be4a18a3159742436ce5d8e3f469f5eed6966e105ef0",
+      "bytes": 19
+    },
+    {
+      "path": "dotnet/AI.Core/Models/NeijiangExactStructureSummary.cs",
+      "sha256": "ec8edfe38639509ee78c5f70d473a8b5a845cdfc2712b8bb1193fd1846214207",
+      "bytes": 583
+    },
+    {
+      "path": "dotnet/AI.Core/Models/NeijiangExactStructureSummary.cs.uid",
+      "sha256": "6dd37f20298d466fe7dba639928b2dcac96f6fdc48c971063822268d4563be2d",
+      "bytes": 20
+    },
+    {
+      "path": "dotnet/AI.Core/Models/NeijiangFairBranchSummary.cs.uid",
+      "sha256": "90f0c8600202e421942721acac4f4ea8a6b450515fcf4d40dcbed698aec793d5",
+      "bytes": 20
+    },
+    {
+      "path": "dotnet/AI.Core/Models/NeijiangGangReplacementSummary.cs",
+      "sha256": "54c974d7291da0956b2c9cb96864ab0093a428f2d59288e234abde07c64d613e",
+      "bytes": 628
+    },
+    {
+      "path": "dotnet/AI.Core/Models/NeijiangGangReplacementSummary.cs.uid",
+      "sha256": "65dc215eadd0e574b9cdc1e003cf4a878bb207d457393695ae9c4405b218fa88",
+      "bytes": 20
+    },
+    {
+      "path": "evidence/neijiang_3d_ui_port_20260813/production_reference_20260815/production_godot_capture.log",
+      "sha256": "9b8cfaa3dab76e1e0fb5014f9b8db4148049527f805a6fee77afeac96f6fc32b",
+      "bytes": 473
+    },
+    {
+      "path": "evidence/neijiang_3d_ui_port_20260813/release_v1_0_72_20260815/desktop_mobile_release.log",
+      "sha256": "5cedd5f27bedc15be06663b965b85f895ff1ed7343583132efde7fb219725c37",
+      "bytes": 292240
+    },
+    {
+      "path": "evidence/neijiang_3d_ui_port_20260813/release_v1_0_72_20260815/godot_asset_import.log",
+      "sha256": "46f5d9059c278b41cabbfe34bfb867b286adb42bfb190f23650c2bc87e01309e",
+      "bytes": 20352
+    }
+  ]
+}

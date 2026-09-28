@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.89 - 2026-09-28
+
+- Added Sichuan-dialect voice choices, the blue-glass table skin, and always-available in-round match details while retaining Neijiang's two-suit rules and scoring.
+- Redesigned settlement, ranking, ledger, rules, and utility drawer layouts; corrected the blue-glass settlement texture path and reduced seat-HUD visual weight.
+- Included the current local-room and synchronous C# AI updates, and repaired the mobile renderer project setting for the new Android/iOS exports.
+
 ## 1.0.63 - 2026-08-13
 
 - Fixed the iPhone gray-screen regression by switching the mobile renderer from the legacy Compatibility path to the same Forward+ contract used by the source Sichuan 3D project, restoring the camera, PBR table, tile meshes, environment, lights and center compass on Metal.

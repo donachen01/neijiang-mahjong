@@ -7,5 +7,7 @@ public sealed class NeijiangEvidenceSnapshot
     public double[][] SeatNoPengEvidence { get; init; } = Enumerable.Range(0, 4).Select(_ => new double[18]).ToArray();
     public double[][] SeatNoGangEvidence { get; init; } = Enumerable.Range(0, 4).Select(_ => new double[18]).ToArray();
     public double[][] SeatAbandonedSuitEvidence { get; init; } = Enumerable.Range(0, 4).Select(_ => new double[2]).ToArray();
+    public double[][] SeatTileReleaseEvidence { get; init; } = Enumerable.Range(0, 4).Select(_ => new double[18]).ToArray();
+    public double[][] SeatRecentSuitReleaseEvidence { get; init; } = Enumerable.Range(0, 4).Select(_ => new double[2]).ToArray();
     public IReadOnlyList<int>[] SeatRecentDiscardTrend { get; init; } = Enumerable.Range(0, 4).Select(_ => (IReadOnlyList<int>)Array.Empty<int>()).ToArray();
 }

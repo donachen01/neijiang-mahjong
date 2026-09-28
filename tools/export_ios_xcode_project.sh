@@ -159,6 +159,8 @@ if [[ -f "$INFO_PLIST" ]]; then
   for privacy_key in NSCameraUsageDescription NSMicrophoneUsageDescription NSPhotoLibraryUsageDescription; do
     /usr/libexec/PlistBuddy -c "Delete :$privacy_key" "$INFO_PLIST" >/dev/null 2>&1 || true
   done
+  /usr/libexec/PlistBuddy -c "Delete :NSLocalNetworkUsageDescription" "$INFO_PLIST" >/dev/null 2>&1 || true
+  /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string 用于在同一 Wi-Fi 内搜索和连接内江麻将房间。" "$INFO_PLIST"
 fi
 # Personal Apple ID device installs use automatic development signing even for
 # the optimized Release configuration. Godot's distribution identity conflicts

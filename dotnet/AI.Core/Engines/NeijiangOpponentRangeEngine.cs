@@ -31,6 +31,8 @@ public sealed class NeijiangOpponentRangeEngine
                 + AverageVisibleScarcity(state, suit) * 0.18
                 + ((state.IsCalled[seat] || state.IsReady[seat]) ? 0.08 : 0.0)
                 - discardBySuit[suit] * 0.09;
+            var suitReleaseWeight = state.IsReady[seat] || state.IsCalled[seat] ? 0.04 : 0.18;
+            heat -= evidence.SeatRecentSuitReleaseEvidence[seat][suit] * suitReleaseWeight;
             if (evidence.SeatAbandonedSuitEvidence[seat][suit] >= 0.56)
                 heat *= 0.58;
             suitDemand[suit] = Math.Clamp(heat, 0.04, 0.98);
@@ -45,6 +47,7 @@ public sealed class NeijiangOpponentRangeEngine
             var noHu = evidence.SeatNoHuEvidence[seat][tileType];
             var noPeng = evidence.SeatNoPengEvidence[seat][tileType];
             var noGang = evidence.SeatNoGangEvidence[seat][tileType];
+            var releaseEvidence = evidence.SeatTileReleaseEvidence[seat][tileType];
             if (evidence.SeatExactSafeTiles[seat].Contains(tileType))
             {
                 hold[tileType] = 0.01;
@@ -66,6 +69,8 @@ public sealed class NeijiangOpponentRangeEngine
             posterior *= 1.0 - noHu * 0.42;
             posterior *= 1.0 - noPeng * 0.22;
             posterior *= 1.0 - noGang * 0.14;
+            var releaseWeight = state.IsReady[seat] || state.IsCalled[seat] ? 0.08 : 0.30;
+            posterior *= 1.0 - releaseEvidence * releaseWeight;
             hold[tileType] = Math.Clamp((posterior * 0.48 + readyProbability * 0.24 + suitDemand[suit] * 0.20) * (1.0 - noPeng * 0.24) * (1.0 - noGang * 0.16), 0.01, 0.99);
             wait[tileType] = Math.Clamp(readyProbability * (posterior * 0.44 + suitDemand[suit] * 0.24 + sequenceAffinity * 0.20) * (1.0 - noHu * 0.76), 0.0, 0.98);
         }

@@ -4,6 +4,7 @@ extends Control
 signal action_selected(action: String)
 
 const TABLE_SKIN_CATALOG := preload("res://scripts/ui/table/NeijiangTableSkinCatalog.gd")
+const GLASS_ACTION_TEXTURE := preload("res://res/ui/glass_action_badge.png")
 const MAX_ACTIONS := 6
 # 与四川麻将最新操作章保持一致：双按钮时给出明显更大的 iPhone 触控面，
 # 多操作冲突时再逐级收紧，但仍高于旧版的 108px 密集按钮。
@@ -228,12 +229,12 @@ func _apply_button_style(button: Button, action_id: String) -> void:
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", pressed)
 	button.add_theme_stylebox_override("focus", focus)
-	button.add_theme_color_override("font_color", Color(colors["text"]))
+	button.add_theme_color_override("font_color", Color("F7FCFF") if bool(active_skin.get("glass_theme", false)) else Color(colors["text"]))
 	button.add_theme_color_override("font_hover_color", Color(colors["text"]).lightened(0.10))
 	button.add_theme_color_override("font_pressed_color", Color(colors["text"]).darkened(0.08))
 	button.add_theme_color_override("font_disabled_color", Color(colors["text"], 0.42))
-	button.add_theme_color_override("font_outline_color", Color(colors["outline"]))
-	button.add_theme_constant_override("outline_size", 6)
+	button.add_theme_color_override("font_outline_color", Color("FFFFFF", 0.90) if bool(active_skin.get("glass_theme", false)) else Color(colors["outline"]))
+	button.add_theme_constant_override("outline_size", 2 if bool(active_skin.get("glass_theme", false)) else 6)
 	button.add_theme_color_override("font_shadow_color", Color(0.0, 0.02, 0.015, 0.64))
 	button.add_theme_constant_override("shadow_offset_x", 2)
 	button.add_theme_constant_override("shadow_offset_y", 3)
@@ -267,9 +268,9 @@ func _make_action_badge_style(pressed: bool) -> StyleBoxTexture:
 	# Mahjong. It preserves the separate dark-green centre and copper ring rather
 	# than approximating the look with a flat grey circular border.
 	var style := StyleBoxTexture.new()
-	style.texture = ResourceLoader.load(TABLE_SKIN_CATALOG.texture_path(active_skin_id, "action_badge.png")) as Texture2D
+	style.texture = GLASS_ACTION_TEXTURE if bool(active_skin.get("glass_theme", false)) else ResourceLoader.load(TABLE_SKIN_CATALOG.texture_path(active_skin_id, "action_badge.png")) as Texture2D
 	style.draw_center = true
-	style.modulate_color = Color(0.80, 0.80, 0.80, 1.0) if pressed else Color.WHITE
+	style.modulate_color = (Color(0.78, 0.88, 0.96, 0.96) if pressed else Color.WHITE) if bool(active_skin.get("glass_theme", false)) else (Color(0.80, 0.80, 0.80, 1.0) if pressed else Color.WHITE)
 	style.expand_margin_left = 3.0
 	style.expand_margin_top = 3.0
 	style.expand_margin_right = 3.0

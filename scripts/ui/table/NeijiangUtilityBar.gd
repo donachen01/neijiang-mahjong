@@ -3,9 +3,10 @@ extends Control
 
 signal utility_selected(action: String)
 
-const BUTTON_SIZE := Vector2(372.0, 116.0)
-const BUTTON_GAP := 12
-const TOGGLE_SIZE := Vector2(148.0, 148.0)
+const BUTTON_SIZE := Vector2(310.0, 82.0)
+const BUTTON_GAP := 10
+const TOGGLE_SIZE := Vector2(104.0, 104.0)
+const DRAWER_LEFT := 246.0
 const BODY_FONT := preload("res://res/fonts/app_cjk.ttc")
 
 var buttons: Dictionary = {}
@@ -14,6 +15,7 @@ var panel: PanelContainer
 var toggle_button: Button
 var collapsed := true
 var last_pointer_toggle_msec := -1000
+var active_skin_id := NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
 
 
 func _ready() -> void:
@@ -29,8 +31,9 @@ func render(snapshot: Dictionary, ai_helper_enabled: bool, opponent_hands_enable
 	_set_button_text("opponents", "明牌 · %s" % ("开" if opponent_hands_enabled else "关"))
 	_set_button_text("voice", "语音 · %s" % ("四川话" if voice_language == "sichuan" else "普通话"))
 	var settlement_visible := int(snapshot.get("current_phase", 0)) == 7
-	_set_button_visible("settlement", settlement_visible)
+	_set_button_visible("settlement", true)
 	_set_button_visible("next_round", settlement_visible)
+	_set_button_text("settlement", "☷  对局详情")
 	var next_button := buttons.get("next_round") as Button
 	if next_button != null:
 		next_button.disabled = not settlement_visible
@@ -61,6 +64,27 @@ func set_collapsed(value: bool) -> void:
 
 func is_collapsed() -> bool:
 	return collapsed
+
+
+func set_table_skin(skin_id: String) -> void:
+	if not NeijiangTableSkinCatalog.has_skin(skin_id):
+		return
+	active_skin_id = skin_id
+	if toggle_button == null:
+		return
+	toggle_button.add_theme_stylebox_override("normal", _button_style(Color("122C27"), Color("B88943"), 1, 52))
+	toggle_button.add_theme_stylebox_override("hover", _button_style(Color("245A42"), Color("E2BC6A"), 2, 52))
+	toggle_button.add_theme_stylebox_override("pressed", _button_style(Color("102E27"), Color("E2BC6A"), 2, 52))
+	toggle_button.add_theme_color_override("font_color", Color("F8FCFF") if skin_id == "blue_glass" else Color("FFF0CF"))
+	toggle_button.add_theme_color_override("font_outline_color", Color.TRANSPARENT if skin_id == "blue_glass" else Color("24150C"))
+	panel.add_theme_stylebox_override("panel", _panel_style())
+	for value in buttons.values():
+		var button := value as Button
+		button.add_theme_stylebox_override("normal", _button_style(Color("173D31"), Color("B88943"), 1))
+		button.add_theme_stylebox_override("hover", _button_style(Color("245A42"), Color("E2BC6A"), 2))
+		button.add_theme_stylebox_override("pressed", _button_style(Color("102E27"), Color("E2BC6A"), 2))
+		button.add_theme_color_override("font_color", Color("F8FCFF") if skin_id == "blue_glass" else Color("FFF0CF"))
+		button.add_theme_color_override("font_outline_color", Color.TRANSPARENT if skin_id == "blue_glass" else Color("24150C"))
 
 
 func activate_at_global_position(global_position: Vector2, enforce_pointer_debounce: bool = true) -> bool:
@@ -94,7 +118,7 @@ func _build_ui() -> void:
 	# 与 _input 在同一次鼠标按下中各翻转一次，导致视觉上“点不开”。
 	# 键盘/手柄焦点激活不受 mouse_filter 影响，仍走 pressed 信号。
 	toggle_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	toggle_button.add_theme_font_size_override("font_size", 78)
+	toggle_button.add_theme_font_size_override("font_size", 52)
 	toggle_button.add_theme_color_override("font_color", Color("FFF0CF"))
 	toggle_button.add_theme_color_override("font_outline_color", Color("24150C"))
 	toggle_button.add_theme_constant_override("outline_size", 2)
@@ -114,7 +138,7 @@ func _build_ui() -> void:
 	panel.anchor_bottom = 0.0
 	panel.offset_left = TOGGLE_SIZE.x + BUTTON_GAP
 	panel.offset_top = 0.0
-	panel.offset_right = TOGGLE_SIZE.x + BUTTON_GAP + 10.0 * BUTTON_SIZE.x + 9.0 * BUTTON_GAP + 16.0
+	panel.offset_right = TOGGLE_SIZE.x + BUTTON_GAP + 2.0 * BUTTON_SIZE.x + BUTTON_GAP + 16.0
 	panel.offset_bottom = BUTTON_SIZE.y + 20.0
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_theme_stylebox_override("panel", _panel_style())
@@ -137,7 +161,8 @@ func _build_ui() -> void:
 		{"id": "opponents", "label": "明牌"},
 		{"id": "skin", "label": "桌布皮肤"},
 		{"id": "voice", "label": "语音\n普通话"},
-		{"id": "settlement", "label": "结算"},
+		{"id": "choose_voice", "label": "选择声音"},
+		{"id": "settlement", "label": "☷  对局详情"},
 		{"id": "next_round", "label": "下一局"},
 		{"id": "view", "label": "旧版UI"},
 		{"id": "exit", "label": "退出"},
@@ -146,6 +171,7 @@ func _build_ui() -> void:
 	custom_minimum_size = TOGGLE_SIZE
 	_apply_focus_navigation()
 	_apply_collapsed_state()
+	set_table_skin(active_skin_id)
 
 
 func _apply_collapsed_state() -> void:
@@ -163,12 +189,12 @@ func _apply_collapsed_state() -> void:
 	var rows := ceili(float(visible_count) / 2.0)
 	var drawer_height := rows * BUTTON_SIZE.y + maxi(0, rows - 1) * BUTTON_GAP + 24.0
 	panel.custom_minimum_size = Vector2(drawer_width, drawer_height)
-	panel.offset_left = 0.0
+	panel.offset_left = DRAWER_LEFT
 	panel.offset_top = TOGGLE_SIZE.y + BUTTON_GAP
-	panel.offset_right = drawer_width
+	panel.offset_right = DRAWER_LEFT + drawer_width
 	panel.offset_bottom = TOGGLE_SIZE.y + BUTTON_GAP + drawer_height
 	custom_minimum_size = TOGGLE_SIZE if collapsed else Vector2(
-		drawer_width,
+		DRAWER_LEFT + drawer_width,
 		TOGGLE_SIZE.y + BUTTON_GAP + drawer_height
 	)
 	size = custom_minimum_size
@@ -184,7 +210,7 @@ func _create_button(action: String, label_text: String) -> void:
 	button.text = label_text
 	button.custom_minimum_size = BUTTON_SIZE
 	button.focus_mode = Control.FOCUS_ALL
-	button.add_theme_font_size_override("font_size", 44)
+	button.add_theme_font_size_override("font_size", 35)
 	button.add_theme_font_override("font", BODY_FONT)
 	button.add_theme_color_override("font_color", Color("FFF0CF"))
 	button.add_theme_color_override("font_outline_color", Color("24150C"))
@@ -224,7 +250,7 @@ func _difficulty_label(snapshot: Dictionary) -> String:
 
 func _apply_focus_navigation() -> void:
 	var ordered: Array[Button] = []
-	for action in ["difficulty", "tuning", "helper", "opponents", "skin", "voice", "settlement", "next_round", "view", "exit"]:
+	for action in ["difficulty", "tuning", "helper", "opponents", "skin", "voice", "choose_voice", "settlement", "next_round", "view", "exit"]:
 		var button := buttons.get(action) as Button
 		if button != null:
 			ordered.append(button)
@@ -242,6 +268,15 @@ func _apply_focus_navigation() -> void:
 
 
 func _panel_style() -> StyleBoxFlat:
+	if active_skin_id == "blue_glass":
+		var glass := StyleBoxFlat.new()
+		glass.bg_color = Color(0.015, 0.08, 0.15, 0.76)
+		glass.border_color = Color.TRANSPARENT
+		glass.set_border_width_all(0)
+		glass.set_corner_radius_all(18)
+		glass.shadow_color = Color(0.01, 0.06, 0.13, 0.42)
+		glass.shadow_size = 18
+		return glass
 	var style := _button_style(Color(0.025, 0.095, 0.078, 0.97), Color(Color("C49A55"), 0.78), 2, 14)
 	style.shadow_color = Color(0.0, 0.0, 0.0, 0.42)
 	style.shadow_size = 14
@@ -251,6 +286,15 @@ func _panel_style() -> StyleBoxFlat:
 
 func _button_style(fill: Color, border: Color, border_width: int, radius: int = 12) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
+	if active_skin_id == "blue_glass":
+		style.bg_color = Color(0.70, 0.91, 1.0, 0.025 if border_width == 1 else 0.20)
+		style.border_color = Color.TRANSPARENT if border_width == 1 else Color(0.90, 0.98, 1.0, 0.45)
+		style.set_border_width_all(0 if border_width == 1 else 1)
+		style.set_corner_radius_all(radius if radius > 12 else 18)
+		style.shadow_color = Color(0.01, 0.10, 0.24, 0.14)
+		style.shadow_size = 3
+		style.set_content_margin_all(7)
+		return style
 	style.bg_color = Color(Color("172621"), 0.94) if border_width == 1 else fill
 	style.border_color = Color(Color("9D743A"), 0.72) if border_width == 1 else border
 	style.set_border_width_all(border_width)

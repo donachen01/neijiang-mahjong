@@ -1,8 +1,8 @@
 # Version
 
-Current app version: `1.0.84`
+Current app version: `1.0.89`
 
-`1.0.84` presents two clear AI modes: Intelligent Mode uses only fair public information and a Sichuan-derived posterior two-ply route comparison, while Perspective Mode retains the complete-information v1.0.70/1.0.82 policy. Legacy intermediate and bone-ash presets remain load-compatible but are presented as Intelligent Mode. The 1.0.83 gang-transfer settlement correction remains unchanged.
+`1.0.89` packages the Sichuan-inspired Neijiang UI, Sichuan-dialect voice selection, match-detail pages, local multiplayer support, and the current synchronous C# AI work. The table UI now exposes live match details, presents ranking/ledger/rules in blue-glass pages, and keeps Neijiang-specific rules. It also repairs the mobile renderer setting before Android and iOS export. `1.0.88` remains the previous installed baseline.
 
 ## Versioning Workflow
 

@@ -4,6 +4,17 @@
   "runtime_resolution": 2048,
   "skins": [
     {
+      "id": "blue_glass",
+      "source_asset": "launch_glass_v1",
+      "files": [
+        "albedo_2k.png",
+        "normal_2k.png",
+        "roughness_2k.png",
+        "preview.jpg",
+        "action_badge.png"
+      ]
+    },
+    {
       "id": "deep_emerald_crepe",
       "source_asset": "crepe_georgette",
       "files": [

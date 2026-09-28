@@ -77,10 +77,10 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 	var contract: Dictionary = stage.get_visual_contract()
 	if int(contract.get("wall_count", -1)) != 19:
 		failures.append("3D stage did not preserve the 72-tile snapshot wall count")
-	if str(contract.get("table_asset", "")) != "neijiang_table_v2_pbr":
-		failures.append("3D stage did not load the Neijiang-authored PBR table")
-	if str(contract.get("table_trim_finish", "")) != "continuous_outer_and_inner_champagne_gold_inlay":
-		failures.append("3D table lost the reference-matched continuous double champagne-gold inlay")
+	if str(contract.get("table_asset", "")) != "neijiang_table_blue_glass":
+		failures.append("3D stage did not load the blue glass table")
+	if str(contract.get("table_trim_finish", "")) != "blue_lacquer_and_clear_glass":
+		failures.append("3D table lost the blue lacquer and clear-glass finish")
 	if str(contract.get("table_divider_finish", "")) != "none_clean_uninterrupted_felt":
 		failures.append("3D tabletop must remain a clean uninterrupted felt surface")
 	var manufactured_table := stage.get_node_or_null("ManufacturedClubTable")
@@ -90,16 +90,16 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 	else:
 		manufactured_table_transform = (manufactured_table as Node3D).transform
 		for required_mesh_name: String in [
-			"OuterChampagneGoldPiping",
-			"InnerChampagneGoldPiping",
-			"PlayfieldInsetOuter",
-			"PlayfieldInsetInner",
+			"TableFelt", "TableWalnutBase", "WalnutApronRing",
+			"SingleClearGlassCap", "InnerGlassEdge", "RaisedTransparentGlassLip",
 		]:
 			if manufactured_table.find_child(required_mesh_name, true, false) == null:
 				failures.append("Production table GLB is stale or missing %s" % required_mesh_name)
 	var skin_contract := stage.get_table_skin_contract()
-	if int(skin_contract.get("skin_count", 0)) != 6:
-		failures.append("3D stage did not expose all six table skins")
+	if int(skin_contract.get("skin_count", 0)) != 7:
+		failures.append("3D stage did not expose all seven table skins")
+	if not bool(skin_contract.get("glass_theme", false)) or int(skin_contract.get("frame_surface_count", 0)) < 3:
+		failures.append("3D stage did not bind the glass frame material")
 	if int(skin_contract.get("felt_material_count", 0)) < 1:
 		failures.append("3D stage did not bind the imported TableFelt material for runtime skins")
 	if int(skin_contract.get("felt_inset_material_count", -1)) != 0 \
@@ -108,7 +108,7 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 	if manufactured_table != null:
 		for retired_loop_name in ["PlayfieldInsetOuter", "PlayfieldInsetInner"]:
 			var retired_loop := (manufactured_table as Node).find_child(retired_loop_name, true, false) as MeshInstance3D
-			if retired_loop == null or retired_loop.visible:
+			if retired_loop != null and retired_loop.visible:
 				failures.append("3D table still exposes the retired bright divider loop: %s" % retired_loop_name)
 	for skin in TABLE_SKIN_CATALOG.all_skins():
 		var skin_id := str(skin.get("id", ""))
@@ -154,8 +154,8 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 	var add_gang_entries: Dictionary = {}
 	stage.call("_append_meld_entries", add_gang_entries, 0, [{
 		"type": "gang",
-		"gang_subtype": "add_gang",
-		"from_seat": 0,
+		"gang_upgrade": true,
+		"from_seat": 1,
 		"tiles": [
 			{"id": 611, "suit": "tong", "rank": 4},
 			{"id": 612, "suit": "tong", "rank": 4},
@@ -169,6 +169,14 @@ func _verify_table_stage_contract(failures: Array[String]) -> void:
 		or stacked_transform.origin.z != base_transform.origin.z \
 		or stacked_transform.origin.y <= base_transform.origin.y:
 		failures.append("Add-gang fourth tile is not stacked directly above the existing peng")
+	var first_add_basis := ((add_gang_entries.get("meld_0_0_611", {}) as Dictionary).get("transform", Transform3D.IDENTITY) as Transform3D).basis
+	var third_add_basis := ((add_gang_entries.get("meld_0_0_613", {}) as Dictionary).get("transform", Transform3D.IDENTITY) as Transform3D).basis
+	if not first_add_basis.is_equal_approx(third_add_basis) or not first_add_basis.is_equal_approx(stage.call("_flat_basis_for_seat", 0)):
+		failures.append("Add-gang kept the old peng source tile horizontal instead of restoring three vertical tiles")
+	if int(stage.call("_meld_layout_slot_count", [{"type": "gang", "gang_upgrade": true, "tiles": [1, 2, 3, 4]}])) != 3:
+		failures.append("Add-gang row width still reserves four horizontal slots instead of three stacked slots")
+	if int(stage.call("_claim_tile_index_for_meld", 3, 3, 0)) != 2 or int(stage.call("_claim_tile_index_for_meld", 3, 3, 2)) != 0:
+		failures.append("Right-seat source direction was not mirrored to the player's readable left/right order")
 	await process_frame
 	var pick_tile := stage.tile_nodes.get("hand_0_2") as NeijiangTile3D
 	if pick_tile == null:
@@ -244,8 +252,8 @@ func _verify_seat_hud_contract(failures: Array[String]) -> void:
 		failures.append("Neijiang SeatHUD incorrectly exposes Sichuan ding-que state")
 	if not bool(contract.get("shows_bao_jiao", false)) or not bool(contract.get("shows_bao_gang_count", false)):
 		failures.append("Neijiang SeatHUD did not expose bao-jiao/bao-gang state")
-	if str(contract.get("material_family", "")) != "unified_smoked_jade_nameplate":
-		failures.append("Neijiang SeatHUD did not retain the Sichuan smoked-jade material family")
+	if str(contract.get("material_family", "")) != "translucent_blue_glass_nameplate":
+		failures.append("Neijiang SeatHUD did not apply the blue glass nameplate")
 	if str(contract.get("active_text_badge", "missing")) != "none":
 		failures.append("Neijiang SeatHUD reintroduced a text-only active state badge")
 	if not bool(contract.get("active_state_uses_shape_and_color", false)):
@@ -259,6 +267,18 @@ func _verify_seat_hud_contract(failures: Array[String]) -> void:
 	if name_font == null or name_font.base_font.resource_path != "res://res/fonts/app_cjk.ttc" \
 		or hud.score_label.get_theme_font("font").resource_path != "res://res/fonts/app_cjk.ttc":
 		failures.append("Neijiang SeatHUD theme does not actually use the packaged CJK fonts")
+	hud.render({
+		"seat": 0,
+		"nickname": "本家",
+		"score": 12,
+		"has_won": true,
+		"win_type": "discard_win",
+		"winning_source_seat": 3,
+	}, 1, 0)
+	if hud.winner_badge == null or hud.winner_badge.text != "下家点炮" or not hud.winner_badge.visible:
+		failures.append("Winner nameplate did not replace the tile arrow with the X家点炮 badge")
+	elif hud.winner_badge.get_parent() != hud or hud.winner_badge.position.y > 5.0:
+		failures.append("Winner point-source badge is not above the player name")
 	hud.queue_free()
 	await process_frame
 
@@ -303,8 +323,8 @@ func _verify_utility_bar_contract(failures: Array[String]) -> void:
 
 func _verify_table_skin_contract(failures: Array[String]) -> void:
 	var skins: Array[Dictionary] = TABLE_SKIN_CATALOG.all_skins()
-	if skins.size() != 6:
-		failures.append("桌布皮肤目录必须精确包含 6 套材质，实际 %d" % skins.size())
+	if skins.size() != 7:
+		failures.append("桌布皮肤目录必须包含 7 套材质，实际 %d" % skins.size())
 	var ids: Dictionary = {}
 	for skin in skins:
 		var skin_id := str(skin.get("id", ""))
@@ -312,7 +332,7 @@ func _verify_table_skin_contract(failures: Array[String]) -> void:
 			failures.append("桌布皮肤 ID 为空或重复: %s" % skin_id)
 			continue
 		ids[skin_id] = true
-		for filename in ["albedo_2k.jpg", "normal_2k.png", "roughness_2k.png", "preview.jpg"]:
+		for filename in [str(skin.get("albedo_filename", "albedo_2k.jpg")), "normal_2k.png", "roughness_2k.png", "preview.jpg"]:
 			var resource_path := TABLE_SKIN_CATALOG.texture_path(skin_id, filename)
 			if not ResourceLoader.exists(resource_path):
 				failures.append("桌布皮肤缺少发布资源: %s" % resource_path)
@@ -327,14 +347,14 @@ func _verify_table_skin_contract(failures: Array[String]) -> void:
 	panel.open(TABLE_SKIN_CATALOG.DEFAULT_SKIN_ID)
 	await process_frame
 	var panel_contract := panel.get_visual_contract()
-	if int(panel_contract.get("skin_count", 0)) != 6:
-		failures.append("换肤面板没有显示六套真实材质")
+	if int(panel_contract.get("skin_count", 0)) != 7:
+		failures.append("换肤面板没有显示七套真实材质")
 	if not bool(panel_contract.get("safe_area_aware", false)) or not bool(panel_contract.get("modal", false)):
 		failures.append("换肤面板丢失手机安全区或模态输入合同")
 	if (panel_contract.get("touch_target", Vector2.ZERO) as Vector2).x < 88.0:
 		failures.append("换肤卡片的触控区域过小")
-	if (panel_contract.get("authored_size", Vector2.ZERO) as Vector2) != Vector2(940.0, 752.0):
-		failures.append("换肤面板没有同步四川麻将 940x752 大尺寸规格")
+	if (panel_contract.get("authored_size", Vector2.ZERO) as Vector2) != Vector2(1320.0, 972.0):
+		failures.append("换肤面板没有同步七套材质的大尺寸规格")
 	var emitted_skin_ids: Array[String] = []
 	panel.skin_selected.connect(func(skin_id: String) -> void: emitted_skin_ids.append(skin_id))
 	for skin in skins:
@@ -348,7 +368,7 @@ func _verify_table_skin_contract(failures: Array[String]) -> void:
 	for skin in skins:
 		expected_ids.append(str(skin.get("id", "")))
 	if emitted_skin_ids != expected_ids:
-		failures.append("换肤面板的 skin_selected 事件与六套目录不一致")
+		failures.append("换肤面板的 skin_selected 事件与七套目录不一致")
 	panel.close()
 	panel.queue_free()
 	await process_frame
@@ -426,6 +446,17 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 			failures.append("Center instrument incorrectly retained stacked physical rings")
 	if main_scene.get("table_3d_action_bar") == null or main_scene.get("table_3d_utility_bar") == null:
 		failures.append("MainScene did not install the Neijiang action/utility adapters")
+	var tabs := main_scene.get("settlement_detail_tabs") as HBoxContainer
+	if tabs == null or tabs.get_child_count() != 4:
+		failures.append("Neijiang settlement did not install four detail tabs")
+	else:
+		main_scene.call("_set_settlement_tab", 3)
+		var details := main_scene.get("settlement_detail_page") as ScrollContainer
+		if details == null or not details.visible or not _has_label_with_text(details, "内江麻将玩法规则"):
+			failures.append("Neijiang rules tab does not render the current local rules")
+		main_scene.call("_set_settlement_tab", 0)
+	if main_scene.get("lan_room_ui") == null:
+		failures.append("MainScene did not install the LAN waiting/disconnect UI")
 	main_scene.call("_on_snapshot_changed", main_scene.get("last_snapshot"))
 	main_scene.call("_apply_neijiang_3d_layout")
 	var seat_huds: Dictionary = main_scene.get("table_3d_seat_huds")
@@ -478,6 +509,35 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 	main_scene.set("ai_helper_enabled", false)
 	game_manager.set_human_trainer_hint_enabled(false)
 	var utility_bar := main_scene.get("table_3d_utility_bar") as NeijiangUtilityBar
+	var live_snapshot := game_manager.get_snapshot()
+	utility_bar.render(live_snapshot, false, false)
+	var details_button := utility_bar.get_button("settlement")
+	var next_round_utility := utility_bar.get_button("next_round")
+	if details_button == null or not details_button.visible:
+		failures.append("对局详情入口在行牌中不可见")
+	if int(live_snapshot.get("current_phase", 0)) != 7:
+		if next_round_utility != null and next_round_utility.visible:
+			failures.append("行牌中错误显示下一局入口")
+		utility_bar.utility_selected.emit("settlement")
+		await process_frame
+		var overlay := main_scene.get("settlement_overlay") as Control
+		var detail_page := main_scene.get("settlement_detail_page") as ScrollContainer
+		if overlay == null or not overlay.visible or not bool(main_scene.get("match_details_manual_open")) \
+				or int(main_scene.get("settlement_active_tab")) != 1:
+			failures.append("行牌中无法通过工具栏打开对局排行")
+		if detail_page == null or not _has_label_with_text(detail_page, "对局积分排行"):
+			failures.append("行牌中对局排行内容未绘制")
+		if (main_scene.get("next_round_button") as Button).visible:
+			failures.append("行牌中对局详情错误显示下一局按钮")
+		main_scene.call("_set_settlement_tab", 0)
+		if not _has_label_with_text(detail_page, "当前局尚未结算"):
+			failures.append("行牌中当前局页缺少未结算提示")
+		main_scene.call("_on_snapshot_changed", game_manager.get_snapshot())
+		if not overlay.visible:
+			failures.append("快照刷新错误关闭行牌中的对局详情")
+		main_scene.call("_on_settlement_close_pressed")
+		if overlay.visible or bool(main_scene.get("match_details_manual_open")):
+			failures.append("行牌中对局详情无法关闭")
 	# Exercise the complete production skin path instead of only testing the
 	# isolated catalog/panel: utility action -> modal -> signal -> 3D material ->
 	# persisted scene state. Restore the user's original choice afterwards.
@@ -533,6 +593,20 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 		failures.append("3D mode still hides or loses the AI advice panel")
 	elif helper_panel.get_global_rect().intersects(self_play_rect, true):
 		failures.append("3D AI advice panel overlaps the projected self hand: helper=%s hand=%s" % [helper_panel.get_global_rect(), self_play_rect])
+	if helper_panel != null:
+		main_scene.set("discard_helper_glass_opacity", 0.25)
+		main_scene.call("_apply_discard_helper_style")
+		var glass_style := helper_panel.get_theme_stylebox("panel") as StyleBoxFlat
+		if glass_style == null or absf(glass_style.bg_color.a - 0.25) > 0.01 or helper_summary.self_modulate.a < 0.99:
+			failures.append("AI glass opacity faded text or did not update the background")
+		main_scene.call("_toggle_discard_helper_details")
+		var opacity_slider := main_scene.get("discard_helper_opacity_slider") as HSlider
+		if helper_panel.custom_minimum_size.y >= 200.0 or opacity_slider == null or opacity_slider.visible:
+			failures.append("AI helper collapse did not compact the panel")
+		main_scene.set("discard_helper_position_normalized", Vector2(0.8, 0.3))
+		main_scene.call("_position_discard_helper_panel")
+		if not root_ui.get_global_rect().encloses(helper_panel.get_global_rect()):
+			failures.append("Saved AI helper position escaped the safe viewport")
 	utility_bar.utility_selected.emit("helper")
 	await process_frame
 	if bool(main_scene.get("ai_helper_enabled")) \
@@ -556,6 +630,15 @@ func _verify_main_scene_adapter(failures: Array[String]) -> void:
 		failures.append("3D restore control should hide after returning to the 3D table")
 	main_scene.queue_free()
 	await process_frame
+
+
+func _has_label_with_text(root: Node, expected: String) -> bool:
+	if root is Label and str((root as Label).text).contains(expected):
+		return true
+	for child in root.get_children():
+		if _has_label_with_text(child, expected):
+			return true
+	return false
 
 
 func _players_fixture() -> Array:

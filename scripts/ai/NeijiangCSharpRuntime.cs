@@ -138,16 +138,23 @@ public partial class NeijiangCSharpRuntime : Node
     {
         try
         {
-            var payload = JsonSerializer.Deserialize<DiscardPayload>(payloadJson, JsonOptions);
-            if (payload is null)
-                return "{\"ok\":false,\"error\":\"invalid_discard_payload\"}";
+            var payload = ParseDiscardPayloadJson(payloadJson);
+
+            // iOS NativeAOT cannot reliably reflect over the anonymous graph
+            // returned by BuildDiscardObject.  A serialization failure crosses
+            // the Godot boundary as a null Variant and leaves the strict-sync
+            // turn waiting forever.  Mobile payloads already request a compact
+            // result, so keep the full decision engine but use an AOT-safe,
+            // hand-written transport response.
+            if (payload.CompactResult || payload.MobileSpeedMode)
+                return BuildCompactDiscardJson(payload);
 
             var output = BuildDiscardObject(payload);
             return JsonSerializer.Serialize(output, JsonOptions);
         }
         catch (Exception ex)
         {
-            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+            return BuildErrorJson("discard_exception", ex);
         }
     }
 
@@ -181,16 +188,12 @@ public partial class NeijiangCSharpRuntime : Node
     {
         try
         {
-            var payload = JsonSerializer.Deserialize<SelfActionPayload>(payloadJson, JsonOptions);
-            if (payload is null)
-                return "{\"ok\":false,\"error\":\"invalid_self_action_payload\"}";
-
-            var output = BuildSelfActionObject(payload);
-            return JsonSerializer.Serialize(output, JsonOptions);
+            var payload = ParseSelfActionPayloadJson(payloadJson);
+            return BuildSelfActionJson(payload);
         }
         catch (Exception ex)
         {
-            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+            return BuildErrorJson("self_action_exception", ex);
         }
     }
 
@@ -198,16 +201,12 @@ public partial class NeijiangCSharpRuntime : Node
     {
         try
         {
-            var payload = JsonSerializer.Deserialize<BaoJiaoPayload>(payloadJson, JsonOptions);
-            if (payload is null)
-                return "{\"ok\":false,\"error\":\"invalid_bao_jiao_payload\"}";
-
-            var output = BuildBaoJiaoObject(payload);
-            return JsonSerializer.Serialize(output, JsonOptions);
+            var payload = ParseBaoJiaoPayloadJson(payloadJson);
+            return BuildBaoJiaoJson(payload);
         }
         catch (Exception ex)
         {
-            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+            return BuildErrorJson("bao_jiao_exception", ex);
         }
     }
 
@@ -215,16 +214,12 @@ public partial class NeijiangCSharpRuntime : Node
     {
         try
         {
-            var payload = JsonSerializer.Deserialize<DingQuePayload>(payloadJson, JsonOptions);
-            if (payload is null)
-                return "{\"ok\":false,\"error\":\"invalid_ding_que_payload\"}";
-
-            var output = BuildDingQueObject(payload);
-            return JsonSerializer.Serialize(output, JsonOptions);
+            var payload = ParseDingQuePayloadJson(payloadJson);
+            return BuildDingQueJson(payload);
         }
         catch (Exception ex)
         {
-            return JsonSerializer.Serialize(new { ok = false, error = ex.Message }, JsonOptions);
+            return BuildErrorJson("ding_que_exception", ex);
         }
     }
 
@@ -560,6 +555,180 @@ public partial class NeijiangCSharpRuntime : Node
         payload.ForceLightweight = GetJsonBool(root, "forceLightweight");
         payload.MobileSpeedMode = GetJsonBool(root, "mobileSpeedMode");
         payload.CompactResult = GetJsonBool(root, "compactResult");
+    }
+
+    private static DiscardPayload ParseDiscardPayloadJson(string payloadJson)
+    {
+        using var document = JsonDocument.Parse(payloadJson);
+        var payload = new DiscardPayload();
+        PopulateDiscardPayloadFromJson(document.RootElement, payload);
+        return payload;
+    }
+
+    private static SelfActionPayload ParseSelfActionPayloadJson(string payloadJson)
+    {
+        using var document = JsonDocument.Parse(payloadJson);
+        var root = document.RootElement;
+        var payload = new SelfActionPayload();
+        PopulateDiscardPayloadFromJson(root, payload);
+        payload.CanSelfHu = GetJsonBool(root, "canSelfHu");
+        payload.AnGangTileTypes = GetJsonIntList(root, "anGangTileTypes");
+        payload.AddGangTileTypes = GetJsonIntList(root, "addGangTileTypes");
+        payload.MandatoryGangTileTypes = GetJsonIntList(root, "mandatoryGangTileTypes");
+        if (TryGetJsonProperty(root, "addGangQiangGangCounts", out var counts) && counts.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var item in counts.EnumerateObject())
+            {
+                if (int.TryParse(item.Name, out var tileType) && item.Value.TryGetInt32(out var count))
+                    payload.AddGangQiangGangCounts[tileType] = count;
+            }
+        }
+        return payload;
+    }
+
+    private static BaoJiaoPayload ParseBaoJiaoPayloadJson(string payloadJson)
+    {
+        using var document = JsonDocument.Parse(payloadJson);
+        var root = document.RootElement;
+        var payload = new BaoJiaoPayload();
+        PopulateDiscardPayloadFromJson(root, payload);
+        payload.TingTileTypes = GetJsonIntList(root, "tingTileTypes");
+        payload.PlanScore = GetJsonInt(root, "planScore");
+        if (TryGetJsonProperty(root, "baoGangCandidates", out var candidates) && candidates.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in candidates.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                    continue;
+                payload.BaoGangCandidates.Add(new BaoGangCandidatePayload
+                {
+                    Key = GetJsonString(item, "key"),
+                    TileType = GetJsonInt(item, "tileType", -1),
+                    Subtype = GetJsonString(item, "subtype")
+                });
+            }
+        }
+        return payload;
+    }
+
+    private static DingQuePayload ParseDingQuePayloadJson(string payloadJson)
+    {
+        using var document = JsonDocument.Parse(payloadJson);
+        var root = document.RootElement;
+        var payload = new DingQuePayload();
+        if (TryGetJsonProperty(root, "suitCounts", out var counts) && counts.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var item in counts.EnumerateObject())
+            {
+                if (item.Value.TryGetInt32(out var count))
+                    payload.SuitCounts[item.Name] = count;
+            }
+        }
+        if (TryGetJsonProperty(root, "activeSuits", out var suits) && suits.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in suits.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                    payload.ActiveSuits.Add(item.GetString() ?? "");
+            }
+        }
+        return payload;
+    }
+
+    private string BuildCompactDiscardJson(DiscardPayload payload)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var state = BuildState(payload);
+        var result = _facade.DecideDiscardCached(
+            state,
+            forceLightweight: payload.MobileSpeedMode || payload.ForceLightweight);
+        stopwatch.Stop();
+
+        var sb = new StringBuilder(4096);
+        sb.Append("{\"ok\":true");
+        sb.Append(",\"action\":\"").Append(EscapeJsonString(result.Action.ActionType.ToString().ToLowerInvariant())).Append('"');
+        sb.Append(",\"tileType\":").Append(result.Action.TileType);
+        sb.Append(",\"gangSubtype\":\"").Append(EscapeJsonString(result.GangSubtype)).Append('"');
+        sb.Append(",\"score\":").Append(result.Action.Score);
+        sb.Append(",\"shanten\":").Append(result.Shanten);
+        sb.Append(",\"ukeire\":").Append(result.Ukeire);
+        sb.Append(",\"liveUkeire\":").Append(result.LiveUkeire);
+        sb.Append(",\"winProbability\":").Append(JsonDouble(result.WinProbability));
+        sb.Append(",\"dealInProbability\":").Append(JsonDouble(result.DealInProbability));
+        sb.Append(",\"searchUsed\":").Append(JsonBool(result.SearchUsed));
+        sb.Append(",\"searchSimulations\":").Append(result.SearchSimulations);
+        sb.Append(",\"elapsedMs\":").Append(stopwatch.ElapsedMilliseconds);
+        sb.Append(",\"elapsedMsExact\":").Append(JsonDouble(stopwatch.Elapsed.TotalMilliseconds));
+        sb.Append(",\"mobileSpeedMode\":true,\"compactResult\":true");
+        sb.Append(",\"backendMode\":\"csharp_native_mobile_aot\"");
+        sb.Append(",\"routePlan\":{");
+        sb.Append("\"primaryRoute\":\"").Append(EscapeJsonString(result.RoutePlan.PrimaryRoute)).Append('"');
+        sb.Append(",\"secondaryRoutes\":");
+        AppendJsonStringArray(sb, result.RoutePlan.SecondaryRoutes);
+        sb.Append(",\"routeWeights\":");
+        AppendJsonStringIntDictionary(sb, result.RoutePlan.RouteWeights);
+        sb.Append(",\"constraints\":");
+        AppendJsonStringArray(sb, result.RoutePlan.Constraints);
+        sb.Append(",\"reasons\":");
+        AppendJsonStringArray(sb, result.RoutePlan.Reasons);
+        sb.Append(",\"targetSuit\":").Append(result.RoutePlan.TargetSuit).Append('}');
+        sb.Append(",\"beliefSummary\":{\"compact\":true");
+        sb.Append(",\"ready_posteriors\":[],\"hold_summary\":{\"top_holders\":[]}");
+        sb.Append(",\"wall_summary\":{\"top_tiles\":[]},\"wait_summary\":{\"top_waiters\":[]}");
+        sb.Append(",\"unknown_summary\":{\"top_tiles\":[]}}");
+        sb.Append(",\"reasons\":");
+        AppendJsonStringArray(sb, result.Reasons);
+        sb.Append(",\"candidates\":[");
+        var candidates = SelectCompactCandidates(result);
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (index > 0) sb.Append(',');
+            AppendCompactDiscardCandidateJson(sb, candidates[index]);
+        }
+        sb.Append("]}");
+        return sb.ToString();
+    }
+
+    private static void AppendCompactDiscardCandidateJson(StringBuilder sb, NeijiangCandidateDetail item)
+    {
+        sb.Append("{\"tileType\":").Append(item.TileType);
+        sb.Append(",\"fastTingDiscardRank\":").Append(item.FastTingDiscardRank);
+        sb.Append(",\"score\":").Append(item.Score);
+        sb.Append(",\"shanten\":").Append(item.Shanten);
+        sb.Append(",\"ukeire\":").Append(item.Ukeire);
+        sb.Append(",\"liveUkeire\":").Append(item.LiveUkeire);
+        sb.Append(",\"danger\":").Append(item.Danger);
+        sb.Append(",\"waitCount\":").Append(item.WaitCount);
+        sb.Append(",\"waitQualityScore\":").Append(item.WaitQualityScore);
+        sb.Append(",\"riskLabel\":\"").Append(EscapeJsonString(item.RiskLabel)).Append('"');
+        sb.Append(",\"strategyTag\":\"").Append(EscapeJsonString(item.StrategyTag)).Append('"');
+        sb.Append(",\"strategyMode\":\"").Append(EscapeJsonString(item.StrategyMode)).Append('"');
+        sb.Append(",\"explanationHint\":\"").Append(EscapeJsonString(item.ExplanationHint)).Append('"');
+        sb.Append(",\"routePlanPrimary\":\"").Append(EscapeJsonString(item.RoutePlanPrimary)).Append('"');
+        sb.Append(",\"routePlanScore\":").Append(item.RoutePlanScore);
+        sb.Append(",\"tenpaiProbability\":").Append(JsonDouble(item.TenpaiProbability));
+        sb.Append(",\"selfDrawProbability\":").Append(JsonDouble(item.SelfDrawProbability));
+        sb.Append(",\"winProbability\":").Append(JsonDouble(item.WinProbability));
+        sb.Append(",\"dealInProbability\":").Append(JsonDouble(item.DealInProbability));
+        sb.Append(",\"expectedValue\":").Append(JsonDouble(item.ExpectedValue));
+        sb.Append(",\"expectedNetScore\":").Append(JsonDouble(item.ExpectedNetScore));
+        sb.Append(",\"shapeScore\":").Append(JsonDouble(item.ShapeScore));
+        sb.Append(",\"fairBranchScore\":").Append(JsonDouble(item.FairBranchScore));
+        sb.Append(",\"fairBranchCount\":").Append(item.FairBranchCount);
+        sb.Append(",\"fairBranchExpectedShanten\":").Append(JsonDouble(item.FairBranchExpectedShanten));
+        sb.Append(",\"fairBranchExpectedLiveUkeire\":").Append(JsonDouble(item.FairBranchExpectedLiveUkeire));
+        sb.Append(",\"fairBranchWorstShanten\":").Append(item.FairBranchWorstShanten);
+        sb.Append(",\"fairBranchWorstLiveUkeire\":").Append(item.FairBranchWorstLiveUkeire);
+        sb.Append(",\"searchBonus\":").Append(JsonDouble(item.SearchBonus));
+        sb.Append(",\"searchSimulations\":").Append(item.SearchSimulations);
+        sb.Append(",\"searchUsed\":").Append(JsonBool(item.SearchUsed));
+        sb.Append(",\"posteriorReasons\":");
+        AppendJsonStringArray(sb, item.PosteriorReasons);
+        sb.Append(",\"riskReasons\":");
+        AppendJsonStringArray(sb, item.RiskReasons);
+        sb.Append(",\"reasons\":");
+        AppendJsonStringArray(sb, item.Reasons);
+        sb.Append('}');
     }
 
     private static void PopulateHellChallengePayloadFromJson(JsonElement root, HellChallengePayload payload)
@@ -1141,6 +1310,78 @@ public partial class NeijiangCSharpRuntime : Node
             teamPlanPressure = result.ActionScores.GetValueOrDefault("team_plan_pressure", 0),
             backendMode = "hell_challenge_reaction_direct"
         };
+    }
+
+    private string BuildSelfActionJson(SelfActionPayload payload)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var state = BuildState(payload);
+        var result = _facade.DecideSelfAction(
+            state,
+            payload.CanSelfHu,
+            payload.AnGangTileTypes,
+            payload.AddGangTileTypes,
+            payload.AddGangQiangGangCounts,
+            payload.MandatoryGangTileTypes);
+        stopwatch.Stop();
+
+        var sb = new StringBuilder(1024);
+        sb.Append("{\"ok\":true");
+        sb.Append(",\"action\":\"").Append(EscapeJsonString(result.Action.ActionType.ToString().ToLowerInvariant())).Append('"');
+        sb.Append(",\"tileType\":").Append(result.Action.TileType);
+        sb.Append(",\"gangSubtype\":\"").Append(EscapeJsonString(result.GangSubtype)).Append('"');
+        sb.Append(",\"score\":").Append(result.Action.Score);
+        sb.Append(",\"reason\":\"").Append(EscapeJsonString(result.Action.Reason)).Append('"');
+        sb.Append(",\"shantenAfter\":").Append(result.ShantenAfter);
+        sb.Append(",\"liveUkeireAfter\":").Append(result.LiveUkeireAfter);
+        sb.Append(",\"reasons\":");
+        AppendJsonStringArray(sb, result.Reasons);
+        sb.Append(",\"actionScores\":");
+        AppendJsonStringIntDictionary(sb, result.ActionScores);
+        sb.Append(",\"elapsedMs\":").Append(stopwatch.ElapsedMilliseconds);
+        sb.Append(",\"backendMode\":\"csharp_native_self_action_aot\"}");
+        return sb.ToString();
+    }
+
+    private string BuildBaoJiaoJson(BaoJiaoPayload payload)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var state = BuildState(payload);
+        var candidates = payload.BaoGangCandidates
+            .Select(item => new NeijiangBaoGangCandidate(item.Key, item.TileType, item.Subtype))
+            .ToArray();
+        var result = _facade.DecideBaoJiaoDeclaration(state, payload.TingTileTypes, candidates, payload.PlanScore);
+        stopwatch.Stop();
+
+        var sb = new StringBuilder(1024);
+        sb.Append("{\"ok\":true");
+        sb.Append(",\"action\":\"").Append(result.Declare ? "bao_jiao" : "pass").Append('"');
+        sb.Append(",\"declare\":").Append(JsonBool(result.Declare));
+        sb.Append(",\"selectedBaoGangKeys\":");
+        AppendJsonStringArray(sb, result.SelectedBaoGangKeys);
+        sb.Append(",\"score\":").Append(result.Score);
+        sb.Append(",\"reasons\":");
+        AppendJsonStringArray(sb, result.Reasons);
+        sb.Append(",\"candidateScores\":");
+        AppendJsonStringIntDictionary(sb, result.CandidateScores);
+        sb.Append(",\"elapsedMs\":").Append(stopwatch.ElapsedMilliseconds);
+        sb.Append(",\"backendMode\":\"csharp_native_bao_jiao_aot\"}");
+        return sb.ToString();
+    }
+
+    private string BuildDingQueJson(DingQuePayload payload)
+    {
+        var result = _facade.DecideDingQue(payload.SuitCounts, payload.ActiveSuits);
+        var sb = new StringBuilder(512);
+        sb.Append("{\"ok\":true,\"action\":\"ding_que\"");
+        sb.Append(",\"suit\":\"").Append(EscapeJsonString(result.Suit)).Append('"');
+        sb.Append(",\"score\":").Append(result.Score);
+        sb.Append(",\"reasons\":");
+        AppendJsonStringArray(sb, result.Reasons);
+        sb.Append(",\"suitCounts\":");
+        AppendJsonStringIntDictionary(sb, result.SuitCounts);
+        sb.Append(",\"backendMode\":\"csharp_native_ding_que_aot\"}");
+        return sb.ToString();
     }
 
     private object BuildSelfActionObject(SelfActionPayload payload)

@@ -19,6 +19,7 @@ const AITuningConfigScript := preload("res://scripts/core/ai_tuning_config.gd")
 const AILearningEngineScript := preload("res://scripts/core/ai_learning_engine.gd")
 const OpeningRollResolverScript := preload("res://scripts/core/opening_roll_resolver.gd")
 const AIManagerScript := preload("res://scripts/ai/AIManager.gd")
+const NetworkSnapshotProjector := preload("res://scripts/network/neijiang_snapshot_projector.gd")
 
 enum RoundPhase {
 	BOOT,
@@ -74,6 +75,7 @@ var current_phase: RoundPhase = RoundPhase.BOOT
 var current_dealer_seat: int = 0
 var current_turn_seat: int = 0
 var players: Array[Dictionary] = []
+var seat_controllers: Array[Dictionary] = []
 var wall: Array[Dictionary] = []
 var wall_count: int = 0
 var discard_pile: Array[Dictionary] = []
@@ -109,6 +111,7 @@ var trainer_history: Array[Dictionary] = []
 var human_trainer_hint_enabled: bool = false
 var latest_trainer_hint: Dictionary = {}
 var latest_trainer_hint_cache_key: String = ""
+var network_trainer_hint_cache: Dictionary = {}
 var pending_trainer_hint_request_id: int = 0
 var pending_trainer_hint_request_cache_key: String = ""
 var pending_trainer_hint_request_seat: int = -1
@@ -203,6 +206,100 @@ func clear_test_seed() -> void:
 	_rng.randomize()
 
 
+func start_local_game() -> void:
+	seat_controllers.clear()
+	players.clear()
+	round_index = 1
+	previous_dealer_seat = -1
+	start_new_round()
+
+
+func configure_seat_controllers(controllers: Array, restart_round: bool = false) -> bool:
+	if controllers.size() != 4:
+		return false
+	var normalized: Array[Dictionary] = []
+	var occupied := {}
+	for value in controllers:
+		if not value is Dictionary:
+			return false
+		var controller: Dictionary = value
+		var seat := int(controller.get("seat", -1))
+		if seat < 0 or seat >= 4 or occupied.has(seat):
+			return false
+		occupied[seat] = true
+		var is_ai := bool(controller.get("is_ai", false))
+		var player_id := str(controller.get("player_id", ""))
+		if not is_ai and player_id.is_empty():
+			return false
+		normalized.append({
+			"seat": seat,
+			"nickname": str(controller.get("nickname", "玩家%d" % (seat + 1))).strip_edges().left(24),
+			"is_ai": is_ai,
+			"player_id": player_id,
+		})
+	normalized.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["seat"]) < int(b["seat"]))
+	seat_controllers = normalized
+	if _has_multiple_human_controllers() and ai_tuning_config != null and str(ai_tuning_config.preset_name) == AITuningConfigScript.PRESET_HELL:
+		ai_tuning_config.apply_preset(AITuningConfigScript.PRESET_BONE_ASH)
+		ai_level = AILevel.ADVANCED
+		_apply_ai_runtime_tuning()
+	if restart_round:
+		players.clear()
+		round_index = 1
+		previous_dealer_seat = -1
+		start_new_round()
+	return true
+
+
+func _has_multiple_human_controllers() -> bool:
+	var human_count := 0
+	for controller in seat_controllers:
+		if not bool(controller.get("is_ai", false)):
+			human_count += 1
+	return human_count >= 2
+
+
+func prepare_lan_table(controllers: Array) -> bool:
+	if not configure_seat_controllers(controllers):
+		return false
+	round_index = 1
+	previous_dealer_seat = -1
+	current_dealer_seat = 0
+	players = _create_initial_players()
+	wall.clear()
+	wall_count = 0
+	discard_pile.clear()
+	round_winners.clear()
+	settlement_data = _create_empty_settlement_data()
+	last_turn_context.clear()
+	last_gang_context.clear()
+	pending_qiang_gang_context.clear()
+	last_draw_tile.clear()
+	shun_he_locks.clear()
+	current_discard_context.clear()
+	pending_reactions.clear()
+	trainer_history.clear()
+	latest_trainer_hint.clear()
+	latest_trainer_hint_cache_key = ""
+	network_trainer_hint_cache.clear()
+	_clear_pending_trainer_hint_request()
+	reaction_pass_evidence.clear()
+	self_hu_pass_locks.clear()
+	pending_ai_turn_decision.clear()
+	pending_ai_reaction_decision.clear()
+	_clear_pending_ai_async_state()
+	opening_bao_jiao_pending = false
+	opening_bao_jiao_queue.clear()
+	opening_bao_jiao_current_seat = -1
+	opening_roll_data.clear()
+	opening_roll_pending_completion = false
+	current_turn_seat = -1
+	current_phase = RoundPhase.TABLE_SETUP
+	debug_last_message = "联机房间等待玩家准备"
+	_emit_state_changed()
+	return true
+
+
 func start_new_round(preserve_dealer: bool = false) -> void:
 	current_phase = RoundPhase.TABLE_SETUP
 	if deterministic_seed_enabled:
@@ -221,6 +318,7 @@ func start_new_round(preserve_dealer: bool = false) -> void:
 	pending_reactions.clear()
 	trainer_history.clear()
 	latest_trainer_hint.clear()
+	network_trainer_hint_cache.clear()
 	ai_decision_metrics = _create_empty_ai_decision_metrics()
 	ai_decision_performance_ms.clear()
 	ai_reaction_review_history.clear()
@@ -259,7 +357,7 @@ func start_new_round(preserve_dealer: bool = false) -> void:
 	opening_roll_started.emit(opening_roll_data.duplicate(true))
 
 
-func get_debug_snapshot() -> Dictionary:
+func get_debug_snapshot(include_trainer_hint: bool = true) -> Dictionary:
 	var rules_debug: Dictionary = {} if rules == null else rules.to_debug_dict()
 	var reaction_summary := ""
 	if mahjong_judge != null:
@@ -312,7 +410,7 @@ func get_debug_snapshot() -> Dictionary:
 		"pending_ai_turn_decision": pending_ai_turn_decision.duplicate(true),
 		"ai_core_debug": _build_ai_core_debug_snapshot(),
 		"ai_chain_debug": ai_chain_debug_history.duplicate(),
-		"trainer_hint": _get_human_trainer_hint_snapshot() if human_trainer_hint_enabled else {},
+		"trainer_hint": _get_human_trainer_hint_snapshot() if include_trainer_hint and human_trainer_hint_enabled else {},
 		"opening_roll": opening_roll_data.duplicate(true),
 		"opening_roll_pending": opening_roll_pending_completion,
 		"opening_bao_jiao_pending": opening_bao_jiao_pending,
@@ -322,6 +420,52 @@ func get_debug_snapshot() -> Dictionary:
 		"ai_analysis_recording": _build_ai_analysis_recording_debug_snapshot(),
 		"debug_decision_trace": _build_debug_decision_trace_snapshot(),
 		"players": players.duplicate(true),
+	}
+
+
+func get_gameplay_snapshot(viewer_seat: int) -> Dictionary:
+	if viewer_seat < 0 or viewer_seat >= players.size():
+		return {}
+	var private_actions := {
+		"human_can_discard": can_human_discard(viewer_seat),
+		"human_can_self_hu": can_human_self_hu(viewer_seat),
+		"human_can_add_gang": can_human_add_gang(viewer_seat),
+		"human_can_an_gang": can_human_an_gang(viewer_seat),
+		"human_can_bao_jiao": can_human_bao_jiao(viewer_seat),
+		"human_can_pass_opening_bao_jiao": can_human_pass_opening_bao_jiao(viewer_seat),
+		"human_bao_jiao_plan": get_human_bao_jiao_plan(viewer_seat),
+		"human_last_draw_tile_id": _get_last_draw_tile_id_for_seat(viewer_seat),
+		"human_reaction_options": get_human_reaction_options(viewer_seat),
+	}
+	if viewer_seat == 0 and human_trainer_hint_enabled:
+		private_actions["trainer_hint"] = _get_human_trainer_hint_snapshot()
+	elif human_trainer_hint_enabled and not bool(players[viewer_seat].get("is_ai", false)):
+		private_actions["trainer_hint"] = _get_network_trainer_hint_snapshot(viewer_seat)
+	return NetworkSnapshotProjector.new().project(_build_authority_network_snapshot(), viewer_seat, private_actions)
+
+
+func _build_authority_network_snapshot() -> Dictionary:
+	return {
+		"round_index": round_index,
+		"current_phase": int(current_phase),
+		"current_dealer_seat": current_dealer_seat,
+		"current_turn_seat": current_turn_seat,
+		"wall_count": wall_count,
+		"discard_count": discard_pile.size(),
+		"winner_count": round_winners.size(),
+		"round_winners": round_winners.duplicate(),
+		"recent_discard_display": _get_recent_discard_display(),
+		"recent_discard_tile_id": _get_recent_discard_tile_id(),
+		"recent_draw_display": _get_recent_draw_display(),
+		"recent_draw_seat": _get_recent_draw_seat(),
+		"discard_context": current_discard_context,
+		"opening_roll": opening_roll_data,
+		"opening_roll_pending": opening_roll_pending_completion,
+		"opening_bao_jiao_pending": opening_bao_jiao_pending,
+		"opening_bao_jiao_current_seat": opening_bao_jiao_current_seat,
+		"rules": {} if rules == null else rules.to_debug_dict(),
+		"settlement_data": settlement_data if current_phase == RoundPhase.SETTLEMENT else {},
+		"players": players,
 	}
 
 
@@ -336,11 +480,14 @@ func set_human_trainer_hint_enabled(enabled: bool) -> void:
 	if not enabled:
 		latest_trainer_hint.clear()
 		latest_trainer_hint_cache_key = ""
+		network_trainer_hint_cache.clear()
 		_clear_pending_trainer_hint_request()
 
 
 func set_ai_preset(preset_name: String) -> bool:
 	if ai_tuning_config == null:
+		return false
+	if preset_name == AITuningConfigScript.PRESET_HELL and _has_multiple_human_controllers():
 		return false
 	ai_tuning_config.apply_preset(preset_name)
 	if str(ai_tuning_config.preset_name) == AITuningConfigScript.PRESET_HELL:
@@ -606,6 +753,8 @@ func _update_ai_learning_after_round(score_changes: Dictionary) -> void:
 func set_ai_level(level: int) -> bool:
 	if level < int(AILevel.BEGINNER) or level > int(AILevel.CHEATING):
 		return false
+	if level == int(AILevel.CHEATING) and _has_multiple_human_controllers():
+		return false
 	if ai_tuning_config != null:
 		var preset_name := AITuningConfigScript.PRESET_INTERMEDIATE
 		match level:
@@ -775,6 +924,8 @@ func can_human_self_hu(seat: int) -> bool:
 func can_human_add_gang(seat: int) -> bool:
 	if current_phase != RoundPhase.DISCARD:
 		return false
+	if wall_count <= 0:
+		return false
 	if seat < 0 or seat >= players.size():
 		return false
 	if current_turn_seat != seat or players[seat]["has_won"]:
@@ -784,6 +935,8 @@ func can_human_add_gang(seat: int) -> bool:
 
 func can_human_an_gang(seat: int) -> bool:
 	if current_phase != RoundPhase.DISCARD:
+		return false
+	if wall_count <= 0:
 		return false
 	if seat < 0 or seat >= players.size():
 		return false
@@ -1244,6 +1397,9 @@ func _build_ai_turn_decision(force_lightweight: bool = false) -> Dictionary:
 	])
 	var allow_cheat: bool = int(players[seat].get("ai_level", int(ai_level))) == int(AILevel.CHEATING)
 	var self_action: Dictionary = _build_ai_self_action_decision(seat, player_state, table_state)
+	if bool(self_action.get("transport_failed", false)):
+		_record_ai_chain_debug("turn_build_self_action_transport_failed seat=%d err=%s" % [seat, debug_last_message])
+		return {}
 	if not self_action.is_empty():
 		for key in self_action.keys():
 			base[key] = self_action[key]
@@ -1385,8 +1541,9 @@ func _build_ai_self_action_decision(seat: int, player_state: Dictionary, table_s
 		return {}
 	var csharp_decision: Dictionary = ai_manager.analyze_self_action(player_state, table_state, rules, can_self_hu, an_types, add_types, add_qiang_counts, mandatory_types)
 	if csharp_decision.is_empty():
-		debug_last_message = "C# AI 未返回有效自摸动作结果，当前等待重试。"
-		return {}
+		var native_error := str(ai_manager.get_backend_status().get("last_native_turn_error", "empty_self_action_analysis"))
+		debug_last_message = "C# AI 未返回有效自摸动作结果，当前等待重试：%s" % native_error
+		return {"transport_failed": true}
 	var action := str(csharp_decision.get("action", "pass")).strip_edges().to_lower()
 	if action == "hu" and can_self_hu:
 		return {
@@ -1850,6 +2007,9 @@ func _start_ai_turn_background_request() -> bool:
 		var native_player_state := _build_player_state(native_seat)
 		var native_table_state := _build_table_state()
 		var self_action := _build_ai_self_action_decision(native_seat, native_player_state, native_table_state)
+		if bool(self_action.get("transport_failed", false)):
+			_record_ai_chain_debug("turn_self_action_transport_failed seat=%d err=%s" % [native_seat, debug_last_message])
+			return false
 		if not self_action.is_empty():
 			var base := {
 				"round_index": round_index,
@@ -2385,7 +2545,8 @@ func _get_human_trainer_hint_snapshot() -> Dictionary:
 	var can_react := bool(reaction_options.get("can_peng", false)) \
 		or bool(reaction_options.get("can_gang", false)) \
 		or bool(reaction_options.get("can_hu", false))
-	var can_show_hint: bool = can_human_discard(seat) or can_human_add_gang(seat) or can_human_an_gang(seat) or can_human_self_hu(seat) or can_react
+	var can_bao_jiao := can_human_bao_jiao(seat)
+	var can_show_hint: bool = can_human_discard(seat) or can_human_add_gang(seat) or can_human_an_gang(seat) or can_human_self_hu(seat) or can_react or can_bao_jiao
 	if not can_show_hint:
 		latest_trainer_hint.clear()
 		latest_trainer_hint_cache_key = ""
@@ -2395,12 +2556,145 @@ func _get_human_trainer_hint_snapshot() -> Dictionary:
 	if cache_key == latest_trainer_hint_cache_key and not latest_trainer_hint.is_empty():
 		return latest_trainer_hint.duplicate(true)
 	latest_trainer_hint_cache_key = cache_key
+	latest_trainer_hint.clear()
 	if can_react:
 		latest_trainer_hint = _build_human_reaction_trainer_hint(seat, reaction_options)
+		if latest_trainer_hint.is_empty():
+			latest_trainer_hint = {"unavailable_reason": "C# 反应分析暂不可用", "state_signature": cache_key}
 		return latest_trainer_hint.duplicate(true)
+	if can_bao_jiao and opening_bao_jiao_pending:
+		latest_trainer_hint = _build_human_bao_jiao_trainer_hint(seat)
+		return latest_trainer_hint.duplicate(true)
+	if can_human_self_hu(seat) or can_human_add_gang(seat) or can_human_an_gang(seat):
+		latest_trainer_hint = _build_human_self_action_trainer_hint(seat)
+		if str(latest_trainer_hint.get("action_recommendation", "")) != "continue_discard":
+			return latest_trainer_hint.duplicate(true)
+	var self_action_hint := latest_trainer_hint.duplicate(true)
 	if _start_human_trainer_hint_request(seat, cache_key):
+		if not self_action_hint.is_empty():
+			latest_trainer_hint["self_action_analysis"] = self_action_hint
 		return latest_trainer_hint.duplicate(true)
-	return _build_trainer_hint_for_seat(seat)
+	latest_trainer_hint = {"unavailable_reason": "C# 实时分析暂不可用", "state_signature": cache_key}
+	return latest_trainer_hint.duplicate(true)
+
+
+func _get_network_trainer_hint_snapshot(seat: int) -> Dictionary:
+	if not human_trainer_hint_enabled or seat <= 0 or seat >= players.size() or bool(players[seat].get("is_ai", false)):
+		return {}
+	var reaction_options := get_human_reaction_options(seat)
+	var can_react := bool(reaction_options.get("can_peng", false)) or bool(reaction_options.get("can_gang", false)) or bool(reaction_options.get("can_hu", false))
+	var can_bao_jiao := can_human_bao_jiao(seat)
+	if not (can_human_discard(seat) or can_human_self_hu(seat) or can_human_add_gang(seat) or can_human_an_gang(seat) or can_react or can_bao_jiao):
+		network_trainer_hint_cache.erase(seat)
+		return {}
+	var cache_key := _build_trainer_hint_cache_key(seat)
+	var cached: Dictionary = network_trainer_hint_cache.get(seat, {})
+	if str(cached.get("key", "")) == cache_key:
+		return Dictionary(cached.get("hint", {})).duplicate(true)
+	var hint: Dictionary = {}
+	if can_react:
+		hint = _build_human_reaction_trainer_hint(seat, reaction_options)
+		if hint.is_empty():
+			hint = {"unavailable_reason": "C# 反应分析暂不可用"}
+	elif can_bao_jiao and opening_bao_jiao_pending:
+		hint = _build_human_bao_jiao_trainer_hint(seat)
+	elif can_human_self_hu(seat) or can_human_add_gang(seat) or can_human_an_gang(seat):
+		hint = _build_human_self_action_trainer_hint(seat)
+		if str(hint.get("action_recommendation", "")) == "continue_discard":
+			var self_action_hint := hint.duplicate(true)
+			hint = _build_network_discard_trainer_hint(seat)
+			hint["self_action_analysis"] = self_action_hint
+	else:
+		hint = _build_network_discard_trainer_hint(seat)
+	if hint.is_empty():
+		hint = {"unavailable_reason": "C# 实时分析暂不可用"}
+	hint["state_signature"] = cache_key
+	network_trainer_hint_cache[seat] = {"key": cache_key, "hint": hint.duplicate(true)}
+	return hint
+
+
+func _build_network_discard_trainer_hint(seat: int) -> Dictionary:
+	if ai_manager == null or not ai_manager.has_method("analyze_turn"):
+		return {"unavailable_reason": "C# 出牌分析暂不可用"}
+	var analysis: Dictionary = ai_manager.analyze_turn(
+		_build_player_state(seat), _build_table_state(), rules, ai_tuning_config,
+		hu_checker, risk_analyzer, false
+	)
+	if analysis.is_empty():
+		return {"unavailable_reason": "C# 出牌分析暂不可用"}
+	var recommended: Dictionary = analysis.get("recommended", {})
+	return {
+		"recommended": recommended.duplicate(true),
+		"options": analysis.get("options", []).duplicate(true),
+		"danger_tiles": analysis.get("danger_tiles", []).duplicate(true),
+		"recommended_tile_id": int(recommended.get("tile", {}).get("id", -1)),
+		"danger_tile_ids": _extract_trainer_tile_ids(analysis.get("danger_tiles", [])),
+		"current_routes": analysis.get("current_routes", []).duplicate(true),
+		"strategy_profile": analysis.get("strategy_profile", {}).duplicate(true),
+		"situation_label": _resolve_trainer_situation_label(players[seat], analysis.get("strategy_profile", {})),
+		"can_self_hu": can_human_self_hu(seat),
+		"can_add_gang": can_human_add_gang(seat),
+		"can_an_gang": can_human_an_gang(seat),
+		"backend_mode": str(analysis.get("backend_mode", "")),
+	}
+
+
+func _build_human_bao_jiao_trainer_hint(seat: int) -> Dictionary:
+	if ai_manager == null or not ai_manager.has_method("analyze_bao_jiao"):
+		return {"unavailable_reason": "C# 报叫分析暂不可用"}
+	var plan := get_human_bao_jiao_plan(seat)
+	if plan.is_empty():
+		return {}
+	var analysis: Dictionary = ai_manager.analyze_bao_jiao(_build_player_state(seat), _build_table_state(), rules, plan)
+	if analysis.is_empty():
+		return {"unavailable_reason": "C# 报叫分析暂不可用"}
+	var selected_keys := _sanitize_bao_gang_selection(plan, analysis.get("selected_bao_gang_keys", []))
+	var selected_names: Array[String] = []
+	for option in plan.get("bao_gang_options", []):
+		if selected_keys.has(str(option.get("key", ""))):
+			selected_names.append(str(option.get("display_name", option.get("key", ""))))
+	var declare := _should_execute_ai_bao_jiao_decision(analysis)
+	return {
+		"action_recommendation": "bao_jiao" if declare else "pass",
+		"action_reason": "报杠：%s" % "、".join(selected_names) if declare and not selected_names.is_empty() else "",
+		"action_reasons": Array(analysis.get("reasons", [])).duplicate(true),
+		"action_scores": analysis.get("candidate_scores", {}).duplicate(true),
+		"legal_actions": {"can_bao_jiao": true, "bao_gang_options": plan.get("bao_gang_options", []).duplicate(true)},
+		"backend_mode": str(analysis.get("backend_mode", "")),
+		"state_signature": _build_trainer_hint_cache_key(seat),
+	}
+
+
+func _build_human_self_action_trainer_hint(seat: int) -> Dictionary:
+	if ai_manager == null or not ai_manager.has_method("analyze_self_action"):
+		return {"unavailable_reason": "C# 自行动作分析暂不可用"}
+	var an_options := _find_all_an_gang_options(seat)
+	var add_options := _find_all_add_gang_options(seat)
+	var an_types := _tile_types_from_options(an_options, "tiles") if can_human_an_gang(seat) else []
+	var add_types := _tile_types_from_options(add_options, "tile") if can_human_add_gang(seat) else []
+	var can_self_hu_now := can_human_self_hu(seat)
+	var analysis: Dictionary = ai_manager.analyze_self_action(
+		_build_player_state(seat), _build_table_state(), rules, can_self_hu_now,
+		an_types, add_types, _add_gang_qiang_counts_by_tile_type(seat, add_options),
+		_mandatory_gang_tile_types_for_seat(seat, an_options, add_options)
+	)
+	if analysis.is_empty():
+		return {"unavailable_reason": "C# 自行动作分析暂不可用"}
+	var action := str(analysis.get("action", "pass")).strip_edges().to_lower()
+	if action == "hu" and not can_self_hu_now:
+		return {"unavailable_reason": "自摸建议与当前合法动作不一致"}
+	if action == "gang" and not (int(analysis.get("tile_type", -1)) in an_types or int(analysis.get("tile_type", -1)) in add_types):
+		return {"unavailable_reason": "杠牌建议与当前合法动作不一致"}
+	var label := _neijiang_tile_type_label(int(analysis.get("tile_type", -1))) if action == "gang" else ""
+	return {
+		"action_recommendation": "self_hu" if action == "hu" else ("self_gang" if action == "gang" else "continue_discard"),
+		"action_reason": "建议杠 %s" % label if action == "gang" else str(analysis.get("reason", "")),
+		"action_reasons": Array(analysis.get("reasons", [])).duplicate(true),
+		"action_scores": analysis.get("action_scores", {}).duplicate(true),
+		"legal_actions": {"can_self_hu": can_self_hu_now, "an_gang_tile_types": an_types, "add_gang_tile_types": add_types},
+		"backend_mode": str(analysis.get("backend_mode", "")),
+		"state_signature": _build_trainer_hint_cache_key(seat),
+	}
 
 
 func _build_human_reaction_trainer_hint(seat: int, legal_options: Dictionary) -> Dictionary:
@@ -2448,7 +2742,9 @@ func _build_trainer_hint_cache_key(seat: int) -> String:
 		hand_ids.append(str(int(tile.get("id", -1))))
 	hand_ids.sort()
 	var reaction_options := get_human_reaction_options(seat)
-	return "%d|%d|%s|%s|%d|%d|%d|%d|%d|%d|%d" % [
+	return "%d|%d|%d|%d|%s|%s|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d" % [
+		seat,
+		round_index,
 		int(current_phase),
 		int(current_turn_seat),
 		str(player.get("ding_que", "")),
@@ -2460,6 +2756,10 @@ func _build_trainer_hint_cache_key(seat: int) -> String:
 		int(bool(reaction_options.get("can_peng", false))),
 		int(bool(reaction_options.get("can_gang", false))),
 		int(bool(reaction_options.get("can_hu", false))),
+		int(can_human_self_hu(seat)),
+		int(can_human_bao_jiao(seat)),
+		int(opening_bao_jiao_pending),
+		wall_count,
 	]
 
 
@@ -2604,6 +2904,14 @@ func _select_initial_dealer() -> int:
 
 
 func _create_initial_players(previous_players: Array = []) -> Array[Dictionary]:
+	if not seat_controllers.is_empty():
+		var configured: Array[Dictionary] = []
+		for controller in seat_controllers:
+			var seat := int(controller.get("seat", -1))
+			var player := _create_player_state(seat, str(controller.get("nickname", "玩家%d" % (seat + 1))), bool(controller.get("is_ai", false)), _seed_score_for_seat(previous_players, seat))
+			player["player_id"] = str(controller.get("player_id", ""))
+			configured.append(player)
+		return configured
 	return [
 		_create_player_state(0, "陈旭", false, _seed_score_for_seat(previous_players, 0)),
 		_create_player_state(1, "舒小燕", true, _seed_score_for_seat(previous_players, 1)),
@@ -3691,6 +3999,9 @@ func _prepare_reaction_context(source_seat: int, discarded_tile: Dictionary) -> 
 		"winner_seats": [],
 	}
 	pending_reactions = mahjong_judge.build_reaction_candidates(_build_table_state(), current_discard_context, rules)
+	if wall_count <= 0:
+		for candidate in pending_reactions:
+			candidate["can_gang"] = false
 	_apply_reaction_candidate_rule_flags()
 	_apply_shun_he_lock_filter()
 
@@ -3764,6 +4075,8 @@ func _apply_reaction_candidate_rule_flags() -> void:
 
 
 func _find_add_gang_option(seat: int) -> Dictionary:
+	if wall_count <= 0:
+		return {}
 	if seat < 0 or seat >= players.size():
 		return {}
 	var last_draw_tile_id := _get_last_draw_tile_id_for_seat(seat)
@@ -3799,6 +4112,8 @@ func _find_add_gang_option(seat: int) -> Dictionary:
 
 
 func _find_an_gang_option(seat: int) -> Dictionary:
+	if wall_count <= 0:
+		return {}
 	if seat < 0 or seat >= players.size():
 		return {}
 	var hand_tiles: Array = players[seat]["hand_tiles"]
@@ -3876,6 +4191,8 @@ func _should_ai_an_gang(seat: int) -> bool:
 
 
 func _start_add_gang(seat: int, selected_option: Dictionary = {}) -> bool:
+	if wall_count <= 0 or wall.is_empty():
+		return false
 	var option: Dictionary = selected_option.duplicate(true) if not selected_option.is_empty() else ({} if bool(players[seat].get("is_ai", false)) else _find_add_gang_option(seat))
 	if option.is_empty():
 		return false
@@ -3914,6 +4231,8 @@ func _start_add_gang(seat: int, selected_option: Dictionary = {}) -> bool:
 
 
 func _execute_an_gang(seat: int, selected_option: Dictionary = {}) -> bool:
+	if wall_count <= 0 or wall.is_empty():
+		return false
 	var option: Dictionary = selected_option.duplicate(true) if not selected_option.is_empty() else ({} if bool(players[seat].get("is_ai", false)) else _find_an_gang_option(seat))
 	if option.is_empty():
 		return false
@@ -4557,6 +4876,8 @@ func _phase_debug_name(phase_value: int) -> String:
 
 func _find_all_add_gang_options(seat: int) -> Array:
 	var results: Array = []
+	if wall_count <= 0:
+		return results
 	if seat < 0 or seat >= players.size():
 		return results
 	var last_draw_tile_id := _get_last_draw_tile_id_for_seat(seat)
@@ -4594,6 +4915,8 @@ func _find_all_add_gang_options(seat: int) -> Array:
 
 func _find_all_an_gang_options(seat: int) -> Array:
 	var results: Array = []
+	if wall_count <= 0:
+		return results
 	if seat < 0 or seat >= players.size():
 		return results
 	var hand_tiles: Array = players[seat]["hand_tiles"]
@@ -4661,6 +4984,8 @@ func _build_qiang_gang_hu_candidates(actor_seat: int, gang_tile: Dictionary) -> 
 func _finalize_add_gang_without_qiang() -> bool:
 	if pending_qiang_gang_context.is_empty():
 		return false
+	if wall_count <= 0 or wall.is_empty():
+		return false
 	var seat: int = int(pending_qiang_gang_context["actor_seat"])
 	var tile: Dictionary = pending_qiang_gang_context["tile"]
 	if not pending_qiang_gang_context.has("meld_index"):
@@ -4718,6 +5043,7 @@ func _upgrade_peng_to_gang(seat: int, meld_index: int, extra_tile: Dictionary) -
 	meld["type"] = "gang"
 	meld["tiles"] = tiles
 	meld["gang_upgrade"] = true
+	meld["gang_subtype"] = "add_gang"
 	melds[meld_index] = meld
 	players[seat]["melds"] = melds
 	return true
@@ -4771,6 +5097,8 @@ func _execute_peng(seat: int) -> bool:
 
 func _execute_gang(seat: int) -> bool:
 	if current_discard_context.is_empty():
+		return false
+	if wall_count <= 0 or wall.is_empty():
 		return false
 
 	_clear_pending_ai_async_state()
@@ -5474,20 +5802,9 @@ func _seat_display_name(seat: int) -> String:
 
 
 func _resolve_next_dealer_seat() -> int:
-	var end_reason: String = str(settlement_data.get("end_reason", ""))
-	if end_reason == "draw_wall_empty":
-		return posmod(current_dealer_seat - 1, players.size())
-	var win_events: Array = settlement_data.get("win_events", [])
-	if win_events.is_empty():
-		return posmod(current_dealer_seat - 1, players.size())
-	var dealer_keeps := false
-	for event in win_events:
-		if int(event.get("winner_seat", -1)) == current_dealer_seat:
-			dealer_keeps = true
-			break
-	if dealer_keeps:
-		return current_dealer_seat
-	return posmod(current_dealer_seat - 1, players.size())
+	return preload("res://scripts/core/neijiang_dealer_rotation.gd").next_dealer(
+		settlement_data.get("win_events", []), players.size(), current_dealer_seat
+	)
 
 
 func _consume_next_draw_reason() -> String:
@@ -5546,6 +5863,7 @@ func _append_settlement_win_event(winner_seat: int, source_seat: int, winning_ti
 			"winning_tile": winning_tile.duplicate(true),
 			"win_type": win_type,
 			"payer_seats": payer_seats.duplicate(),
+			"melds": Array(players[winner_seat].get("melds", [])).duplicate(true),
 			"fan_detail": fan_detail,
 		}
 	)

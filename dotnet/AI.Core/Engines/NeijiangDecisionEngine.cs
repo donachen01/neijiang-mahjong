@@ -15,6 +15,8 @@ public sealed class NeijiangDecisionEngine
     private readonly NeijiangExpectedScoreEngine _expectedScore = new();
     private readonly NeijiangSelfDrawProbabilityEngine _selfDraw = new();
     private readonly NeijiangHandShapeEngine _shape = new();
+    private readonly NeijiangExactStructureEngine _exactStructure = new();
+    private readonly NeijiangExactHandAnalyzer _exactHands = new();
     private readonly NeijiangWaitShapeEngine _waitShape = new();
     private readonly NeijiangLimitedLookaheadEngine _limitedLookahead = new();
     private readonly NeijiangFairBranchEngine _fairBranch = new();
@@ -81,7 +83,7 @@ public sealed class NeijiangDecisionEngine
             var (ukeire, liveUkeire, improvingTiles) = _ukeire.CalcUkeire(state.Hand18, state.Remaining18, tileType, meldCount);
             var remainingHand = RemoveOne(state.Hand18, tileType);
             var moduleStarted = Stopwatch.GetTimestamp();
-            var exactReadyTiles = GetExactReadyTiles(remainingHand, meldCount);
+            var exactReadyTiles = _exactHands.EnumerateWaits(remainingHand, meldCount);
             exactReadyMs += Stopwatch.GetElapsedTime(moduleStarted).TotalMilliseconds;
             var effectiveUkeire = exactReadyTiles.Count > 0 ? exactReadyTiles.Count : ukeire;
             var effectiveShanten = exactReadyTiles.Count > 0 ? 0 : shanten;
@@ -102,6 +104,7 @@ public sealed class NeijiangDecisionEngine
             var qualityScore = _quality.EvaluateScore(effectiveImprovingTiles, state.Remaining18);
             moduleStarted = Stopwatch.GetTimestamp();
             var shapeSummary = _shape.Evaluate(remainingHand, state.Remaining18, meldCount, effectiveShanten);
+            var exactStructure = _exactStructure.Evaluate(remainingHand, meldCount);
             var waitShapeSummary = _waitShape.Evaluate(remainingHand, waitCount > 0 ? effectiveImprovingTiles : Array.Empty<int>());
             handShapeMs += Stopwatch.GetElapsedTime(moduleStarted).TotalMilliseconds;
             var readyCentralPreservation = EvaluateReadyCentralPreservationAdjustment(
@@ -112,22 +115,31 @@ public sealed class NeijiangDecisionEngine
                 effectiveLiveUkeire,
                 roundStage);
             moduleStarted = Stopwatch.GetTimestamp();
-            var limitedLookahead = _limitedLookahead.Evaluate(
-                remainingHand,
-                state.Remaining18,
-                meldCount,
-                effectiveShanten,
-                effectiveLiveUkeire,
-                ResolveLookaheadDrawTypes(state.WallCount, effectiveShanten));
+            // Do not stack both forward engines on the same candidate. Exact
+            // two-ply comparison is valuable near tenpai; farther away the
+            // cheaper limited lookahead is the appropriate signal.
+            var useFairTwoPly = effectiveShanten <= 1;
+            var limitedLookahead = useFairTwoPly
+                ? new NeijiangLimitedLookaheadSummary()
+                : _limitedLookahead.Evaluate(
+                    remainingHand,
+                    state.Remaining18,
+                    meldCount,
+                    effectiveShanten,
+                    effectiveLiveUkeire,
+                    ResolveLookaheadDrawTypes(state.WallCount, effectiveShanten));
             limitedLookaheadMs += Stopwatch.GetElapsedTime(moduleStarted).TotalMilliseconds;
             moduleStarted = Stopwatch.GetTimestamp();
-            var fairBranch = _fairBranch.Evaluate(
-                remainingHand,
-                belief.Unknown18,
-                belief.TileWallPosterior,
-                meldCount,
-                effectiveShanten,
-                effectiveLiveUkeire);
+            var fairBranch = useFairTwoPly
+                ? _fairBranch.Evaluate(
+                    remainingHand,
+                    belief.Unknown18,
+                    belief.TileWallPosterior,
+                    meldCount,
+                    effectiveShanten,
+                    effectiveLiveUkeire,
+                    ResolveFairBranchCount(state.WallCount))
+                : new NeijiangFairBranchSummary();
             fairBranchMs += Stopwatch.GetElapsedTime(moduleStarted).TotalMilliseconds;
             var dangerEval = _danger.EvaluateDetail(tileType, state, belief);
             var danger = dangerEval.Risk;
@@ -166,6 +178,7 @@ public sealed class NeijiangDecisionEngine
             var dealInPolicy = _dealInPolicy.Evaluate(tileType, aiContext);
             var shapeValue = EstimateShapeValue(effectiveShanten, effectiveUkeire, effectiveLiveUkeire, waitCount, qualityScore, wallDrawPosterior, roundStage, routesAfter.Count, routeLoss.Length)
                 + shapeSummary.ShapeScore
+                + exactStructure.Score
                 + waitShapeSummary.WaitShapeScore
                 + limitedLookahead.Score
                 + fairBranch.Score
@@ -193,6 +206,7 @@ public sealed class NeijiangDecisionEngine
             var mergedReasons = candidateReasons
                 .Concat(waitCount > 0 ? waitShapeSummary.Reasons : Array.Empty<string>())
                 .Concat(shapeSummary.Reasons)
+                .Concat(exactStructure.Reasons)
                 .Concat(limitedLookahead.Reasons)
                 .Concat(fairBranch.Reasons)
                 .Concat(fastTingPriority.Reasons)
@@ -246,6 +260,11 @@ public sealed class NeijiangDecisionEngine
                 SameShantenImprovementCount = shapeSummary.SameShantenImprovementCount,
                 MiddleTileFlexibility = shapeSummary.MiddleTileFlexibility,
                 ShapeScore = shapeSummary.ShapeScore,
+                ExactStructureScore = exactStructure.Score,
+                ExactStructureBlockCount = exactStructure.BlockCount,
+                ExactStructureRedundantBlockCount = exactStructure.RedundantBlockCount,
+                ExactStructureDecompositionCount = exactStructure.DecompositionCount,
+                ExactStructureWeakestBlockQuality = exactStructure.WeakestBlockQuality,
                 BreaksPair = setPreservation.BreaksPair,
                 BreaksTriplet = setPreservation.BreaksTriplet,
                 SetPreservationScore = setPreservation.Score,
@@ -266,6 +285,8 @@ public sealed class NeijiangDecisionEngine
                 FairBranchExpectedLiveUkeire = fairBranch.ExpectedNextLiveUkeire,
                 FairBranchWorstShanten = fairBranch.WorstNextShanten,
                 FairBranchWorstLiveUkeire = fairBranch.WorstNextLiveUkeire,
+                FairBranchDeadProbability = fairBranch.DeadBranchProbability,
+                FairBranchTailLiveUkeire = fairBranch.TailExpectedLiveUkeire,
                 SearchBonus = 0.0,
                 SearchSimulations = 0,
                 SearchUsed = false,
@@ -482,90 +503,6 @@ public sealed class NeijiangDecisionEngine
                 .Take(10)
                 .ToArray()
         };
-
-    private static List<int> GetExactReadyTiles(int[] hand18, int meldCount)
-    {
-        var results = new List<int>();
-        var expectedConcealed = ((4 - meldCount) * 3) + 1;
-        if (meldCount < 0 || meldCount > 4 || hand18.Sum() != expectedConcealed)
-            return results;
-        for (var tileType = 0; tileType < hand18.Length; tileType++)
-        {
-            if (hand18[tileType] >= 4) continue;
-            var probe = (int[])hand18.Clone();
-            probe[tileType]++;
-            if (CanHu(probe, meldCount))
-                results.Add(tileType);
-        }
-        return results;
-    }
-
-    private static bool CanHu(int[] hand18, int meldCount)
-    {
-        var requiredConcealed = ((4 - meldCount) * 3) + 2;
-        if (meldCount < 0 || meldCount > 4 || hand18.Sum() != requiredConcealed)
-            return false;
-        if (meldCount == 0 && IsQiDui(hand18))
-            return true;
-        for (var tileType = 0; tileType < hand18.Length; tileType++)
-        {
-            if (hand18[tileType] < 2) continue;
-            var trial = (int[])hand18.Clone();
-            trial[tileType] -= 2;
-            if (CanClearSuit(trial, 0) && CanClearSuit(trial, 9))
-                return true;
-        }
-        return false;
-    }
-
-    private static bool IsQiDui(int[] hand18)
-    {
-        if (hand18.Sum() != 14) return false;
-        var pairCount = 0;
-        foreach (var count in hand18)
-        {
-            if (count != 0 && count != 2 && count != 4)
-                return false;
-            pairCount += count / 2;
-        }
-        return pairCount == 7;
-    }
-
-    private static bool CanClearSuit(int[] hand18, int startIndex)
-    {
-        var suit = new int[9];
-        Array.Copy(hand18, startIndex, suit, 0, 9);
-        return CanClearSuitRecursive(suit, 0);
-    }
-
-    private static bool CanClearSuitRecursive(int[] counts, int startRank)
-    {
-        var rank = startRank;
-        while (rank < 9 && counts[rank] == 0)
-            rank++;
-        if (rank >= 9)
-            return true;
-
-        if (counts[rank] >= 3)
-        {
-            var triplet = (int[])counts.Clone();
-            triplet[rank] -= 3;
-            if (CanClearSuitRecursive(triplet, rank))
-                return true;
-        }
-
-        if (rank <= 6 && counts[rank + 1] > 0 && counts[rank + 2] > 0)
-        {
-            var sequence = (int[])counts.Clone();
-            sequence[rank]--;
-            sequence[rank + 1]--;
-            sequence[rank + 2]--;
-            if (CanClearSuitRecursive(sequence, rank))
-                return true;
-        }
-
-        return false;
-    }
 
     private static int[] RemoveOne(int[] hand18, int tileType)
     {
@@ -1089,6 +1026,13 @@ public sealed class NeijiangDecisionEngine
         if (wallCount <= 6) return 6;
         if (wallCount <= 12 && shanten <= 1) return 4;
         return 0;
+    }
+
+    private static int ResolveFairBranchCount(int wallCount)
+    {
+        if (wallCount <= 6) return 4;
+        if (wallCount <= 12) return 5;
+        return 6;
     }
 
     private static double EstimateTenpaiProbability(int shanten, int liveUkeire)

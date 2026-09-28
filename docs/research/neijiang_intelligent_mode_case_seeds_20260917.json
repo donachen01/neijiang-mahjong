@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "purpose": "Seed cases extracted from non-video Sichuan learning material. These are semantic regression specifications, not yet executable tile-engine fixtures.",
+  "cases": [
+    {
+      "id": "PDF-STRUCT-001",
+      "tiles": "2234567",
+      "source": "四川麻将教程（14）——抉择时刻的原理",
+      "knowledge": "Do not lock 234 as a completed sequence and treat 2 as an orphan. Preserve the 22 pair plus 34567 three-sided structure as a strong competing decomposition.",
+      "required_assertions": [
+        "multiple_decompositions_returned",
+        "pair_22_plus_run_34567_present",
+        "effective_tiles_are_union_not_sum"
+      ]
+    },
+    {
+      "id": "PDF-STRUCT-002",
+      "tiles": "223 versus 677",
+      "source": "四川麻将教程（14）——抉择时刻的原理",
+      "knowledge": "Pair quality is conditional on the retained neighboring structure and future release/call probability; pair and sequence value cannot be a fixed rank-only table.",
+      "required_assertions": [
+        "pair_value_depends_on_context",
+        "sequence_option_cost_reported",
+        "no_fixed_discard_without_public_state"
+      ]
+    },
+    {
+      "id": "PDF-STRUCT-003",
+      "tiles": "5567",
+      "source": "四川麻将教程（14）——抉择时刻的原理",
+      "knowledge": "The order of cutting 6, 7 or 5 depends on which future structures and waits remain; equivalent local shanten does not imply equivalent continuation value.",
+      "required_assertions": [
+        "all_legal_discards_enumerated",
+        "future_shape_difference_reported",
+        "best_action_not_selected_by_shanten_only"
+      ]
+    },
+    {
+      "id": "PDF-WAIT-001",
+      "tiles": "4566699",
+      "source": "麻将清一色听牌怎么看听口",
+      "knowledge": "The hand has alternative decompositions such as 45+666+99 and 456+66+99, producing a union of waits rather than one visually obvious wait.",
+      "required_assertions": [
+        "alternative_winning_decompositions",
+        "exact_wait_union",
+        "wait_explanation_links_decomposition"
+      ]
+    },
+    {
+      "id": "PDF-WAIT-002",
+      "tiles": "3445566778",
+      "source": "麻将清一色听牌怎么看听口",
+      "knowledge": "Reject visually convenient splits that do not preserve a legal winning decomposition; prefer splits that actually produce completed groups and a valid remainder.",
+      "required_assertions": [
+        "invalid_split_rejected",
+        "legal_group_coverage",
+        "exact_wait_union"
+      ]
+    },
+    {
+      "id": "PDF-WAIT-003",
+      "tiles": "four identical tiles inside a long single-suit hand",
+      "source": "麻将清一色听牌怎么看听口",
+      "knowledge": "Four identical tiles can participate as 3+1 or 2+2; both roles must be enumerated when legal.",
+      "required_assertions": [
+        "quad_triplet_single_role",
+        "quad_pair_pair_role",
+        "no_copy_count_violation"
+      ]
+    },
+    {
+      "id": "PDF-PROB-001",
+      "tiles": "late unfamiliar discard from a defending opponent",
+      "source": "四川麻将教程（7）、（10）、（13）",
+      "knowledge": "Update neighboring-tile and same-tile hold hypotheses by the probability that this opponent would choose that discard from each candidate hidden hand.",
+      "required_assertions": [
+        "ordered_event_changes_posterior",
+        "release_probability_separate_from_hold_probability",
+        "four_copy_conservation"
+      ]
+    },
+    {
+      "id": "PDF-ROUTE-001",
+      "tiles": "high same-suit count with a faster ordinary ready route",
+      "source": "四川麻将教程（10）、（14）",
+      "knowledge": "Compare flush and ordinary continuations. A high same-suit count alone must not force a flush if ordinary play has higher net expectation.",
+      "required_assertions": [
+        "flush_counterfactual_present",
+        "ordinary_counterfactual_present",
+        "exit_cost_present",
+        "no_same_suit_threshold_lock"
+      ]
+    },
+    {
+      "id": "PDF-ACTION-001",
+      "tiles": "middle triplet while pursuing a long single-suit structure",
+      "source": "如何提高四川麻将水平？",
+      "knowledge": "Do not value an available gang by immediate income alone. Compare preserved sequence/wait options, replacement draw and final settlement value.",
+      "required_assertions": [
+        "gang_replacement_branch",
+        "structure_option_cost",
+        "settlement_projection",
+        "pass_or_peng_counterfactual"
+      ]
+    },
+    {
+      "id": "PDF-ACTION-002",
+      "tiles": "peng available but pass preserves a better route",
+      "source": "四川麻将教程（8）、（10）",
+      "knowledge": "Peng must include its mandatory follow-up discard and route loss; pass must include the delayed next draw. Compare both in the same net-value unit.",
+      "required_assertions": [
+        "peng_then_discard",
+        "pass_wait_draw",
+        "route_loss",
+        "same_value_unit"
+      ]
+    },
+    {
+      "id": "PDF-DEFENSE-001",
+      "tiles": "one major threat and one low-value opponent",
+      "source": "四川麻将教程（2）、（9）",
+      "knowledge": "Defense should target the threat with meaningful expected loss and include the speed cost of holding tiles; it should not defend all opponents equally.",
+      "required_assertions": [
+        "threat_specific_loss",
+        "own_speed_cost",
+        "opponent_advancement_cost",
+        "pareto_frontier"
+      ]
+    },
+    {
+      "id": "PDF-LEARN-001",
+      "tiles": "correct decision followed by an unlucky draw sequence",
+      "source": "四川麻将教程（3）、（11）、（14）",
+      "knowledge": "Do not label the decision as wrong from the round result. Evaluate it by information available at decision time and counterfactual expected value.",
+      "required_assertions": [
+        "decision_time_information_only",
+        "counterfactual_regret",
+        "outcome_not_direct_label",
+        "probability_calibration"
+      ]
+    },
+    {
+      "id": "PDF-STRUCT-004",
+      "tiles": "one hand represented by four, five and six candidate blocks",
+      "source": "四川麻将教程（2）、（8）、（11）",
+      "knowledge": "Compare five-block completeness, sixth-block redundancy and fourth-block growth instead of assigning an unconditional bonus to every local block.",
+      "required_assertions": ["block_count_topology", "redundant_block_identified", "growth_block_identified", "weakest_block_reported"]
+    },
+    {
+      "id": "PDF-WAIT-004",
+      "tiles": "ready hand where a gang consumes a tile used by an alternative winning decomposition",
+      "source": "四川麻将教程（5）、麻将清一色听牌怎么看听口",
+      "knowledge": "Recompute the exact legal wait set after gang; an unchanged shanten number is not enough to prove the action preserves readiness.",
+      "required_assertions": ["wait_set_before", "wait_set_after", "alternative_decomposition_removed", "no_shanten_only_acceptance"]
+    },
+    {
+      "id": "PDF-PROB-002",
+      "tiles": "two-draw branch from a reduced wall with known remaining counts",
+      "source": "四川麻将教程（6）",
+      "knowledge": "The second draw uses the wall composition remaining after the first draw; marginal draw probabilities must not be multiplied as independent events.",
+      "required_assertions": ["without_replacement", "conditional_denominator", "wall_mass_conserved", "matches_exact_enumeration"]
+    },
+    {
+      "id": "PDF-BELIEF-001",
+      "tiles": "same public discards presented in two different chronological orders",
+      "source": "四川麻将教程（4）、（7）、（10）、（13）",
+      "knowledge": "The posterior may differ because each action was chosen from a different state and at a different stage; aggregate counts alone are insufficient.",
+      "required_assertions": ["chronological_replay", "order_sensitive_posterior", "same_copy_total", "public_events_only"]
+    },
+    {
+      "id": "PDF-BELIEF-002",
+      "tiles": "same tile discarded once as a draw discard and once from the concealed hand",
+      "source": "四川麻将教程（4）、（10）",
+      "knowledge": "Discard origin carries different rejection evidence and must be preserved in the public event contract.",
+      "required_assertions": ["draw_discard_likelihood", "hand_discard_likelihood", "origin_changes_posterior", "origin_missing_is_explicit"]
+    },
+    {
+      "id": "PDF-ROUTE-002",
+      "tiles": "late flush route with few live waits versus ordinary ready with broad waits",
+      "source": "四川麻将教程（9）、（14）",
+      "knowledge": "Route value includes live wait mass and late failure tail; nominal hand value must not dominate when the high-value route is unlikely to complete.",
+      "required_assertions": ["live_wait_mass", "late_failure_probability", "ordinary_exit_route", "tail_risk_reported"]
+    },
+    {
+      "id": "PDF-ROUTE-003",
+      "tiles": "four pairs with both seven-pairs and ordinary routes available",
+      "source": "四川麻将教程（12）",
+      "knowledge": "Retain both candidates until their continuation values separate; four pairs alone must not irreversibly lock the hand into seven pairs.",
+      "required_assertions": ["seven_pairs_candidate", "ordinary_candidate", "optional_value", "confidence_aware_commitment"]
+    },
+    {
+      "id": "PDF-ACTION-003",
+      "tiles": "available peng that improves shanten but forces the discard of a high-option block",
+      "source": "四川麻将教程（1）、（2）、（8）",
+      "knowledge": "Peng evaluation includes the best mandatory discard and all lost structure options; shanten improvement alone cannot select it.",
+      "required_assertions": ["peng_then_best_discard", "lost_option_value", "pass_branch", "same_settlement_unit"]
+    },
+    {
+      "id": "PDF-ACTION-004",
+      "tiles": "ready declaration and non-declaration are both legal",
+      "source": "四川麻将教程（5）、（9）",
+      "knowledge": "Apply each declaration's future restrictions before comparing continuation values, waits, risk and settlement.",
+      "required_assertions": ["declare_constraints_applied", "nondeclare_flexibility", "wait_quality", "settlement_projection"]
+    },
+    {
+      "id": "PDF-ACTION-005",
+      "tiles": "peng immediately creates ready but pass retains a wider two-step route",
+      "source": "四川麻将教程（8）",
+      "knowledge": "A peng-to-ready exception is valuable but not absolute; compare immediate live waits with the pass branch's conditional continuation value.",
+      "required_assertions": ["peng_ready_waits", "pass_two_step_value", "live_copy_adjustment", "unified_action_ranking"]
+    },
+    {
+      "id": "PDF-DEFENSE-002",
+      "tiles": "identical discard candidates at early and late wall stages",
+      "source": "四川麻将教程（1）、（4）",
+      "knowledge": "Danger and the cost of delaying the hand change with stage; a fixed safe-tile table cannot rank both states correctly.",
+      "required_assertions": ["stage_sensitive_danger", "speed_cost", "public_visibility", "no_static_safety_only"]
+    },
+    {
+      "id": "PDF-DEFENSE-003",
+      "tiles": "discard cannot win immediately but can enable a threatening opponent to peng or gang",
+      "source": "四川麻将教程（2）、（9）",
+      "knowledge": "Defense includes expected advancement and gang income given to the opponent, not only immediate deal-in probability.",
+      "required_assertions": ["peng_advancement_cost", "gang_advancement_cost", "immediate_dealin_separate", "threat_specific"]
+    },
+    {
+      "id": "PDF-SETTLE-001",
+      "tiles": "gang followed by rob-gang, gang-discard win, transfer and refund variants",
+      "source": "如何提高四川麻将水平？（仅迁移比较方法）",
+      "knowledge": "All projected action values must be checked against Neijiang's actual per-seat settlement; Sichuan payment values are not reusable.",
+      "required_assertions": ["neijiang_rules_only", "per_seat_net", "exactly_once_accounting", "projection_matches_runtime"]
+    },
+    {
+      "id": "PDF-LEARN-002",
+      "tiles": "same policy evaluated on tuning seeds and unseen seeds",
+      "source": "四川麻将教程（3）、（11）",
+      "knowledge": "Learning progress is accepted only on held-out seeds and scenarios, not the examples used to tune thresholds.",
+      "required_assertions": ["train_tune_test_split", "seed_holdout", "scenario_holdout", "promotion_uses_blind_suite"]
+    },
+    {
+      "id": "PDF-LEARN-003",
+      "tiles": "selected discard accompanied by a human-readable recommendation",
+      "source": "四川麻将教程（4）、（11）",
+      "knowledge": "The explanation must reference the exact computed factors and branches that selected the action, not a plausible narrative created afterward.",
+      "required_assertions": ["selected_candidate_trace", "factor_values_match", "branch_ids_match", "deterministic_replay"]
+    },
+    {
+      "id": "PDF-EXPLAIN-001",
+      "tiles": "close discard candidates with different structure, route and risk tradeoffs",
+      "source": "四川麻将教程（4）、（11）",
+      "knowledge": "Expose why candidates differ across structure, live tiles, route, expected settlement and danger so errors can be diagnosed dimension by dimension.",
+      "required_assertions": ["structure_reason", "ukeire_reason", "route_reason", "expected_score_reason", "risk_reason"]
+    },
+    {
+      "id": "PDF-BOUNDARY-001",
+      "tiles": "Sichuan intentional deal-out example",
+      "source": "四川麻将教程（13）",
+      "knowledge": "The intentional-deal-out conclusion is rejected for Neijiang unless independently legal and profitable under Neijiang settlement; only the conditional-probability method transfers.",
+      "required_assertions": ["sichuan_strategy_rejected", "method_only_transfer", "neijiang_legality", "neijiang_settlement"]
+    }
+  ]
+}

@@ -29,8 +29,9 @@ func _capture() -> void:
 	await process_frame
 	if _capture_mode() == "settlement":
 		_force_settlement_preview(root_node)
-		await process_frame
-		await process_frame
+		_apply_requested_settlement_tab(root_node)
+		for _frame in range(8):
+			await process_frame
 		var settlement_image: Image = get_root().get_texture().get_image()
 		var settlement_path := ProjectSettings.globalize_path(output_path)
 		var settlement_error := settlement_image.save_png(settlement_path)
@@ -60,12 +61,36 @@ func _capture() -> void:
 	_force_self_hu_preview(root_node)
 	_force_ai_helper_preview(root_node)
 	if _capture_mode() == "utility-expanded":
+		var helper_panel: Control = root_node.get("discard_helper_panel") as Control
+		if helper_panel != null:
+			helper_panel.hide()
 		var utility := root_node.get("table_3d_utility_bar") as Control
 		if utility != null:
 			utility.call("set_collapsed", false)
+		for _frame in range(8):
+			await process_frame
+	elif _capture_mode() == "voice":
+		root_node.call("_open_voice_select_panel")
+		for _frame in range(8):
+			await process_frame
+	elif _capture_mode() == "action-2":
+		var helper_panel: Control = root_node.get("discard_helper_panel") as Control
+		if helper_panel != null:
+			helper_panel.hide()
+		var action_bar: Control = root_node.get("table_3d_action_bar") as Control
+		if action_bar != null:
+			var preview_actions: Array[Dictionary] = [
+				{"id": "peng", "label": "碰"}, {"id": "pass", "label": "取消"},
+			]
+			action_bar.call("render", preview_actions, "等待本家响应")
+			root_node.call("_apply_neijiang_3d_layout")
 		await process_frame
 		await process_frame
-
+	elif _capture_mode() == "details":
+		root_node.call("_on_top_settlement_info_pressed")
+		_apply_requested_settlement_tab(root_node)
+		for _frame in range(8):
+			await process_frame
 	var image: Image = get_root().get_texture().get_image()
 	if image == null:
 		push_error("Failed to capture viewport image")
@@ -99,6 +124,39 @@ func _capture_mode() -> String:
 	return "table"
 
 
+func _apply_requested_settlement_tab(root_node: Node) -> void:
+	var seed_history := OS.get_cmdline_user_args().has("--history-sample")
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--settlement-tab="):
+			var tab := clampi(int(argument.trim_prefix("--settlement-tab=")), 0, 3)
+			if seed_history and tab in [1, 2]:
+				_seed_match_history(root_node)
+			root_node.call("_set_settlement_tab", tab)
+			return
+
+
+func _seed_match_history(root_node: Node) -> void:
+	var history = root_node.get("match_history")
+	if history == null:
+		return
+	var changes: Array[Dictionary] = [
+		{0: 3, 1: -1, 2: -1, 3: -1},
+		{0: -2, 1: 4, 2: -1, 3: -1},
+		{0: 6, 1: -2, 2: -2, 3: -2},
+	]
+	var names := ["陈旭", "陈东", "舒小燕", "舒玲"]
+	for index in range(changes.size()):
+		var players := []
+		for seat in range(4):
+			players.append({"seat": seat, "nickname": names[seat], "score": 0})
+		history.call("remember", {
+			"current_phase": 7,
+			"round_index": index + 1,
+			"players": players,
+			"settlement_data": {"scores_applied": true, "score_changes": changes[index], "win_events": [], "gang_events": []},
+		})
+
+
 func _force_settlement_preview(root_node: Node) -> void:
 	var players := []
 	for seat in range(4):
@@ -111,7 +169,7 @@ func _force_settlement_preview(root_node: Node) -> void:
 				{"id": 8001 + seat * 20, "suit": "tiao", "rank": 3},
 				{"id": 8002 + seat * 20, "suit": "tong", "rank": 5},
 				{"id": 8003 + seat * 20, "suit": "tong", "rank": 6},
-				{"id": 8004 + seat * 20, "suit": "wan", "rank": 8},
+				{"id": 8004 + seat * 20, "suit": "tong", "rank": 8},
 			],
 			"melds": [],
 			"has_won": seat == 0,
@@ -121,7 +179,7 @@ func _force_settlement_preview(root_node: Node) -> void:
 		"current_phase": 7,
 		"round_index": 8,
 		"current_dealer_seat": 0,
-		"rules": {"use_ding_que_phase": false},
+		"rules": (root_node.get("game_manager") as GameManager).get_snapshot().get("rules", {}),
 		"players": players,
 		"settlement_data": {
 			"round_index": 8,
@@ -135,6 +193,11 @@ func _force_settlement_preview(root_node: Node) -> void:
 		},
 	}
 	root_node.call("_render_settlement", snapshot)
+	root_node.set("last_snapshot", snapshot)
+	root_node.get_node("UILayer/RootUI/SettlementOverlay/SettlementCenter/SettlementPanel/SettlementMargin/SettlementVBox/SettlementHeader/SettlementTitle").set("text", "单局结算")
+	var next_button := root_node.get("next_round_button") as Control
+	if next_button != null:
+		next_button.show()
 	var overlay := root_node.get("settlement_overlay") as Control
 	if overlay != null:
 		overlay.visible = true

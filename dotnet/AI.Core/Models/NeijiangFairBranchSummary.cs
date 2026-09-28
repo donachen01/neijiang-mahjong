@@ -9,5 +9,7 @@ public sealed class NeijiangFairBranchSummary
     public double OrderedTwoDrawCompletionProxy { get; init; }
     public int WorstNextShanten { get; init; }
     public int WorstNextLiveUkeire { get; init; }
+    public double DeadBranchProbability { get; init; }
+    public double TailExpectedLiveUkeire { get; init; }
     public IReadOnlyList<string> Reasons { get; init; } = Array.Empty<string>();
 }

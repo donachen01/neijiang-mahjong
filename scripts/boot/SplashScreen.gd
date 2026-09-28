@@ -1,6 +1,6 @@
 extends Control
 
-const MAIN_SCENE_PATH := "res://scenes/table/MainSceneV2.tscn"
+const MAIN_SCENE_PATH := "res://scenes/network/GameModeSelect.tscn"
 const SPLASH_SECONDS := 3.0
 
 @onready var splash_image: TextureRect = %SplashImage

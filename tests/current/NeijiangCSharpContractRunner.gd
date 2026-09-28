@@ -54,6 +54,7 @@ func _run() -> void:
 	_run_test("bao_jiao_csharp_tile_type_maps_to_last_draw_tile", _test_bao_jiao_csharp_tile_type_maps_to_last_draw_tile, failures)
 	_run_test("bao_jiao_reported_gang_action_survives_turn_mapping", _test_bao_jiao_reported_gang_action_survives_turn_mapping, failures)
 	_run_test("self_action_gang_subtype_survives_godot_mapping", _test_self_action_gang_subtype_survives_godot_mapping, failures)
+	_run_test("native_runtime_self_hu_aot_transport_returns_hu", _test_native_runtime_self_hu_aot_transport_returns_hu, failures)
 	_run_test("native_runtime_async_reaction_returns_result", _test_native_runtime_async_reaction_returns_result, failures)
 	_run_test("native_runtime_mobile_compact_discard_returns_action_candidate", _test_native_runtime_mobile_compact_discard_returns_action_candidate, failures)
 	_run_test("ai_manager_sync_hell_challenge_preserves_pressure_diagnostics", _test_ai_manager_sync_hell_challenge_preserves_pressure_diagnostics, failures)
@@ -371,6 +372,46 @@ func _test_self_action_gang_subtype_survives_godot_mapping():
 		return "expected top-level gang_subtype=add_gang, got %s" % [analysis]
 	if str(analysis.get("gangSubtype", "")) != "add_gang":
 		return "expected camelCase gangSubtype mirror, got %s" % [analysis]
+	return true
+
+
+func _test_native_runtime_self_hu_aot_transport_returns_hu():
+	var runtime = root.get_node_or_null("NeijiangCSharpRuntime")
+	if runtime == null or not runtime.has_method("AnalyzeSelfActionJson"):
+		return "expected native C# self-action runtime"
+	var hand18 := _empty18()
+	for tile_type in [0, 0, 0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 17, 17]:
+		hand18[tile_type] += 1
+	var payload := {
+		"seatIndex": 1,
+		"dealerSeat": 0,
+		"currentSeat": 1,
+		"wallCount": 8,
+		"hand18": hand18,
+		"visible18": hand18.duplicate(),
+		"remaining18": _empty18(),
+		"discards18": _empty_matrix(),
+		"melds18": _empty_matrix(),
+		"passedHu18": _empty_pass_matrix(),
+		"passedPeng18": _empty_pass_matrix(),
+		"passedGang18": _empty_pass_matrix(),
+		"isCalled": [false, false, false, false],
+		"isReady": [false, false, false, false],
+		"hasHu": [false, false, false, false],
+		"canSelfHu": true,
+		"anGangTileTypes": [],
+		"addGangTileTypes": [],
+		"addGangQiangGangCounts": {},
+		"mandatoryGangTileTypes": [],
+	}
+	var parsed = JSON.parse_string(str(runtime.call("AnalyzeSelfActionJson", JSON.stringify(payload))))
+	var result: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+	if not bool(result.get("ok", false)):
+		return "expected AOT-safe self-action response, got %s" % [result]
+	if str(result.get("action", "")) != "hu":
+		return "expected self hu to outrank discard path, got %s" % [result]
+	if str(result.get("backendMode", "")) != "csharp_native_self_action_aot":
+		return "expected AOT self-action backend marker, got %s" % [result]
 	return true
 
 

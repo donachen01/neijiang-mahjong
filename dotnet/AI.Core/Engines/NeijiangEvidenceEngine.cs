@@ -27,10 +27,14 @@ public sealed class NeijiangEvidenceEngine
                     BuildPassedReactionEvidence(state.PassedHu18, seat, tileType, 0.36, 0.94));
                 snapshot.SeatNoPengEvidence[seat][tileType] = BuildPassedReactionEvidence(state.PassedPeng18, seat, tileType, 0.30, 0.88);
                 snapshot.SeatNoGangEvidence[seat][tileType] = BuildPassedReactionEvidence(state.PassedGang18, seat, tileType, 0.34, 0.90);
+                snapshot.SeatTileReleaseEvidence[seat][tileType] = EstimateOrderedReleaseEvidence(discards, tileType);
             }
 
             for (var suit = 0; suit < 2; suit++)
+            {
                 snapshot.SeatAbandonedSuitEvidence[seat][suit] = Math.Clamp(discardBySuit[suit] / 5.0, 0.0, 0.92);
+                snapshot.SeatRecentSuitReleaseEvidence[seat][suit] = EstimateRecentSuitReleaseEvidence(discards, suit);
+            }
 
             snapshot.SeatRecentDiscardTrend[seat] = discards
                 .Where(tile => tile is >= 0 and < 18)
@@ -38,6 +42,46 @@ public sealed class NeijiangEvidenceEngine
                 .ToArray();
         }
         return snapshot;
+    }
+
+    private static double EstimateOrderedReleaseEvidence(IReadOnlyList<int> discards, int tileType)
+    {
+        var evidence = 0.0;
+        var decay = 1.0;
+        for (var index = discards.Count - 1; index >= 0; index--)
+        {
+            var discarded = discards[index];
+            if (discarded is < 0 or >= 18)
+                continue;
+            if (discarded == tileType)
+                evidence += 0.42 * decay;
+            else if (discarded / 9 == tileType / 9 && Math.Abs(discarded % 9 - tileType % 9) <= 1)
+                evidence += 0.16 * decay;
+            decay *= 0.78;
+            if (decay < 0.08)
+                break;
+        }
+        return Math.Clamp(evidence, 0.0, 0.94);
+    }
+
+    private static double EstimateRecentSuitReleaseEvidence(IReadOnlyList<int> discards, int suit)
+    {
+        var matching = 0.0;
+        var total = 0.0;
+        var weight = 1.0;
+        for (var index = discards.Count - 1; index >= 0; index--)
+        {
+            var tile = discards[index];
+            if (tile is < 0 or >= 18)
+                continue;
+            total += weight;
+            if (tile / 9 == suit)
+                matching += weight;
+            weight *= 0.76;
+            if (weight < 0.08)
+                break;
+        }
+        return total <= 0.000001 ? 0.0 : Math.Clamp(matching / total, 0.0, 1.0);
     }
 
     private static double BuildPassedReactionEvidence(int[][] countsBySeat, int seat, int tileType, double singlePassEvidence, double cap)

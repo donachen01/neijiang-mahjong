@@ -18,6 +18,7 @@ const BODY_FONT := preload("res://res/fonts/app_cjk.ttc")
 const NAME_FONT := preload("res://res/fonts/nameplate_calligraphy.ttf")
 
 var seat := 0
+var active_skin_id := NeijiangTableSkinCatalog.DEFAULT_SKIN_ID
 var background_panel: Panel
 var inner_frame: Panel
 var avatar_medallion: Control
@@ -52,6 +53,14 @@ func configure(seat_index: int) -> void:
 	seat = clampi(seat_index, 0, 3)
 
 
+func set_table_skin(skin_id: String) -> void:
+	if not NeijiangTableSkinCatalog.has_skin(skin_id):
+		return
+	active_skin_id = skin_id
+	if background_panel != null:
+		background_panel.add_theme_stylebox_override("panel", _shell_style())
+
+
 func render(player: Dictionary, active_seat: int, dealer_seat: int) -> void:
 	if background_panel == null:
 		_build_ui()
@@ -69,6 +78,7 @@ func render(player: Dictionary, active_seat: int, dealer_seat: int) -> void:
 		_badge_style(GANG_BROWN if bao_gang_count > 0 else JADE_BADGE)
 	)
 	winner_badge.visible = bool(player.get("has_won", false))
+	winner_badge.text = _won_badge_text(player)
 	var is_active := seat == active_seat and not winner_badge.visible
 	inner_frame.add_theme_stylebox_override("panel", _inner_frame_style(is_active))
 	avatar_medallion.call("configure", seat, is_active, winner_badge.visible)
@@ -82,7 +92,7 @@ func get_visual_contract() -> Dictionary:
 		"shows_bao_gang_count": true,
 		"active_state_uses_shape_and_color": true,
 		"minimum_size": custom_minimum_size,
-		"material_family": "unified_smoked_jade_nameplate",
+		"material_family": "translucent_blue_glass_nameplate" if active_skin_id == "blue_glass" else "unified_smoked_jade_nameplate",
 		"identity_encoding": ["name", "score"],
 		"active_treatment": "single_thin_antique_gold_edge",
 		"active_text_badge": "none",
@@ -198,8 +208,11 @@ func _build_ui() -> void:
 
 	report_badge = _make_badge("报叫", JADE_BADGE, 58)
 	status_row.add_child(report_badge)
-	winner_badge = _make_badge("已胡", CINNABAR, 54)
-	status_row.add_child(winner_badge)
+	winner_badge = _make_badge("已胡", CINNABAR, 86)
+	winner_badge.name = "WinnerSourceBadge"
+	winner_badge.position = Vector2(8, 3)
+	winner_badge.size = Vector2(86, 27)
+	add_child(winner_badge)
 
 	dealer_badge = _make_badge("庄", CINNABAR, 38)
 	dealer_badge.name = "DealerCornerSeal"
@@ -213,6 +226,20 @@ func _identity_glyph(player_name: String) -> String:
 	if clean_name.is_empty():
 		return ["东", "南", "西", "北"][seat]
 	return clean_name.substr(maxi(0, clean_name.length() - 1), 1)
+
+
+func _won_badge_text(player: Dictionary) -> String:
+	var win_type := str(player.get("win_type", ""))
+	if win_type in ["self_draw", "gang_self_draw"]:
+		return "自摸"
+	var source_seat := int(player.get("winning_source_seat", int(player.get("seat", seat))))
+	if source_seat == int(player.get("seat", seat)):
+		return "自摸"
+	return "%s点炮" % _seat_name(source_seat)
+
+
+func _seat_name(source_seat: int) -> String:
+	return ["本家", "上家", "对家", "下家"][clampi(source_seat, 0, 3)]
 
 
 func _apply_text_style(label: Label, color: Color) -> void:
@@ -239,6 +266,15 @@ func _make_badge(text_value: String, fill: Color, width: float) -> Label:
 
 func _shell_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
+	if active_skin_id == "blue_glass":
+		style.bg_color = Color(0.07, 0.24, 0.43, 0.38)
+		style.border_color = Color(0.87, 0.98, 1.0, 0.52)
+		style.set_border_width_all(1)
+		style.set_corner_radius_all(16)
+		style.shadow_color = Color(0.02, 0.10, 0.22, 0.32)
+		style.shadow_size = 9
+		style.set_content_margin_all(6)
+		return style
 	style.bg_color = Color(0.025, 0.13, 0.11, 0.28)
 	style.border_color = Color(Color("9D743A"), 0.62)
 	style.set_border_width_all(1)
@@ -253,6 +289,11 @@ func _shell_style() -> StyleBoxFlat:
 func _inner_frame_style(active: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color.TRANSPARENT
+	if active_skin_id == "blue_glass":
+		style.border_color = Color(0.97, 1.0, 1.0, 0.90 if active else 0.10)
+		style.set_border_width_all(2 if active else 1)
+		style.set_corner_radius_all(14)
+		return style
 	style.border_color = Color(COPPER_HIGHLIGHT if active else AGED_COPPER, 0.90 if active else 0.20)
 	style.set_border_width_all(2 if active else 1)
 	style.set_corner_radius_all(8)
@@ -261,8 +302,8 @@ func _inner_frame_style(active: bool) -> StyleBoxFlat:
 
 func _badge_style(fill: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = fill
-	style.border_color = Color(COPPER_HIGHLIGHT, 0.88)
+	style.bg_color = Color(fill, 0.62) if active_skin_id == "blue_glass" else fill
+	style.border_color = Color("ECFBFF", 0.84) if active_skin_id == "blue_glass" else Color(COPPER_HIGHLIGHT, 0.88)
 	style.set_border_width_all(1)
 	style.set_corner_radius_all(7)
 	style.content_margin_left = 6

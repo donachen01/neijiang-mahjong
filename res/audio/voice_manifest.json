@@ -1,0 +1,136 @@
+{
+  "voice_options": [
+    {
+      "id": "mandarin_tiancaitongzhu_2",
+      "language": "mandarin",
+      "gender": "male",
+      "name": "天才同桌 2.0",
+      "directory": "tts/male"
+    },
+    {
+      "id": "mandarin_xiaohe_2",
+      "language": "mandarin",
+      "gender": "female",
+      "name": "小何 2.0",
+      "directory": "tts/female"
+    },
+    {
+      "id": "sichuan_wennuanahu_2",
+      "language": "sichuan",
+      "gender": "male",
+      "name": "温暖阿虎 2.0",
+      "directory": "tts_sichuan/male"
+    },
+    {
+      "id": "sichuan_vivi_2",
+      "language": "sichuan",
+      "gender": "female",
+      "name": "Vivi 2.0",
+      "directory": "tts_sichuan/female"
+    },
+    {
+      "id": "sichuan_xiaotian_2",
+      "language": "sichuan",
+      "gender": "male",
+      "name": "小天 2.0",
+      "directory": "voice_options/sichuan_xiaotian_2"
+    },
+    {
+      "id": "sichuan_kuailexiaodong_2",
+      "language": "sichuan",
+      "gender": "male",
+      "name": "快乐小东 2.0",
+      "directory": "voice_options/sichuan_kuailexiaodong_2"
+    },
+    {
+      "id": "mandarin_baqiqingshu_2",
+      "language": "mandarin",
+      "gender": "male",
+      "name": "霸气青叔 2.0",
+      "directory": "voice_options/mandarin_baqiqingshu_2"
+    },
+    {
+      "id": "mandarin_huolixiaoge_2",
+      "language": "mandarin",
+      "gender": "male",
+      "name": "活力小哥 2.0",
+      "directory": "voice_options/mandarin_huolixiaoge_2"
+    },
+    {
+      "id": "mandarin_fanjuanqingnian_2",
+      "language": "mandarin",
+      "gender": "male",
+      "name": "反卷青年 2.0",
+      "directory": "voice_options/mandarin_fanjuanqingnian_2"
+    },
+    {
+      "id": "sichuan_xiaohe_2",
+      "language": "sichuan",
+      "gender": "female",
+      "name": "小何 2.0",
+      "directory": "voice_options/sichuan_xiaohe_2"
+    },
+    {
+      "id": "mandarin_wuzetian_2",
+      "language": "mandarin",
+      "gender": "female",
+      "name": "武则天 2.0",
+      "directory": "voice_options/mandarin_wuzetian_2"
+    },
+    {
+      "id": "mandarin_tiexinnvsheng_2",
+      "language": "mandarin",
+      "gender": "female",
+      "name": "贴心女声 2.0",
+      "directory": "voice_options/mandarin_tiexinnvsheng_2"
+    },
+    {
+      "id": "mandarin_jitangmeimei_2",
+      "language": "mandarin",
+      "gender": "female",
+      "name": "鸡汤妹妹 2.0",
+      "directory": "voice_options/mandarin_jitangmeimei_2"
+    },
+    {
+      "id": "mandarin_qiaopinvsheng_2",
+      "language": "mandarin",
+      "gender": "female",
+      "name": "俏皮女声 2.0",
+      "directory": "voice_options/mandarin_qiaopinvsheng_2"
+    }
+  ],
+  "tile_texts": {
+    "tong_1": "一筒",
+    "tong_2": "二筒",
+    "tong_3": "三筒",
+    "tong_4": "四筒",
+    "tong_5": "五筒",
+    "tong_6": "六筒",
+    "tong_7": "七筒",
+    "tong_8": "八筒",
+    "tong_9": "九筒",
+    "tiao_1": "一条",
+    "tiao_2": "二条",
+    "tiao_3": "三条",
+    "tiao_4": "四条",
+    "tiao_5": "五条",
+    "tiao_6": "六条",
+    "tiao_7": "七条",
+    "tiao_8": "八条",
+    "tiao_9": "九条"
+  },
+  "action_keys": [
+    "peng",
+    "gang",
+    "hu",
+    "zimo",
+    "qiang_gang_hu",
+    "gang_shang_hua",
+    "gang_shang_pao",
+    "pass",
+    "win",
+    "lose",
+    "bao_jiao",
+    "bao_gang"
+  ]
+}
